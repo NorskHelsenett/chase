@@ -6,6 +6,7 @@ import (
 	"git.torden.tech/jonasbg/fit/auth"
 	"git.torden.tech/jonasbg/fit/database"
 	"git.torden.tech/jonasbg/fit/handlers"
+	"git.torden.tech/jonasbg/fit/security"
 	"git.torden.tech/jonasbg/fit/session"
 	"git.torden.tech/jonasbg/fit/spa"
 	"git.torden.tech/jonasbg/fit/utils"
@@ -23,6 +24,8 @@ func setupRoutes(r *gin.Engine) {
 		api.GET("/login", handlers.HandleLogin)
 		api.GET("/callback", handlers.HandleCallback)
 		api.GET("/logout", handlers.HandleLogout)
+
+		api.GET("/security/:domain", security.SecurityScanHandler)
 
 		api.Use(auth.Middleware())
 		{

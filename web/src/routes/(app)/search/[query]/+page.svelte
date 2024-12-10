@@ -1,9 +1,10 @@
 <script>
-  import { Clock, Share, Trash2 } from 'lucide-svelte';
+  import { Clock, Globe, Share, Trash2 } from 'lucide-svelte';
   import { fade, fly } from 'svelte/transition';
   import { onMount, onDestroy } from 'svelte';
   import { searchHistory } from '$lib/stores/searchStore';
   import { getRelativeTime } from '$lib/utils/time';
+	import SecurityScan from '$lib/components/SecurityScan.svelte';
   
   /** @type {import('./$types').PageData} */
   export let data;
@@ -71,14 +72,12 @@
   <div class="max-w-3xl mx-auto p-4">
     <h1 class="text-2xl pb-4 pt-4">{data.query}</h1>
       <!-- Source Section -->
-      <div class="text-xl flex items-center gap-2 mb-6">
-          <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-              <path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z"/>
-              <path d="M12 15a3 3 0 100-6 3 3 0 000 6z"/>
-              <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>
-          </svg>
-          <span>Sources</span>
-      </div>
+      <div class="text-2xl flex items-center gap-2 mb-6">
+        <Globe class="w-6 h-6" />
+        <span>Site Report</span>
+    </div>
+
+    <SecurityScan domain="{data.query}"/>
 
       <!-- Results/Loading States -->
       <div class="space-y-4">

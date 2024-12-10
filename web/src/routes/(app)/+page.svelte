@@ -22,16 +22,16 @@
     }
 </script>
 
-<div class="min-h-screen flex items-center justify-center font-system">
+<div class="max-h-screen flex items-center justify-center font-system">
     <div 
-        class="w-[90%] max-w-[768px] p-4"
+        class="w-full max-w-[768px] p-4"
         in:fade={{ duration: 300 }}
     >
         <h1 
             class="text-white text-5xl text-center mb-8"
             in:fly={{ y: -20, duration: 500, delay: 150 }}
         >
-            Which domain would you check?
+        Explore a domain
         </h1>
         
         <div 
@@ -43,7 +43,7 @@
                 on:keydown={handleKeydown}
                 placeholder="Any domain..."
                 rows="1"
-                class="w-full bg-transparent border-none text-[#bfbfbf] text-lg outline-none resize-none placeholder-[#918c8c]"
+                class="w-[25em] bg-transparent border-none text-[#bfbfbf] text-lg outline-none resize-none placeholder-[#918c8c]"
             />
             <div class="flex justify-between items-center mt-4 text-[#bfbfbf]">
                 <div class="flex gap-4 items-center">
