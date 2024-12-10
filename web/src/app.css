@@ -1,0 +1,120 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+	body {
+		@apply transition-colors duration-300;
+	}
+
+	:root {
+
+		/* CSS: .bg-gradient { background: var(--gradient) } */
+		--gradient: #e65c00;
+
+		/* --background: 25 65% 3.6%; */
+		--background: 0, 0%, 10.2%
+		--foreground: 25 10% 97.25%;
+
+		--muted: 25 50% 13.5%;
+		--muted-foreground: 25 10% 54.5%;
+
+		--popover: 25 45% 5.8500000000000005%;
+		--popover-foreground: 25 10% 97.25%;
+
+		--card: 25 45% 5.8500000000000005%;
+		--card-foreground: 25 10% 97.25%;
+
+		--border: 25 50% 13.5%;
+		--input: 25 50% 13.5%;
+
+		--primary: 25 100% 45%;
+		--primary-foreground: 25 10% 97.25%;
+
+		--secondary: 25 50% 13.5%;
+		--secondary-foreground: 25 10% 97.25%;
+
+		--accent: 25 50% 13.5%;
+		--accent-foreground: 25 10% 97.25%;
+
+		--destructive: 0 62.8% 30.6%;
+		--destructive-foreground: 25 10% 97.25%;
+
+		--ring: 25 100% 45%;
+
+		--bg-secondary: rgb(34, 34, 34);
+	}
+}
+
+.bg-secondary{
+	background-color: var(--bg-secondary);
+}
+
+.border-secondary {
+	border-color: rgb(50, 49, 49);
+}
+
+.alert{
+	color: #ff4c4c;
+}
+
+main {
+	background: #171717;
+  margin-top: 8px;
+  margin-right: 8px;
+  margin-bottom: 8px;
+  border-radius: 8px;
+  border: 1px solid #4d4c4c82;
+}
+
+.placeholder {
+	color: transparent;
+	position: relative;
+	overflow: hidden;
+	background-color: rgb(211, 211, 211, 0.66);
+	border-radius: 4px;
+	margin: 2px;
+}
+
+.placeholder::before {
+	content: '';
+	position: absolute;
+	top: 0;
+	left: -100%;
+	width: 200%;
+	height: 100%;
+	background-image: linear-gradient(
+		to left,
+		rgba(251, 251, 251, 0.05),
+		rgba(251, 251, 251, 0.3),
+		rgba(251, 251, 251, 0.6),
+		rgba(251, 251, 251, 0.3),
+		rgba(251, 251, 251, 0.05)
+	);
+	background-image: -moz-linear-gradient(
+		to left,
+		rgba(251, 251, 251, 0.05),
+		rgba(251, 251, 251, 0.3),
+		rgba(251, 251, 251, 0.6),
+		rgba(251, 251, 251, 0.3),
+		rgba(251, 251, 251, 0.05)
+	);
+	background-image: -webkit-linear-gradient(
+		to left,
+		rgba(251, 251, 251, 0.05),
+		rgba(251, 251, 251, 0.3),
+		rgba(251, 251, 251, 0.6),
+		rgba(251, 251, 251, 0.3),
+		rgba(251, 251, 251, 0.05)
+	);
+	animation: loading 1s infinite linear;
+}
+
+@keyframes loading {
+	0% {
+		transform: translateX(-100%);
+	}
+	100% {
+		transform: translateX(100%);
+	}
+}

@@ -1,0 +1,8 @@
+# Node/npm/frontend
+**/node_module
+Dockerfile
+*.md
+.helm/**
+.vscode/**
+.devcontainer/**
+.debug/**
