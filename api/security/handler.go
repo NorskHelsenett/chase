@@ -46,8 +46,12 @@ func SecurityScanHandler(c *gin.Context) {
 		}
 
 		if len(report.Certificate.Findings) > 0 {
-			report.Certificate.Findings = append(report.Certificate.Findings,
-				fmt.Sprintf("%s uses modern encryption standards", domain))
+			report.Certificate.Findings = append(report.Certificate.Findings, Finding{
+				Description: fmt.Sprintf("%s uses modern encryption standards", domain),
+				Risk:        RiskLow,
+				Evidence:    "Strong encryption detected in certificate",
+				Mitigation:  "No action needed",
+			})
 		}
 
 		c.JSON(200, report)

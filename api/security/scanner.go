@@ -1,23 +1,19 @@
+// scanner.go
 package security
 
 import (
 	"crypto/tls"
-	"crypto/x509"
-	"fmt"
 	"net/http"
 	"strings"
 	"sync"
 	"time"
 )
 
-// Scanner performs security analysis
 type Scanner struct {
 	client *http.Client
 }
 
-// NewScanner creates a new security scanner
 func NewScanner() *Scanner {
-	// Custom transport to skip certificate verification for scanning purposes
 	tr := &http.Transport{
 		TLSClientConfig: &tls.Config{
 			InsecureSkipVerify: true,
@@ -32,51 +28,99 @@ func NewScanner() *Scanner {
 	return &Scanner{client: client}
 }
 
-// ScanWebsite performs a complete security scan
 func (s *Scanner) ScanWebsite(domain string) (*SecurityReport, error) {
 	if !strings.HasPrefix(domain, "http") {
 		domain = "https://" + domain
 	}
 
 	var wg sync.WaitGroup
-	report := &SecurityReport{}
+	report := &SecurityReport{
+		ScanTimestamp: time.Now(),
+		TargetURL:     domain,
+		ScanErrors:    make([]ScanError, 0),
+	}
 
-	// Perform all checks concurrently
-	wg.Add(4)
+	// Run all scans concurrently
+	wg.Add(9)
 
-	// Check security headers
 	go func() {
 		defer wg.Done()
-		headerAnalysis, err := s.checkSecurityHeaders(domain)
-		if err == nil {
-			report.Headers = *headerAnalysis
+		if robotsTxt, err := s.checkRobotsTxt(domain); err != nil {
+			report.addError("headers", err)
+		} else {
+			report.RobotsTxt = *robotsTxt
 		}
 	}()
 
-	// Check SSL/TLS certificate
 	go func() {
 		defer wg.Done()
-		certAnalysis, err := s.checkCertificate(domain)
-		if err == nil {
-			report.Certificate = *certAnalysis
+		if securityTxt, err := s.checkSecurityTxt(domain); err != nil {
+			report.addError("headers", err)
+		} else {
+			report.SecurityTxt = *securityTxt
 		}
 	}()
 
-	// Check admin pages
 	go func() {
 		defer wg.Done()
-		adminAnalysis, err := s.checkAdminPages(domain)
-		if err == nil {
-			report.AdminPages = *adminAnalysis
+		if headers, err := s.checkSecurityHeaders(domain); err != nil {
+			report.addError("headers", err)
+		} else {
+			report.Headers = *headers
 		}
 	}()
 
-	// Check Swagger/API docs
 	go func() {
 		defer wg.Done()
-		swaggerAnalysis, err := s.checkSwaggerDocs(domain)
-		if err == nil {
-			report.Swagger = *swaggerAnalysis
+		if cert, err := s.checkCertificate(domain); err != nil {
+			report.addError("certificate", err)
+		} else {
+			report.Certificate = *cert
+		}
+	}()
+
+	go func() {
+		defer wg.Done()
+		if admin, err := s.checkAdminPages(domain); err != nil {
+			report.addError("adminPages", err)
+		} else {
+			report.AdminPages = *admin
+		}
+	}()
+
+	go func() {
+		defer wg.Done()
+		if swagger, err := s.checkSwaggerDocs(domain); err != nil {
+			report.addError("swagger", err)
+		} else {
+			report.Swagger = *swagger
+		}
+	}()
+
+	go func() {
+		defer wg.Done()
+		if infra, err := s.checkInfrastructure(domain); err != nil {
+			report.addError("infrastructure", err)
+		} else {
+			report.Infrastructure = *infra
+		}
+	}()
+
+	go func() {
+		defer wg.Done()
+		if dns, err := s.checkDNS(domain); err != nil {
+			report.addError("dns", err)
+		} else {
+			report.DNSRecords = *dns
+		}
+	}()
+
+	go func() {
+		defer wg.Done()
+		if files, err := s.checkFileExposure(domain); err != nil {
+			report.addError("files", err)
+		} else {
+			report.FileExposure = *files
 		}
 	}()
 
@@ -84,170 +128,10 @@ func (s *Scanner) ScanWebsite(domain string) (*SecurityReport, error) {
 	return report, nil
 }
 
-func (s *Scanner) checkSecurityHeaders(domain string) (*HeadersAnalysis, error) {
-	resp, err := s.client.Get(domain)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	analysis := &HeadersAnalysis{
-		Issues: []string{},
-		Passed: []string{},
-	}
-
-	// Check security headers
-	headers := map[string]string{
-		"Strict-Transport-Security": "HSTS not enabled",
-		"X-Frame-Options":           "X-Frame-Options header missing",
-		"X-Content-Type-Options":    "X-Content-Type-Options header missing",
-		"Content-Security-Policy":   "Content-Security-Policy not configured",
-		"X-XSS-Protection":          "X-XSS-Protection header missing",
-		"Referrer-Policy":           "Referrer-Policy not set",
-	}
-
-	score := 100
-	for header, issue := range headers {
-		if value := resp.Header.Get(header); value == "" {
-			analysis.Issues = append(analysis.Issues, issue)
-			score -= 15
-		} else {
-			analysis.Passed = append(analysis.Passed, fmt.Sprintf("%s header properly configured", header))
-		}
-	}
-
-	// Assign grade based on score
-	switch {
-	case score >= 90:
-		analysis.Score = "A+"
-	case score >= 80:
-		analysis.Score = "A"
-	case score >= 70:
-		analysis.Score = "B+"
-	default:
-		analysis.Score = "B"
-	}
-
-	return analysis, nil
-}
-
-func (s *Scanner) checkCertificate(domain string) (*CertificateAnalysis, error) {
-	conn, err := tls.Dial("tcp", strings.TrimPrefix(domain, "https://")+":443", &tls.Config{
-		InsecureSkipVerify: true,
+func (r *SecurityReport) addError(component string, err error) {
+	r.ScanErrors = append(r.ScanErrors, ScanError{
+		Component: component,
+		Error:     err.Error(),
+		Timestamp: time.Now(),
 	})
-	if err != nil {
-		return nil, err
-	}
-	defer conn.Close()
-
-	cert := conn.ConnectionState().PeerCertificates[0]
-	analysis := &CertificateAnalysis{
-		ValidUntil: cert.NotAfter.Format("2006-01-02"),
-		Issuer:     cert.Issuer.CommonName,
-		Findings:   []string{},
-		Warnings:   []string{},
-	}
-
-	// Check certificate properties
-	if time.Until(cert.NotAfter) < 30*24*time.Hour {
-		analysis.Warnings = append(analysis.Warnings, "Certificate expires in less than 30 days")
-	}
-
-	if cert.KeyUsage&x509.KeyUsageKeyEncipherment != 0 {
-		analysis.Findings = append(analysis.Findings, "Uses strong key encryption")
-	}
-
-	// Determine grade based on certificate properties
-	grade := "A"
-	if len(analysis.Warnings) > 0 {
-		grade = "B+"
-	}
-	analysis.Grade = grade
-
-	return analysis, nil
-}
-
-func (s *Scanner) checkAdminPages(domain string) (*AdminPagesAnalysis, error) {
-	commonPaths := []string{
-		"/admin",
-		"/wp-admin",
-		"/administrator",
-		"/dashboard",
-		"/console",
-	}
-
-	analysis := &AdminPagesAnalysis{
-		Exposed: []string{},
-		Risk:    "low",
-		Recommendations: []string{
-			"Implement IP-based access restrictions",
-			"Use strong authentication mechanisms",
-			"Enable two-factor authentication",
-		},
-	}
-
-	for _, path := range commonPaths {
-		resp, err := s.client.Get(domain + path)
-		if err != nil {
-			continue
-		}
-		resp.Body.Close()
-
-		// Check if page might exist based on status code
-		if resp.StatusCode != 404 {
-			analysis.Exposed = append(analysis.Exposed, path)
-		}
-	}
-
-	// Set risk level based on findings
-	if len(analysis.Exposed) > 2 {
-		analysis.Risk = "high"
-	} else if len(analysis.Exposed) > 0 {
-		analysis.Risk = "medium"
-	}
-
-	return analysis, nil
-}
-
-func (s *Scanner) checkSwaggerDocs(domain string) (*SwaggerAnalysis, error) {
-	swaggerPaths := []string{
-		"/swagger",
-		"/swagger-ui.html",
-		"/api-docs",
-		"/openapi.json",
-		"/swagger/v1/swagger.json",
-	}
-
-	analysis := &SwaggerAnalysis{
-		Endpoints: []string{},
-		Exposed:   false,
-		Risk:      "low",
-		Recommendations: []string{
-			"Restrict access to API documentation",
-			"Implement API key authentication",
-			"Use rate limiting for API endpoints",
-		},
-	}
-
-	for _, path := range swaggerPaths {
-		resp, err := s.client.Get(domain + path)
-		if err != nil {
-			continue
-		}
-		resp.Body.Close()
-
-		if resp.StatusCode != 404 {
-			analysis.Endpoints = append(analysis.Endpoints, path)
-			analysis.Exposed = true
-		}
-	}
-
-	if analysis.Exposed {
-		analysis.Risk = "high"
-		analysis.Recommendations = append(analysis.Recommendations,
-			"Move API documentation to authenticated area",
-			"Implement IP-based access restrictions")
-	}
-
-	return analysis, nil
 }
