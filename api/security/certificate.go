@@ -2,6 +2,7 @@
 package security
 
 import (
+	"crypto/ecdsa"
 	"crypto/rsa"
 	"crypto/tls"
 	"fmt"
@@ -53,17 +54,35 @@ func (s *Scanner) checkCertificate(domain string) (*CertificateAnalysis, error) 
 	}
 
 	// Check key strength
-	keyBits := cert.PublicKey.(*rsa.PublicKey).N.BitLen()
-	if keyBits < 2048 {
-		analysis.Findings = append(analysis.Findings, Finding{
-			Description: "Weak certificate key strength",
-			Risk:        RiskHigh,
-			Evidence:    fmt.Sprintf("Key size: %d bits", keyBits),
-			Mitigation:  "Use at least 2048-bit RSA key",
-		})
-		if analysis.Risk < RiskHigh {
-			analysis.Risk = RiskHigh
+	switch pub := cert.PublicKey.(type) {
+	case *rsa.PublicKey:
+		keyBits := pub.N.BitLen()
+		if keyBits < 2048 {
+			analysis.Findings = append(analysis.Findings, Finding{
+				Description: "Weak certificate key strength",
+				Risk:        RiskHigh,
+				Evidence:    fmt.Sprintf("Key size: %d bits", keyBits),
+				Mitigation:  "Use at least 2048-bit RSA key",
+			})
+			if analysis.Risk < RiskHigh {
+				analysis.Risk = RiskHigh
+			}
 		}
+	case *ecdsa.PublicKey:
+		curveBits := pub.Curve.Params().BitSize
+		if curveBits < 256 {
+			analysis.Findings = append(analysis.Findings, Finding{
+				Description: "Weak ECDSA curve size",
+				Risk:        RiskHigh,
+				Evidence:    fmt.Sprintf("Curve size: %d bits", curveBits),
+				Mitigation:  "Use at least a 256-bit ECDSA curve",
+			})
+			if analysis.Risk < RiskHigh {
+				analysis.Risk = RiskHigh
+			}
+		}
+	default:
+		return nil, fmt.Errorf("unsupported public key type: %T", cert.PublicKey)
 	}
 
 	// Determine grade based on findings

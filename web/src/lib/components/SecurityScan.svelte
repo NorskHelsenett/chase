@@ -13,8 +13,10 @@
   function getRiskColor(risk: string): string {
     switch (risk?.toLowerCase()) {
       case 'critical':
+      case 'f':
         return 'text-red-600';
       case 'high':
+      case 'c':
         return 'text-red-500';
       case 'medium':
 			case 'b':
@@ -49,31 +51,19 @@
     performScan();
   });
 
-  // Components
-  const StatCard = ({ title, value, loading }) => {
-    const skeleton = loading ? 'animate-pulse bg-gray-700/20' : '';
-    return `
-      <div class="text-center p-4 bg-gray-800/50 rounded-lg">
-        <div class="text-2xl font-bold ${skeleton}">${value}</div>
-        <div class="text-sm text-gray-400">${title}</div>
-      </div>
-    `;
-  };
-
-  const InfoCard = ({ label, value }) => {
-    return `
-      <div>
-        <div class="text-gray-400 mb-1">${label}</div>
-        <div>${value}</div>
-      </div>
-    `;
-  };
+  const riskLevel = {
+    'info': 0,
+    'low':1,
+    'medium': 2,
+    'high': 3,
+    'critical':4
+  }
 
 	function getHighestRisk(headers) {
 		let maxRiskIssue = null;
 		if (headers?.issues) {
 			for (let issue of headers.issues) {
-				if (!maxRiskIssue || riskLevel[issue.risk] > riskLevel[maxRiskIssue.risk]) {
+				if (!maxRiskIssue || riskLevel[issue.risk.toLowerCase()] > riskLevel[maxRiskIssue.risk.toLowerCase()]) {
 					maxRiskIssue = issue;
 				}
 			}
@@ -97,11 +87,36 @@
 		<div class="bg-[#202020] rounded-lg overflow-hidden" in:fade={{ duration: 200 }}>
 			<!-- Website Screenshot -->
 			<div class="w-full h-48 bg-[#2b2b2b] relative">
-				<img
-					src="/api/placeholder/800/400"
-					alt="Website preview"
-					class="w-full h-full object-cover opacity-80"
-				/>
+        <div class="w-full h-48 bg-[#2b2b2b] relative">
+          {#if loading}
+            <div class="absolute inset-0 animate-pulse bg-gray-700/50" />
+          {:else}
+          <div class="w-full h-48 bg-[#2b2b2b] relative">
+            {#key domain}
+              <div class="relative w-full h-full">
+                <img
+                  src={`/api/screenshot/${encodeURIComponent(domain)}`}
+                  alt="Website preview"
+                  class="w-full h-full object-cover opacity-0 transition-opacity duration-300"
+                  on:load={(e) => {
+                    e.target.classList.remove('opacity-0');
+                    e.target.classList.add('opacity-80');
+                    // Find and remove the loading overlay
+                    const overlay = e.target.parentElement.querySelector('.loading-overlay');
+                    if (overlay) overlay.remove();
+                  }}
+                />
+                <div 
+                  class="loading-overlay absolute inset-0 bg-gray-700/50 animate-pulse"
+                  style="animation-duration: 2s;"
+                />
+              </div>
+            {/key}
+            <div class="absolute bottom-0 left-0 right-0 h-16" />
+          </div>
+          {/if}
+          <div class="absolute bottom-0 left-0 right-0 h-16" />
+        </div>
 				<div class="absolute bottom-0 left-0 right-0 h-16"></div>
 			</div>
 
@@ -297,6 +312,7 @@
 					</div>
 				</div>
 
+        {#if results.adminPages.exposed.length > 0}
 				<div class="mb-4">
 					<h3 class="text-red-400 mb-2">Exposed Pages</h3>
 					<ul class="space-y-1 text-gray-300">
@@ -305,6 +321,7 @@
 						{/each}
 					</ul>
 				</div>
+        {/if}
 
 				<div>
 					<h3 class="text-blue-400 mb-2">Recommendations</h3>
@@ -506,17 +523,6 @@
           </div>
         {/if}
 
-        {#if results.dnsRecords.txtRecords?.length > 0}
-          <div>
-            <h3 class="text-gray-400 mb-2">TXT Records</h3>
-            <ul class="space-y-1">
-              {#each results.dnsRecords.txtRecords as record}
-                <li class="text-gray-300">• {record}</li>
-              {/each}
-            </ul>
-          </div>
-        {/if}
-
         {#if results.dnsRecords.findings?.length > 0}
           <div class="md:col-span-2">
             <h3 class="text-yellow-400 mb-2">Findings</h3>
@@ -528,6 +534,16 @@
           </div>
         {/if}
       </div>
+      {#if results.dnsRecords.txtRecords?.length > 0}
+      <div class="overflow-x-auto w-full">
+        <h3 class="text-gray-400 mb-2">TXT Records</h3>
+        <ul class="space-y-1">
+          {#each results.dnsRecords.txtRecords as record}
+            <li class="text-gray-300">• {record}</li>
+          {/each}
+        </ul>
+      </div>
+    {/if}
     </div>
   {/if}
 
@@ -778,5 +794,14 @@
 
   .animate-pulse {
     animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  }
+
+  .transition-opacity {
+    transition-property: opacity;
+    transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .duration-300 {
+    transition-duration: 300ms;
   }
 </style>

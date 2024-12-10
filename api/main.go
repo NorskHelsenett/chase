@@ -26,6 +26,7 @@ func setupRoutes(r *gin.Engine) {
 		api.GET("/logout", handlers.HandleLogout)
 
 		api.GET("/security/:domain", security.SecurityScanHandler)
+		api.GET("/screenshot/:domain", security.ScreenshotHandler)
 
 		api.Use(auth.Middleware())
 		{

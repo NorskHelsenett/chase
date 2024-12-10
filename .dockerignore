@@ -6,3 +6,5 @@ Dockerfile
 .vscode/**
 .devcontainer/**
 .debug/**
+screenshot-service/**
+.github/**
