@@ -24,18 +24,25 @@ jobs:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
 
-    - name: Set up Docker Buildx
-      uses: docker/setup-buildx-action@v3
-
-    - name: Build and Push with Kaniko
-      uses: aevea/action-kaniko@v0.10.0
+    - name: Build and push with Kaniko
+      uses: google-github-actions/setup-gcloud@v0
       with:
+        install_components: 'gke-gcloud-auth-plugin'
+    
+    - name: Get branch name
+      id: branch-name
+      run: echo "branch=${GITHUB_REF#refs/heads/}" >> $GITHUB_OUTPUT
+
+    - name: Build and Push
+      uses: GoogleContainerTools/kaniko-project/github-action@v0.7.0
+      with:
+        image: ${{ github.repository }}
         registry: ghcr.io
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
-        image: ${{ github.repository }}
-        tag: latest,${{ github.sha }}
+        dockerfile: ./Dockerfile
+        destination: ghcr.io/${{ github.repository }}:latest,ghcr.io/${{ github.repository }}:${{ github.sha }}
         cache: true
-        cache_registry: cache
-        build_args: |
+        cache-repository: ghcr.io/${{ github.repository }}/cache
+        build-args: |
           VERSION=${{ github.sha }}
