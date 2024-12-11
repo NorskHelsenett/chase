@@ -8,11 +8,11 @@ RUN apk add --no-cache \
     mesa-gl \
     pciutils-libs \
     bash \
-    && wget https://github.com/mozilla/geckodriver/releases/download/v0.33.0/geckodriver-v0.33.0-linux64.tar.gz \
-    && tar -xzf geckodriver-v0.33.0-linux64.tar.gz \
+    && wget https://github.com/mozilla/geckodriver/releases/download/v0.35.0/geckodriver-v0.35.0-linux64.tar.gz \
+    && tar -xzf geckodriver-v0.35.0-linux64.tar.gz \
     && mv geckodriver /usr/local/bin/ \
     && chmod +x /usr/local/bin/geckodriver \
-    && rm geckodriver-v0.33.0-linux64.tar.gz
+    && rm geckodriver-v0.35.0-linux64.tar.gz
 
 # Add user appuser with UID and GID 1001
 RUN addgroup -g 1001 appuser && \

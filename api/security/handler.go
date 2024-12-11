@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
@@ -77,120 +78,77 @@ func ScreenshotHandler(c *gin.Context) {
 		return
 	}
 
-	type PythonScreenshotResponse struct {
+	// Add https:// if not present
+	if !strings.HasPrefix(domain, "http") {
+		domain = "https://" + domain
+	}
+
+	// Make request to screenshot service
+	err := captureAndSendScreenshot(c, domain)
+	if err != nil {
+		c.JSON(500, gin.H{"error": err.Error(), "url": domain})
+	}
+}
+
+func captureAndSendScreenshot(c *gin.Context, domain string) error {
+	// Internal response struct
+	type screenshotResponse struct {
 		Success   bool   `json:"success"`
 		Image     string `json:"image"`      // base64 encoded
 		ImageType string `json:"image_type"` // e.g., "image/png"
 		Error     string `json:"error,omitempty"`
-		Timestamp string `json:"timestamp"`
-		URL       string `json:"url"`
 	}
 
-	// Simple HTTPS check
-	if !strings.HasPrefix(domain, "http") {
-		domain = "https://" + strings.TrimPrefix(domain, "http://")
-	}
-
-	// Create request to Python service
-	screenshotReq := struct {
-		URL string `json:"url"`
-	}{
-		URL: domain,
-	}
-
-	jsonData, err := json.Marshal(screenshotReq)
+	// Create request body
+	jsonData, err := json.Marshal(map[string]string{"url": domain})
 	if err != nil {
-		c.JSON(500, gin.H{"error": fmt.Sprintf("Failed to create request: %v", err)})
-		return
+		return fmt.Errorf("failed to create request: %v", err)
 	}
 
-	// Create channels for results and errors
-	resultChan := make(chan *PythonScreenshotResponse, 1)
-	errChan := make(chan error, 1)
-
-	// Make request to Python service in goroutine
-	go func() {
-		client := &http.Client{
-			Timeout: 25 * time.Second,
-		}
-
-		resp, err := client.Post(
-			"http://screenshot:8080/screenshot",
-			"application/json",
-			bytes.NewBuffer(jsonData),
-		)
-		if err != nil {
-			errChan <- fmt.Errorf("screenshot service error: %v", err)
-			return
-		}
-		defer resp.Body.Close()
-
-		if resp.StatusCode != http.StatusOK {
-			body, _ := io.ReadAll(resp.Body)
-			errChan <- fmt.Errorf("service returned status %d: %s", resp.StatusCode, string(body))
-			return
-		}
-
-		// Read and parse response
-		var pythonResp PythonScreenshotResponse
-		if err := json.NewDecoder(resp.Body).Decode(&pythonResp); err != nil {
-			errChan <- fmt.Errorf("failed to parse response: %v", err)
-			return
-		}
-
-		if !pythonResp.Success {
-			errChan <- fmt.Errorf("screenshot failed: %s", pythonResp.Error)
-			return
-		}
-
-		resultChan <- &pythonResp
-	}()
-
-	// Wait for result with timeout
-	select {
-	case err := <-errChan:
-		c.JSON(500, gin.H{
-			"error": fmt.Sprintf("Screenshot capture failed: %v", err),
-			"url":   domain,
-		})
-		return
-
-	case result := <-resultChan:
-		if result == nil {
-			c.JSON(500, gin.H{
-				"error": "Screenshot service returned nil result",
-				"url":   domain,
-			})
-			return
-		}
-
-		// Decode base64 image
-		imgData, err := base64.StdEncoding.DecodeString(result.Image)
-		if err != nil {
-			c.JSON(500, gin.H{
-				"error": fmt.Sprintf("Failed to decode image: %v", err),
-				"url":   domain,
-			})
-			return
-		}
-
-		// Set content type
-		contentType := result.ImageType
-		if contentType == "" {
-			contentType = "image/png"
-		}
-
-		// Return image data
-		c.Header("Content-Type", contentType)
-		c.Header("Content-Disposition", fmt.Sprintf("inline; filename=%s.png", strings.Replace(domain, "/", "_", -1)))
-		c.Data(200, contentType, imgData)
-		return
-
-	case <-time.After(30 * time.Second):
-		c.JSON(504, gin.H{
-			"error": "Screenshot capture timed out",
-			"url":   domain,
-		})
-		return
+	// Make request to screenshot service
+	serviceURL := os.Getenv("SCREENSHOT_SERVICE_URL")
+	if serviceURL == "" {
+		serviceURL = "http://screenshot:8080"
 	}
+
+	client := &http.Client{Timeout: 25 * time.Second}
+	resp, err := client.Post(
+		serviceURL+"/screenshot",
+		"application/json",
+		bytes.NewBuffer(jsonData),
+	)
+	if err != nil {
+		return fmt.Errorf("screenshot service error: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("service returned status %d: %s", resp.StatusCode, string(body))
+	}
+
+	// Parse response
+	var result screenshotResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return fmt.Errorf("failed to parse response: %v", err)
+	}
+
+	if !result.Success {
+		return fmt.Errorf("screenshot failed: %s", result.Error)
+	}
+
+	// Decode and send image
+	imgData, err := base64.StdEncoding.DecodeString(result.Image)
+	if err != nil {
+		return fmt.Errorf("failed to decode image: %v", err)
+	}
+
+	contentType := result.ImageType
+	if contentType == "" {
+		contentType = "image/png"
+	}
+
+	c.Header("Content-Type", contentType)
+	c.Data(200, contentType, imgData)
+	return nil
 }
