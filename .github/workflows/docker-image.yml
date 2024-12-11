@@ -18,6 +18,31 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v3
 
+      # Helm setup
+      - name: Install Helm
+        uses: azure/setup-helm@v3
+
+      # Push Helm chart to GitHub Container Registry
+      - name: Push Helm chart
+        if: github.ref == 'refs/heads/main'
+        run: |
+          #helm pull oci://ghcr.io/${{ github.repository }}/chase
+          #file=$(ls chase-*.tgz)
+          #CURRENT_VERSION=$(echo $file | grep -oP 'chase-\K[0-9]+\.[0-9]+\.[0-9]+')
+          #NEW_VERSION=$(echo $CURRENT_VERSION | awk -F. '{print $1"."$2"."$3+1}')
+          #echo $NEW_VERSION
+          #sed -i "s/version: 0.0.1/version: $NEW_VERSION/" .helm/Chart.yaml
+
+          DIGEST=${{steps.build-docker-image.outputs.digest}}
+          DIGEST="latest@$DIGEST"
+          sed -i "s/tag: \"latest\"/tag: \"$DIGEST\"/" .helm/values.yaml
+
+          echo ${{ secrets.REGISTRY_ACCESS_TOKEN }} | helm registry login ghcr.io -u ${{ github.actor }} --password-stdin
+          cd .helm
+          helm package .
+
+          helm push *.tgz oci://ghcr.io/$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
+
       # Set up Docker environment
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v2
