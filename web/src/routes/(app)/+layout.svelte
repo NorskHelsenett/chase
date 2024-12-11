@@ -1,5 +1,11 @@
 <script>
+	import { initializeAuth } from '$lib/auth';
 	import Navbar from '$lib/components/Navbar.svelte';
+	import { onMount } from 'svelte';
+
+	onMount(async() => {
+		await initializeAuth();
+	})
 </script>
 
 <!-- Mobile view -->

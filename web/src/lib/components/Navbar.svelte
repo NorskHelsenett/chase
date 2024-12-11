@@ -1,7 +1,6 @@
 <script>
-	import { Home, Settings, LogOut, LogIn } from 'lucide-svelte';
+	import { Home, Settings, LogIn } from 'lucide-svelte';
 	import Avatar from './Avatar.svelte';
-	import { logout } from '$lib/api';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/stores';
 	import { isLoggedIn } from '$lib/auth'
@@ -13,15 +12,6 @@
   ];
 
 	let showModal = false;
-
-	async function handleLogout() {
-		try {
-			await logout();
-			window.location.href = '/';
-		} catch (e) {
-			console.error(e.message);
-		}
-	}
 
 	async function handleLogin() {
    try {
@@ -40,9 +30,7 @@
 <div class="flex flex-col items-center h-full">
 	<!-- Top icon -->
 	<div class="mb-8">
-		<button on:click={toProfile} class="text-gray-300 hover:text-white tooltip" use:tooltip data-tooltip="Profile">
-			<Avatar />
-		</button>
+
 	</div>
 
 	<!-- Center icons -->
@@ -65,9 +53,12 @@
 	{#if $isLoggedIn}
 	<!-- Bottom icon -->
 	<div class="mt-8">
-		<button class="text-gray-300 hover:text-white p-2 tooltip" data-tooltip="Log out" on:click={handleLogout} use:tooltip >
-			<LogOut size={24} />
+		<button on:click={toProfile} class="text-gray-300 hover:text-white tooltip" use:tooltip data-tooltip="Profile">
+			<Avatar />
 		</button>
+		<!-- <button class="text-gray-300 hover:text-white p-2 tooltip" data-tooltip="Log out" on:click={handleLogout} use:tooltip >
+			<LogOut size={24} />
+		</button> -->
 	</div>
 	{:else}
 	<div class="mt-8">
