@@ -1,4 +1,4 @@
-name: CI with Helm and GitHub OCI Registry
+name: Build and push screenshot utility
 
 on:
   push:
