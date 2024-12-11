@@ -1,9 +1,11 @@
-name: Build and push screenshot utility
+name: Screenshot utility
 
 on:
   push:
     branches:
       - "*"
+    paths:
+      - 'screenshot-service/**'
 
 jobs:
   buildn-push:
