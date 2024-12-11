@@ -67,14 +67,14 @@ jobs:
           #CURRENT_VERSION=$(echo $file | grep -oP 'chase-\K[0-9]+\.[0-9]+\.[0-9]+')
           #NEW_VERSION=$(echo $CURRENT_VERSION | awk -F. '{print $1"."$2"."$3+1}')
           #echo $NEW_VERSION
-          #sed -i "s/version: 0.0.1/version: $NEW_VERSION/" .charts/Chart.yaml
+          #sed -i "s/version: 0.0.1/version: $NEW_VERSION/" .helm/Chart.yaml
 
           DIGEST=${{steps.build-docker-image.outputs.digest}}
           DIGEST="latest@$DIGEST"
-          sed -i "s/tag: \"latest\"/tag: \"$DIGEST\"/" .charts/values.yaml
+          sed -i "s/tag: \"latest\"/tag: \"$DIGEST\"/" .helm/values.yaml
 
           echo ${{ secrets.REGISTRY_ACCESS_TOKEN }} | helm registry login ghcr.io -u ${{ github.actor }} --password-stdin
-          cd .charts
+          cd .helm
           helm package .
 
           helm push *.tgz oci://ghcr.io/${{ github.repository }}
