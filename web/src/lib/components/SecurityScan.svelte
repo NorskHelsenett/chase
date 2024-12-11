@@ -3,6 +3,8 @@
   import { Lock, Wrench, AlertTriangle, Server, Globe, Shield, File, Book, Key, List, Bug, CheckCircle, XCircle, Settings } from 'lucide-svelte';
   import { fade } from 'svelte/transition';
   import { onMount } from 'svelte';
+	import Certificate from './scan/Certificate.svelte';
+	import Headers from './scan/Headers.svelte';
 
   export let domain: string = '';
 
@@ -106,7 +108,7 @@
                     if (overlay) overlay.remove();
                   }}
                 />
-                <div 
+                <div
                   class="loading-overlay absolute inset-0 bg-gray-700/50 animate-pulse"
                   style="animation-duration: 2s;"
                 />
@@ -174,118 +176,10 @@
 
 <div class="max-w-3xl mx-auto p-4 space-y-6">
 	<!-- Security Headers Section -->
-	<section>
-		<h2 class="text-xl flex items-center gap-2 mb-4">
-			<Lock class="w-5 h-5" />
-			Security Headers Analysis
-		</h2>
-
-		{#if loading}
-			<div class="bg-[#202020] rounded-lg p-6 animate-pulse">
-				<div class="h-8 bg-gray-700 rounded w-1/4 mb-4"></div>
-				<div class="space-y-2">
-					{#each Array(3) as _}
-						<div class="h-4 bg-gray-700 rounded w-full"></div>
-					{/each}
-				</div>
-			</div>
-		{:else if results}
-			<div class="bg-[#202020] rounded-lg p-6" in:fade={{ duration: 200 }}>
-				<div class="flex items-center gap-4 mb-6">
-					<div
-						class="text-4xl font-bold {getRiskColor(results.headers.score)}"
-					>
-						{results.headers.score}
-					</div>
-					<div class="text-gray-400">Security Headers Score</div>
-				</div>
-
-				{#if results.headers.issues.length > 0}
-					<div class="mb-4">
-						<h3 class="text-red-400 flex items-center gap-2 mb-2">
-							<AlertTriangle class="w-4 h-4" />
-							Issues Found
-						</h3>
-						<ul class="space-y-1 text-gray-300">
-							{#each results.headers.issues as issue}
-								<li>• {issue.description}</li>
-							{/each}
-						</ul>
-					</div>
-				{/if}
-
-				<div>
-					<h3 class="text-green-400 mb-2">Passed Checks</h3>
-					<ul class="space-y-1 text-gray-300">
-						{#each results.headers.passed as check}
-							<li>• {check}</li>
-						{/each}
-					</ul>
-				</div>
-			</div>
-		{/if}
-	</section>
+  <Headers {loading} {results} />
 
 	<!-- Certificate Section -->
-	<section>
-		<h2 class="text-xl flex items-center gap-2 mb-4">
-			<Wrench class="w-5 h-5" />
-			SSL/TLS Certificate Analysis
-		</h2>
-
-		{#if loading}
-			<div class="bg-[#202020] rounded-lg p-6 animate-pulse">
-				<div class="h-8 bg-gray-700 rounded w-1/4 mb-4"></div>
-				<div class="space-y-2">
-					{#each Array(4) as _}
-						<div class="h-4 bg-gray-700 rounded w-full"></div>
-					{/each}
-				</div>
-			</div>
-		{:else if results}
-			<div class="bg-[#202020] rounded-lg p-6" in:fade={{ duration: 200 }}>
-				<div class="flex items-center gap-4 mb-6">
-					<div
-						class="text-4xl font-bold {getRiskColor(results.certificate.grade)}"
-					>
-						{results.certificate.grade}
-					</div>
-					<div class="text-gray-400">Certificate Grade</div>
-				</div>
-
-				<div class="grid grid-cols-2 gap-4">
-					<div>
-						<h3 class="text-gray-400 mb-2">Certificate Details</h3>
-						<p class="text-gray-300">Valid until: {results.certificate.validUntil}</p>
-						<p class="text-gray-300">Issuer: {results.certificate.issuer}</p>
-					</div>
-
-					<div>
-						<h3 class="text-gray-400 mb-2">Findings</h3>
-						<ul class="space-y-1 text-gray-300">
-							{#each results.certificate.findings as finding}
-								<li>• {finding}</li>
-							{/each}
-						</ul>
-					</div>
-				</div>
-
-				{#if results.certificate.warnings.length > 0}
-					<div class="mt-4">
-						<h3 class="text-yellow-400 flex items-center gap-2 mb-2">
-							<AlertTriangle class="w-4 h-4" />
-							Warnings
-						</h3>
-						<ul class="space-y-1 text-gray-300">
-							{#each results.certificate.warnings as warning}
-								<li>• {warning}</li>
-							{/each}
-						</ul>
-					</div>
-				{/if}
-			</div>
-		{/if}
-	</section>
+  <Certificate {loading} {results} />
 
 	<!-- Admin Pages Section -->
 	<section>
@@ -696,7 +590,7 @@
                 <div class="font-medium">
                   {new Date(results.securityTxt.expiration).toLocaleDateString("no")}
                 </div>
-                <div class={daysUntilExpiry < 30 ? 'text-red-400' : 
+                <div class={daysUntilExpiry < 30 ? 'text-red-400' :
                            daysUntilExpiry < 90 ? 'text-yellow-400' : 'text-green-400'}>
                   {daysUntilExpiry} days remaining
                 </div>

@@ -116,12 +116,25 @@ type HeadersAnalysis struct {
 }
 
 type CertificateAnalysis struct {
-	Grade      string    `json:"grade"`
-	ValidUntil time.Time `json:"validUntil"` // Changed to time.Time
-	Issuer     string    `json:"issuer"`
-	Findings   []Finding `json:"findings"` // Changed to Finding type
-	Warnings   []Finding `json:"warnings"` // Changed to Finding type
-	Risk       RiskLevel `json:"risk"`
+	Grade              string    `json:"grade"`
+	ValidUntil         time.Time `json:"validUntil"`
+	Issuer            string    `json:"issuer"`
+	Organization      string    `json:"organization"`
+	Findings          []Finding `json:"findings"`
+	Warnings          []Finding `json:"warnings"`
+	Risk              RiskLevel `json:"risk"`
+	TLSVersions       []string  `json:"tlsVersions"`
+	SupportedCiphers  []Cipher  `json:"supportedCiphers"`
+	CTEnabled         bool      `json:"ctEnabled"`
+	RevocationStatus  string    `json:"revocationStatus"`
+}
+
+type Cipher struct {
+	Name       string `json:"name"`
+	KeyExchange string `json:"keyExchange"`
+	Strength   int    `json:"strength"`
+	Forward    bool   `json:"forwardSecrecy"`
+	Weak       bool   `json:"weak"`
 }
 
 type AdminPagesAnalysis struct {

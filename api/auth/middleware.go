@@ -39,14 +39,14 @@ func Middleware() gin.HandlerFunc {
 
 		sessionID, err := c.Cookie("session")
 		if err != nil {
-			c.Redirect(http.StatusFound, "/login")
+			// c.Redirect(http.StatusFound, "/api/login")
 			c.Abort()
 			return
 		}
 
 		sessionInfo, ok := session.GetSession(sessionID)
 		if !ok || time.Now().After(sessionInfo.Exp) {
-			c.Redirect(http.StatusFound, "/login")
+			// c.Redirect(http.StatusFound, "/api/login")
 			c.Abort()
 			return
 		}

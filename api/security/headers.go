@@ -3,12 +3,20 @@ package security
 
 import (
 	"fmt"
+	"strings"
 )
+
+// headerCheck defines the validation rules for a security header
+type headerCheck struct {
+	description string
+	risk        RiskLevel
+	validator   func(string) (bool, string) // Returns: valid, reason
+}
 
 func (s *Scanner) checkSecurityHeaders(domain string) (*HeadersAnalysis, error) {
 	resp, err := s.client.Get(domain)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to fetch domain: %w", err)
 	}
 	defer resp.Body.Close()
 
@@ -18,23 +26,91 @@ func (s *Scanner) checkSecurityHeaders(domain string) (*HeadersAnalysis, error) 
 		Risk:   RiskLow,
 	}
 
-	headerChecks := map[string]struct {
-		description string
-		risk        RiskLevel
-	}{
-		"Strict-Transport-Security": {"HSTS not enabled", RiskHigh},
-		"X-Frame-Options":           {"Clickjacking protection not enabled", RiskMedium},
-		"X-Content-Type-Options":    {"MIME-type sniffing not prevented", RiskMedium},
-		"Content-Security-Policy":   {"No content security policy configured", RiskHigh},
-		"X-XSS-Protection":          {"XSS protection not enabled", RiskMedium},
-		"Referrer-Policy":           {"Referrer policy not configured", RiskLow},
+	headerChecks := map[string]headerCheck{
+		"Strict-Transport-Security": {
+			description: "HSTS not properly configured",
+			risk:        RiskHigh,
+			validator: func(value string) (bool, string) {
+				if !strings.Contains(value, "max-age=") {
+					return false, "missing max-age directive"
+				}
+				if !strings.Contains(value, "includeSubDomains") {
+					return false, "missing includeSubDomains directive"
+				}
+				return true, ""
+			},
+		},
+		"Content-Security-Policy": {
+			description: "Content Security Policy not properly configured",
+			risk:        RiskHigh,
+			validator: func(value string) (bool, string) {
+				if value == "" {
+					return false, "empty policy"
+				}
+				if strings.Contains(value, "unsafe-inline") || strings.Contains(value, "unsafe-eval") {
+					return false, "contains unsafe directives"
+				}
+				return true, ""
+			},
+		},
+		"X-Frame-Options": {
+			description: "Clickjacking protection not properly configured",
+			risk:        RiskMedium,
+			validator: func(value string) (bool, string) {
+				value = strings.ToUpper(value)
+				if value != "DENY" && value != "SAMEORIGIN" {
+					return false, "invalid value - should be DENY or SAMEORIGIN"
+				}
+				return true, ""
+			},
+		},
+		"X-Content-Type-Options": {
+			description: "MIME-type sniffing protection not properly configured",
+			risk:        RiskMedium,
+			validator: func(value string) (bool, string) {
+				if value != "nosniff" {
+					return false, "invalid value - must be nosniff"
+				}
+				return true, ""
+			},
+		},
+		"Referrer-Policy": {
+			description: "Referrer policy not properly configured",
+			risk:        RiskLow,
+			validator: func(value string) (bool, string) {
+				validPolicies := map[string]bool{
+					"no-referrer": true, "no-referrer-when-downgrade": true,
+					"origin": true, "origin-when-cross-origin": true,
+					"same-origin": true, "strict-origin": true,
+					"strict-origin-when-cross-origin": true, "unsafe-url": true,
+				}
+				policies := strings.Split(value, ",")
+				for _, policy := range policies {
+					if !validPolicies[strings.TrimSpace(policy)] {
+						return false, "contains invalid policy"
+					}
+				}
+				return true, ""
+			},
+		},
+		"Permissions-Policy": {
+			description: "Permissions policy not properly configured",
+			risk:        RiskMedium,
+			validator: func(value string) (bool, string) {
+				if value == "" {
+					return false, "empty policy"
+				}
+				return true, ""
+			},
+		},
 	}
 
 	score := 100
 	highestRisk := RiskLow
 
 	for header, check := range headerChecks {
-		if value := resp.Header.Get(header); value == "" {
+		value := resp.Header.Get(header)
+		if value == "" {
 			analysis.Issues = append(analysis.Issues, Finding{
 				Description: check.description,
 				Risk:        check.risk,
@@ -46,7 +122,20 @@ func (s *Scanner) checkSecurityHeaders(domain string) (*HeadersAnalysis, error) 
 				highestRisk = check.risk
 			}
 		} else {
-			analysis.Passed = append(analysis.Passed, fmt.Sprintf("%s: %s", header, value))
+			if valid, reason := check.validator(value); !valid {
+				analysis.Issues = append(analysis.Issues, Finding{
+					Description: check.description,
+					Risk:        check.risk,
+					Evidence:    fmt.Sprintf("Header '%s' has invalid value: %s", header, reason),
+					Mitigation:  fmt.Sprintf("Update the '%s' header with correct values", header),
+				})
+				score -= 10
+				if check.risk > highestRisk {
+					highestRisk = check.risk
+				}
+			} else {
+				analysis.Passed = append(analysis.Passed, fmt.Sprintf("%s: %s", header, value))
+			}
 		}
 	}
 

@@ -1,10 +1,10 @@
-// certificate.go
 package security
 
 import (
 	"crypto/ecdsa"
 	"crypto/rsa"
 	"crypto/tls"
+	"crypto/x509"
 	"fmt"
 	"strings"
 	"time"
@@ -16,6 +16,28 @@ func (s *Scanner) checkCertificate(domain string) (*CertificateAnalysis, error) 
 		host = host + ":443"
 	}
 
+	// Test different TLS versions
+	tlsVersions := make([]string, 0)
+	versions := map[uint16]string{
+		tls.VersionTLS10: "TLS 1.0",
+		tls.VersionTLS11: "TLS 1.1",
+		tls.VersionTLS12: "TLS 1.2",
+		tls.VersionTLS13: "TLS 1.3",
+	}
+
+	for version, name := range versions {
+		config := &tls.Config{
+			InsecureSkipVerify: true,
+			MinVersion:         version,
+			MaxVersion:         version,
+		}
+		if conn, err := tls.Dial("tcp", host, config); err == nil {
+			tlsVersions = append(tlsVersions, name)
+			conn.Close()
+		}
+	}
+
+	// Main connection for full analysis
 	conn, err := tls.Dial("tcp", host, &tls.Config{
 		InsecureSkipVerify: true,
 	})
@@ -26,14 +48,28 @@ func (s *Scanner) checkCertificate(domain string) (*CertificateAnalysis, error) 
 
 	cert := conn.ConnectionState().PeerCertificates[0]
 	analysis := &CertificateAnalysis{
-		ValidUntil: cert.NotAfter,
-		Issuer:     cert.Issuer.CommonName,
-		Findings:   make([]Finding, 0),
-		Warnings:   make([]Finding, 0),
-		Risk:       RiskLow,
+		ValidUntil:    cert.NotAfter,
+		Issuer:        cert.Issuer.CommonName,
+		Organization:  getOrganization(cert),
+		Findings:      make([]Finding, 0),
+		Warnings:      make([]Finding, 0),
+		Risk:          RiskLow,
+		TLSVersions:   tlsVersions,
 	}
 
-	// Check certificate expiration
+	// Check TLS version support
+	for _, version := range tlsVersions {
+		if version == "TLS 1.0" || version == "TLS 1.1" {
+			analysis.Warnings = append(analysis.Warnings, Finding{
+				Description: "Outdated TLS version supported",
+				Risk:        RiskMedium,
+				Evidence:    fmt.Sprintf("Server supports %s", version),
+				Mitigation:  "Disable TLS 1.0 and 1.1 support",
+			})
+		}
+	}
+
+	// Original expiration check
 	expirationDays := time.Until(cert.NotAfter).Hours() / 24
 	if expirationDays < 0 {
 		analysis.Findings = append(analysis.Findings, Finding{
@@ -53,7 +89,7 @@ func (s *Scanner) checkCertificate(domain string) (*CertificateAnalysis, error) 
 		analysis.Risk = RiskHigh
 	}
 
-	// Check key strength
+	// Original key strength check
 	switch pub := cert.PublicKey.(type) {
 	case *rsa.PublicKey:
 		keyBits := pub.N.BitLen()
@@ -85,16 +121,65 @@ func (s *Scanner) checkCertificate(domain string) (*CertificateAnalysis, error) 
 		return nil, fmt.Errorf("unsupported public key type: %T", cert.PublicKey)
 	}
 
-	// Determine grade based on findings
-	if len(analysis.Findings) == 0 && len(analysis.Warnings) == 0 {
-		analysis.Grade = "A+"
-	} else if len(analysis.Findings) == 0 {
-		analysis.Grade = "A"
-	} else if analysis.Risk == RiskHigh {
-		analysis.Grade = "C"
-	} else {
-		analysis.Grade = "B"
-	}
+	// Updated grade calculation
+	analysis.Grade = calculateGradeCertificate(analysis)
 
 	return analysis, nil
+}
+
+func getOrganization(cert *x509.Certificate) string {
+	// Try different certificate fields for organization info
+	if len(cert.Subject.Organization) > 0 {
+			return cert.Subject.Organization[0]
+	}
+
+	if len(cert.Issuer.Organization) > 0 {
+			return cert.Issuer.Organization[0]
+	}
+
+	// Try CommonName if no Organization is set
+	if cert.Subject.CommonName != "" {
+			// Remove any wildcard prefixes
+			cn := strings.TrimPrefix(cert.Subject.CommonName, "*.")
+			// If it looks like a domain, don't use it as organization
+			if !strings.Contains(cn, ".") {
+					return cn
+			}
+	}
+
+	// Try OrganizationalUnit if available
+	if len(cert.Subject.OrganizationalUnit) > 0 {
+			return cert.Subject.OrganizationalUnit[0]
+	}
+
+	// Try Subject Alternative Names for organization info
+	for _, name := range cert.Subject.Names {
+			// OID 2.5.4.10 is Organization Name
+			if name.Type.Equal([]int{2, 5, 4, 10}) {
+					if str, ok := name.Value.(string); ok {
+							return str
+					}
+			}
+	}
+
+	return "Unknown Organization"
+}
+
+func calculateGradeCertificate(analysis *CertificateAnalysis) string {
+	if len(analysis.Findings) > 0 {
+		return "C"
+	}
+
+	// Cap grade at B for TLS 1.0/1.1 support
+	for _, version := range analysis.TLSVersions {
+		if version == "TLS 1.0" || version == "TLS 1.1" {
+			return "B"
+		}
+	}
+
+	if len(analysis.Warnings) > 0 {
+		return "A"
+	}
+
+	return "A+"
 }

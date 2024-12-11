@@ -31,7 +31,7 @@
 	// "forwardPorts": [],
 
 	// Use 'postCreateCommand' to run commands after the container is created.
-	"postCreateCommand": "mkdir -p .debug/data"
+	"postCreateCommand": "mkdir -p .debug/data && touch api/.env && cd web && npm install"
 
 	// Configure tool-specific properties.
 	// "customizations": {},
