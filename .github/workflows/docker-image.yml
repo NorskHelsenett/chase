@@ -80,15 +80,6 @@ jobs:
       - name: Install Helm
         uses: azure/setup-helm@v3
 
-      # Cache Helm dependencies
-      - name: Cache Helm dependencies
-        uses: actions/cache@v3
-        with:
-          path: ~/.cache/helm
-          key: ${{ runner.os }}-helm-${{ hashFiles('**/Chart.yaml', '**/Chart.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-helm-
-
       # Push Helm chart to GitHub Container Registry
       - name: Push Helm chart
         if: github.ref == 'refs/heads/main'
