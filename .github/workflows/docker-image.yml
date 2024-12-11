@@ -84,7 +84,7 @@ jobs:
       - name: Push Helm chart
         if: github.ref == 'refs/heads/main'
         run: |
-          helm pull oci://ghcr.io/${{ github.repository }}/chase
+          helm pull oci://ghcr.io/$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')/chase
           file=$(ls chase-*.tgz)
           CURRENT_VERSION=$(echo $file | grep -oP 'chase-\K[0-9]+\.[0-9]+\.[0-9]+')
           NEW_VERSION=$(echo $CURRENT_VERSION | awk -F. '{print $1"."$2"."$3+1}')
