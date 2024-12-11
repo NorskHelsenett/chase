@@ -29,7 +29,7 @@ chase:
   - name: DATA_FOLDER
     value: "/data"
   - name: SCREENSHOT_SERVICE_URL
-    value: "http://screenshotr-service.svc.local:80"
+    value: "http://screenshotr-service:8080"
   services:
   - name: chase-service
     port: 8080
