@@ -99,4 +99,4 @@ jobs:
           cd .helm
           helm package .
 
-          helm push *.tgz oci://ghcr.io/${{ github.repository }}
+          helm push *.tgz oci://ghcr.io/$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
