@@ -1,4 +1,4 @@
-name: CI with Helm and GitHub OCI Registry
+name: CHASE CI/CD Build
 
 on:
   push:
