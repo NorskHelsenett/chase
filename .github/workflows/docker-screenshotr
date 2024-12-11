@@ -4,8 +4,6 @@ on:
   push:
     branches:
       - "*"
-    paths:
-      - 'screenshot-service/**'  # Only trigger when changes are made in this directory
 
 jobs:
   buildn-push:
