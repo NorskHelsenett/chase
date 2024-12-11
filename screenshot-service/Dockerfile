@@ -22,8 +22,9 @@ RUN addgroup -g 1001 appuser && \
     chown appuser:appuser /usr/local/bin/geckodriver && \
     mkdir -p /home/appuser/.mozilla && \
     chown -R appuser:appuser /home/appuser && \
-    # Create and set permissions for X11 directory
+    # Pre-create X11 directory structure with correct permissions
     mkdir -p /tmp/.X11-unix && \
+    chown root:root /tmp/.X11-unix && \
     chmod 1777 /tmp/.X11-unix && \
     # Add write permission to /dev/shm for Selenium/Firefox
     chmod 1777 /dev/shm
