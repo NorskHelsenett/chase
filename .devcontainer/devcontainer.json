@@ -5,14 +5,21 @@
 	// Or use a Dockerfile or Docker Compose file. More info: https://containers.dev/guide/dockerfile
 	"image": "mcr.microsoft.com/devcontainers/go:1-1.23-bookworm",
 	"features": {
-		"ghcr.io/devcontainers/features/node:1": {}
+		"ghcr.io/devcontainers/features/node:1": {},
+		"ghcr.io/devcontainers/features/kubectl-helm-minikube:1": {
+			"version": "latest",
+			"helm": "latest",
+			"minikube": "none"
+		}
 	},
 	"customizations": {
 		"vscode": {
 			"extensions": [
 				"golang.go",
 				"dbaeumer.vscode-eslint",
-				"svelte.svelte-vscode"
+				"svelte.svelte-vscode",
+				"qwtel.sqlite-viewer",
+				"ms-kubernetes-tools.vscode-kubernetes-tools"
 			]
 		}
 	},
