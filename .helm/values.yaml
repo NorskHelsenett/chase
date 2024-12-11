@@ -1,0 +1,86 @@
+# Default values for prism.
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+chase:
+  repository: ghcr.io/norskhelsenett/chase
+  pullPolicy: Always
+  tag: "latest"
+  deployment: statefulSet
+  mounts:
+  - name: data
+    mountPath: /data
+    readOnly: false
+    storage: 10Gi
+    statefulSet: true
+  - name: tmp
+    inMemory: true
+    mountPath: /tmp
+    readOnly: false
+    storage: 50Mi
+  host: chase.example.com
+  hostRule:
+    datascripts:
+      - expose-nhn-office-client
+      - expose-nhn-office-devops
+      - expose-nhn-office-nat
+      - expose-nhn-office-isp
+      - bottom-deny-rule
+  env:
+  - name: DATA_FOLDER
+    value: "/data"
+  - name: SCREENSHOT_SERVICE_URL
+    value: "http://screenshotr-service.svc.local:80"
+  services:
+  - name: chase-service
+    port: 8080
+
+screenshotr:
+  repository: ghcr.io/norskhelsenett/chase/screenshotr
+  pullPolicy: Always
+  deployment: deployment
+  replicaCount: 1
+  tag: ""
+  resources:
+    requests:
+      memory: "512Mi"    # Request 512 MiB of memory
+      cpu: "250m"        # Request 0.25 CPU cores
+    limits:
+      memory: "1024Mi"   # Limit to 1 GiB of memory
+      cpu: "500m"        # Limit to 0.5 CPU cores
+  services:
+  - name: web
+    port: 8080
+  - name: geckodriver
+    port: 4444
+  env:
+  - name: MOZ_HEADLESS
+    value: "1"
+  - name: FIREFOX_BIN
+    value: "/usr/lib/firefox-esr/firefox-esr"
+  - name: MOZ_DISABLE_CONTENT_SANDBOX
+    value: "1"
+  - name: GECKO_DRIVER_PORT
+    value: "4444"
+  - name: GECKO_DRIVER_HOST
+    value: "127.0.0.1"
+  mounts:
+  - name: dshm
+    inMemory: true
+    mountPath: /dev/shm
+    readOnly: false
+    storage: 1Gi
+  - name: tmp
+    inMemory: true
+    mountPath: /tmp
+    readOnly: false
+    storage: 50Mi
+  - name: home
+    inMemory: true
+    mountPath: /home
+    readOnly: false
+    storage: 50Mi
+  - name: screenshots
+    inMemory: true
+    mountPath: /app/screenshots
+    readOnly: false
+    storage: 50Mi
