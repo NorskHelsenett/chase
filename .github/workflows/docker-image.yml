@@ -24,7 +24,6 @@ jobs:
 
       # Push Helm chart to GitHub Container Registry
       - name: Push Helm chart
-        if: github.ref == 'refs/heads/main'
         run: |
           #helm pull oci://ghcr.io/${{ github.repository }}/chase
           #file=$(ls chase-*.tgz)
