@@ -536,7 +536,7 @@
       </div>
       {#if results.dnsRecords.txtRecords?.length > 0}
       <div class="overflow-x-auto w-full">
-        <h3 class="text-gray-400 mb-2">TXT Records</h3>
+        <h3 class="text-gray-400 mb-2 mt-4">TXT Records</h3>
         <ul class="space-y-1">
           {#each results.dnsRecords.txtRecords as record}
             <li class="text-gray-300">• {record}</li>
@@ -694,7 +694,7 @@
               <h3 class="text-gray-400 mb-2">Expiration</h3>
               <div class="p-2 bg-gray-800/50 rounded-lg">
                 <div class="font-medium">
-                  {new Date(results.securityTxt.expiration).toLocaleDateString()}
+                  {new Date(results.securityTxt.expiration).toLocaleDateString("no")}
                 </div>
                 <div class={daysUntilExpiry < 30 ? 'text-red-400' : 
                            daysUntilExpiry < 90 ? 'text-yellow-400' : 'text-green-400'}>
