@@ -19,8 +19,10 @@
   $: rowData = mapServerToRowData(server);
 
   function mapServerToRowData(server: Server): ServerRowData {
-    const lastPing = server.ping_results[0];
-    const sortedPings = [...server.ping_results].sort((a, b) => b.timestamp - a.timestamp);
+    const sortedPings = [...server.ping_results].sort((a, b) =>
+      new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+    );
+    const lastPing = sortedPings[0];
 
     return {
       status: sortedPings[0]?.error || sortedPings[0]?.status_code >= 400 ? 'down' : 'up',
@@ -108,9 +110,9 @@
   <div class="flex gap-1">
     {#each Array(10) as _, i}
       {#if i < (10 - rowData.uptime.length)}
-          <div class="w-1 h-4 rounded-sm bg-green-200/20"></div>
+        <div class="w-1 h-4 rounded-sm bg-green-200/20"></div>
       {:else}
-        <div class={`w-1 h-4 rounded-sm ${getUptimeColor(rowData.uptime[i - (10 - rowData.uptime.length)])}`}></div>
+        <div class={`w-1 h-4 rounded-sm ${getUptimeColor(rowData.uptime[rowData.uptime.length - (i - (10 - rowData.uptime.length) + 1)])}`}></div>
       {/if}
     {/each}
   </div>

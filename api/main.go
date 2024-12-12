@@ -33,9 +33,10 @@ func setupRoutes(r *gin.Engine) {
 		api.GET("/servers", servers.GetServers)
 		api.PUT("/servers/:id", servers.UpdateServer)
 		api.GET("/servers/:id", servers.GetServer)
+		api.GET("/servers/:id/report", security.LastSecurityScanHandler)
 		api.GET("/servers/:id/results", servers.GetServerResults)
 		api.POST("/servers/:id/force-check", servers.ForceCheckServer)
-
+		
 		api.Use(auth.Middleware())
 		{
 			api.GET("/register", registerToken)
@@ -66,6 +67,7 @@ func main() {
 
 	db = database.GetDB()
 	db.AutoMigrate(&servers.Server{}, &servers.PingResult{})
+	security.InitDatabase()
 
 	go servers.StartMonitoring()
 

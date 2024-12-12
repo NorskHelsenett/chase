@@ -31,9 +31,7 @@
       loading = true;
       searchTimestamp = Date.now();
       try {
-          // Simulate API delay
-          await new Promise(resolve => setTimeout(resolve, 1500));
-          const response = await fetch(`/api/search?q=${encodeURIComponent(query)}`);
+          const response = await fetch(`/api/security/${encodeURIComponent(query)}`);
           const data = await response.json();
           searchResults = data;
           // Store search in history
@@ -77,8 +75,6 @@
         <span>Site Report</span>
     </div>
 
-    <SecurityScan domain="{data.query}"/>
-
       <!-- Results/Loading States -->
       <div class="space-y-4">
           {#if loading}
@@ -100,31 +96,9 @@
                   </div>
               {/each}
           {:else}
-              {#each searchResults as result, i}
-                  <div
-                      class="bg-[#202020] hover:bg-[#252525] transition-colors rounded-lg p-4"
-                      in:fade|local={{ duration: 200, delay: i * 100 }}
-                  >
-                      <div class="flex items-center gap-4">
-                          <div class="w-12 h-12 bg-[#2b2b2b] rounded-lg flex items-center justify-center">
-                              <img
-                                  src={result.icon || "/api/placeholder/48/48"}
-                                  alt=""
-                                  class="w-8 h-8 rounded"
-                              />
-                          </div>
-                          <div>
-                              <h3 class="text-[#4cc9f0] hover:underline">
-                                  <a href={result.url} target="_blank" rel="noopener">
-                                      {result.title}
-                                  </a>
-                              </h3>
-                              <span class="text-sm text-gray-400">{result.domain}</span>
-                          </div>
-                      </div>
-                      <p class="mt-3 text-gray-300 line-clamp-2">{result.description}</p>
-                  </div>
-              {/each}
+
+            <SecurityScan {searchResults}/>
+
           {/if}
       </div>
   </div>

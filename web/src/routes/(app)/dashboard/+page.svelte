@@ -19,7 +19,10 @@
       console.log(servers)
 
       stats = servers.reduce((acc: Stats, server: Server) => {
-        const latestPing = server.ping_results?.[0];
+        const sortedPings = [...server.ping_results].sort((a, b) =>
+          new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+        );
+        const latestPing = sortedPings[0];
 
         if (latestPing) {
           // Check if server is up (matching expected status code)

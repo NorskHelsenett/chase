@@ -5,6 +5,7 @@
   import StatusMetrics from '$lib/components/server/StatusMetrics.svelte';
   import ResponseTimeGraph from '$lib/components/server/ResponseTimeGraph.svelte';
 	import ServerInfoCard from '$lib/components/server/ServerInfoCard.svelte';
+	import SecurityScan from '$lib/components/SecurityScan.svelte';
 
   /** @type {import('./$types').PageData} */
   export let data;
@@ -14,13 +15,23 @@
   let isLoading = true;
   let error: string | null = null;
 
+  let searchResults = null
+
   $: if (data.id) {
     serverID = data.id;
   }
 
   onMount(() => {
     fetchServerData(serverID);
+    fetchServerReport(serverID);
   });
+
+  async function fetchServerReport(id: number) {
+    const response = await fetch(`/api/servers/${id}/report`);
+    if (!response.ok) throw new Error('Failed to fetch server data');
+
+    searchResults = await response.json();
+  }
 
   async function fetchServerData(id: number) {
     isLoading = true;
@@ -102,5 +113,8 @@
         value: ping.response_time_ms
       }))}
     />
+  {/if}
+  {#if searchResults}
+    <SecurityScan {searchResults}/>
   {/if}
 </div>

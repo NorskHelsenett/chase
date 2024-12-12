@@ -1,12 +1,13 @@
 <!-- SecurityDashboard.svelte -->
 <script lang="ts">
-  import { Lock, Wrench, AlertTriangle, Server, Globe, Shield, File, Book, Key, List, Bug, CheckCircle, XCircle, Settings } from 'lucide-svelte';
+  import { AlertTriangle, Server, Globe, Shield, File, Book } from 'lucide-svelte';
   import { fade } from 'svelte/transition';
   import { onMount } from 'svelte';
 	import Certificate from './scan/Certificate.svelte';
 	import Headers from './scan/Headers.svelte';
 
   export let domain: string = '';
+  export let searchResults = {}
 
   let loading = true;
   let results: any = null;
@@ -34,8 +35,16 @@
   }
 
   async function performScan() {
+    if (searchResults != null) {
+      results = searchResults
+      loading = false;
+    }
+    if (domain == "") {
+      return
+    }
     loading = true;
     error = null;
+
 
     try {
       const response = await fetch(`/api/security/${encodeURIComponent(domain)}`);
