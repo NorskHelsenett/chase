@@ -1,14 +1,40 @@
 <script lang="ts">
-  export let data: {
+  import type { Server } from '$lib/models';
+
+  type ServerRowData = {
     status: 'up' | 'down';
     title: string;
-    headerScore: 'A+' | 'A' | 'B' | 'C' | 'D' | 'F';
-    certScore: 'A+' | 'A' | 'B' | 'C' | 'D' | 'F';
-    adminRisk: 'critical' | 'high' | 'medium' | 'low';
-    apiRisk: 'critical' | 'high' | 'medium' | 'low';
+    headerScore: 'A+' | 'A' | 'B' | 'C' | 'D' | 'F' | '';
+    certScore: 'A+' | 'A' | 'B' | 'C' | 'D' | 'F' | '';
+    adminRisk: 'critical' | 'high' | 'medium' | 'low' | '';
+    apiRisk: 'critical' | 'high' | 'medium' | 'low' | '';
     ip: string;
     uptime: Array<-1 | 0 | 1>;
   };
+
+  export let server: Server;
+
+  let rowData: ServerRowData;
+
+  $: rowData = mapServerToRowData(server);
+
+  function mapServerToRowData(server: Server): ServerRowData {
+    const lastPing = server.ping_results[0];
+
+    return {
+      status: server.active ? 'up' : 'down',
+      title: server.url,
+      headerScore: '',
+      certScore: '',
+      adminRisk: '',
+      apiRisk: '',
+      ip: lastPing?.ip || '',
+      uptime: server.ping_results
+        .slice(0, 10)
+        .reverse()
+        .map(ping => ping.error || ping.status_code >= 400 ? -1 : 1)
+    };
+  }
 
   const getRiskColor = (risk: string) => {
     switch(risk) {
@@ -40,39 +66,51 @@
 
   const getUptimeColor = (status: number) => {
     switch(status) {
-      case 1: return 'bg-lime-400'; // up
-      case -1: return 'bg-red-900'; // down
-      default: return 'bg-green-200/20'; // no data
+      case 1: return 'bg-lime-300/70'; // up
+      case -1: return 'bg-red-500'; // down
+      default: return 'bg-green-200/10'; // no data
     }
   };
 </script>
 
-<div class="grid grid-cols-8 gap-4 p-3 hover:bg-[#2b2b2b] rounded-lg items-center cursor-pointer">
-  <div class="flex items-center gap-2 w-full">
-    <span class={`px-2 py-0.5 text-xs w-[7em] text-center font-medium rounded-full ${getStatusClasses(data.status)}`}>
-      {data.status.toUpperCase()}
-    </span>
+<td class="py-2">
+  <span class={`px-2 py-0.5 text-xs w-[7em] text-center font-medium rounded-full ${getStatusClasses(rowData.status)}`}>
+    {rowData.status.toUpperCase()}
+  </span>
+</td>
+
+<td class="text-white min-w-[300px]">
+  <div class="whitespace-nowrap overflow-hidden text-ellipsis">
+    {rowData.title}
   </div>
+</td>
 
-  <div class="text-white">{data.title}</div>
+<td class={getScoreColor(rowData.headerScore)}>{rowData.headerScore}</td>
 
-  <div class={getScoreColor(data.headerScore)}>{data.headerScore}</div>
+<td class={getScoreColor(rowData.certScore)}>{rowData.certScore}</td>
 
-  <div class={getScoreColor(data.certScore)}>{data.certScore}</div>
-
-  <div class={`px-2 py-1 w-[7em] text-center rounded-full text-sm ${getRiskColor(data.adminRisk)}`}>
-    {data.adminRisk}
+<td>
+  <div class={`px-2 py-1 w-[7em] text-center rounded-full text-sm ${getRiskColor(rowData.adminRisk)}`}>
+    {rowData.adminRisk}
   </div>
+</td>
 
-  <div class={`px-2 py-1 w-[7em] text-center rounded-full text-sm ${getRiskColor(data.apiRisk)}`}>
-    {data.apiRisk}
+<td>
+  <div class={`px-2 py-1 w-[7em] text-center rounded-full text-sm ${getRiskColor(rowData.apiRisk)}`}>
+    {rowData.apiRisk}
   </div>
+</td>
 
-  <div class="text-gray-400">{data.ip}</div>
+<td class="text-gray-400">{rowData.ip}</td>
 
+<td>
   <div class="flex gap-1">
-    {#each data.uptime as status}
-    <div class={`w-1 h-4 rounded-sm ${getUptimeColor(status)}`}></div>
-  {/each}
+    {#each Array(10) as _, i}
+      {#if i < (10 - rowData.uptime.length)}
+          <div class="w-1 h-4 rounded-sm bg-green-200/20"></div>
+      {:else}
+        <div class={`w-1 h-4 rounded-sm ${getUptimeColor(rowData.uptime[i - (10 - rowData.uptime.length)])}`}></div>
+      {/if}
+    {/each}
   </div>
-</div>
+</td>

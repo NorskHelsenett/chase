@@ -8,14 +8,15 @@ import (
 )
 
 func StartMonitoring() {
-
-	runMonitoring()
-
 	ticker := time.NewTicker(15 * time.Minute)
 	defer ticker.Stop()
 
+	// Run immediately in a goroutine
+	go runMonitoring()
+
+	// Then run on ticker
 	for range ticker.C {
-		runMonitoring()
+		go runMonitoring()
 	}
 }
 
@@ -31,6 +32,10 @@ func runMonitoring() {
 	}
 
 	for _, server := range servers {
+
+		if !server.Active {
+			continue
+		}
 
 		result := pingServer(server)
 

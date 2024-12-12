@@ -8,15 +8,16 @@ import (
 	"time"
 
 	"github.com/norskhelsenett/chase/security"
-
 )
 
 // calculateNextCheckInterval determines when to next check a server based on failure count
 func calculateNextCheckInterval(failureCount int) time.Duration {
 	switch {
 	case failureCount == 0:
+		return 15 * time.Minute
+	case failureCount <= 6: // 1-6 failures: check every hour
 		return 1 * time.Hour
-	case failureCount <= 6: // 1-6 failures: check every 3 hours
+	case failureCount <= 12: // 1-6 failures: check every 3 hours
 		return 3 * time.Hour
 	case failureCount <= 24: // 7-24 failures: check every 12 hours
 		return 12 * time.Hour
@@ -31,9 +32,8 @@ func calculateNextCheckInterval(failureCount int) time.Duration {
 
 func pingServer(server Server) PingResult {
 	result := PingResult{
-		ServerID:           server.ID,
-		Timestamp:          time.Now(),
-		InsecureSkipVerify: server.AllowInsecure,
+		ServerID:  server.ID,
+		Timestamp: time.Now(),
 	}
 
 	// Configure TLS
@@ -68,6 +68,7 @@ func pingServer(server Server) PingResult {
 	req, err := http.NewRequest("GET", server.URL, nil)
 	if err != nil {
 		result.Error = err.Error()
+		server.FailureCount++
 		return result
 	}
 
@@ -78,12 +79,14 @@ func pingServer(server Server) PingResult {
 	resp, err := client.Do(req)
 	if err != nil {
 		result.Error = err.Error()
+		server.FailureCount++
 		return result
 	}
 	defer resp.Body.Close()
 
 	result.ResponseTime = float64(time.Since(startTime).Milliseconds())
 	result.StatusCode = resp.StatusCode
+	server.FailureCount = 0
 
 	// Get IP address
 	host := req.URL.Hostname()

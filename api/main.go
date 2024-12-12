@@ -65,6 +65,7 @@ func main() {
 
 	db = database.GetDB()
 	db.AutoMigrate(&servers.Server{}, &servers.PingResult{})
+
 	go servers.StartMonitoring()
 
 	// Initialize the OIDC configuration

@@ -6,6 +6,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/norskhelsenett/chase/database"
+	"gorm.io/gorm"
 )
 
 // Force check endpoint
@@ -41,6 +42,10 @@ func AddServer(c *gin.Context) {
 		return
 	}
 
+	if server.ExpectedStatusCode == 0 {
+		server.ExpectedStatusCode = 200
+	}
+
 	server.NextCheck = time.Now() // Set initial check time
 	db.Create(&server)
 	c.JSON(201, server)
@@ -49,7 +54,22 @@ func AddServer(c *gin.Context) {
 func GetServers(c *gin.Context) {
 	db := database.GetDB()
 	var servers []Server
-	db.Find(&servers)
+
+	// Create a subquery to get the last 10 results for each server
+	subQuery := db.Select("ping_results.*").
+		Table("ping_results").
+		Joins("JOIN (SELECT id, ROW_NUMBER() OVER (PARTITION BY server_id ORDER BY created_at DESC) AS rn FROM ping_results) ranked ON ping_results.id = ranked.id").
+		Where("ranked.rn <= 10")
+
+	err := db.Preload("PingResults", func(db *gorm.DB) *gorm.DB {
+		return db.Select("*").Table("(?) as ping_results", subQuery)
+	}).Find(&servers).Error
+
+	if err != nil {
+		c.JSON(500, gin.H{"error": err.Error()})
+		return
+	}
+
 	c.JSON(200, servers)
 }
 
