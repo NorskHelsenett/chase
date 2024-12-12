@@ -35,28 +35,38 @@
   }
 
   async function performScan() {
-    if (searchResults != null) {
-      results = searchResults
-      loading = false;
-    }
-    if (domain == "") {
-      return
-    }
-    loading = true;
-    error = null;
-
-
-    try {
-      const response = await fetch(`/api/security/${encodeURIComponent(domain)}`);
-      if (!response.ok) throw new Error('Scan failed');
-      results = await response.json();
-    } catch (err) {
-      error = err.message;
-      console.error('Scan failed:', err);
-    } finally {
-      loading = false;
-    }
+  // If domain is empty but we have search results, just set the domain and return
+  if (!domain && searchResults) {
+    domain = extractDomain(searchResults.targetUrl);
+    results = searchResults;
+    loading = false;
+    return;
   }
+
+  // Only proceed with security scan if we had an original domain
+  if (!domain) {
+    return;
+  }
+
+  loading = true;
+  error = null;
+
+  try {
+    const response = await fetch(`/api/security/${encodeURIComponent(domain)}`);
+    if (!response.ok) throw new Error('Scan failed');
+    results = await response.json();
+  } catch (err) {
+    error = err.message;
+    console.error('Scan failed:', err);
+  } finally {
+    loading = false;
+  }
+}
+
+function extractDomain(url: string): string {
+  if (!url) return '';
+  return url.replace(/^(https?:\/\/)/, '').split('/')[0];
+}
 
   onMount(() => {
     performScan();
@@ -115,6 +125,12 @@
                     // Find and remove the loading overlay
                     const overlay = e.target.parentElement.querySelector('.loading-overlay');
                     if (overlay) overlay.remove();
+                  }}
+                  on:error={(e) => {
+                    // Remove the loading overlay on error too
+                    const overlay = e.target.parentElement.querySelector('.loading-overlay');
+                    if (overlay) overlay.remove();
+
                   }}
                 />
                 <div
