@@ -1,5 +1,5 @@
 <script>
-	import { Home, Settings, LogIn } from 'lucide-svelte';
+	import { Home, Settings, LogIn, LayoutDashboard } from 'lucide-svelte';
 	import Avatar from './Avatar.svelte';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/stores';
@@ -8,6 +8,7 @@
 
 	const routes = [
     { path: '/', icon: Home, tooltip: 'Home' },
+    { path: '/dashboard', icon: LayoutDashboard, tooltip: 'Dashboard' },
     { path: '/settings', icon: Settings, tooltip: 'Settings' }
   ];
 

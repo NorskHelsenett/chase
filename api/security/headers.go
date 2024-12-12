@@ -4,6 +4,8 @@ package security
 import (
 	"fmt"
 	"strings"
+
+	"golang.org/x/net/html"
 )
 
 // headerCheck defines the validation rules for a security header
@@ -20,10 +22,32 @@ func (s *Scanner) checkSecurityHeaders(domain string) (*HeadersAnalysis, error) 
 	}
 	defer resp.Body.Close()
 
+	// Parse HTML
+	doc, err := html.Parse(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse HTML: %w", err)
+	}
+
+	var title string
+	var findTitle func(*html.Node)
+	findTitle = func(n *html.Node) {
+		if n.Type == html.ElementNode && n.Data == "title" {
+			if n.FirstChild != nil {
+				title = n.FirstChild.Data
+				return
+			}
+		}
+		for c := n.FirstChild; c != nil; c = c.NextSibling {
+			findTitle(c)
+		}
+	}
+	findTitle(doc)
+
 	analysis := &HeadersAnalysis{
 		Issues: make([]Finding, 0),
 		Passed: make([]string, 0),
 		Risk:   RiskLow,
+		Title:  title,
 	}
 
 	headerChecks := map[string]headerCheck{

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -12,7 +13,39 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/norskhelsenett/chase/database"
+	"gorm.io/gorm"
 )
+
+func InitDatabase() error {
+	db := database.GetDB()
+	return db.AutoMigrate(&SecurityReportRecord{}, &Screenshot{})
+}
+
+type SecurityReportRecord struct {
+	ID          uint   `gorm:"primaryKey"`
+	ServerURL   string `gorm:"index"`
+	ReportData  []byte `gorm:"type:json"`
+	CreatedAt   time.Time
+	RiskLevel   RiskLevel `gorm:"index"`
+	Description string
+}
+
+// Screenshot stores binary screenshot data
+type Screenshot struct {
+	ID        uint   `gorm:"primaryKey"`
+	ServerURL string `gorm:"index"`
+	Data      []byte `gorm:"type:blob"`
+	CreatedAt time.Time
+	MIMEType  string
+}
+
+type screenshotResponse struct {
+	Success   bool   `json:"success"`
+	Image     string `json:"image"`      // base64 encoded
+	ImageType string `json:"image_type"` // e.g., "image/png"
+	Error     string `json:"error,omitempty"`
+}
 
 func SecurityScanHandler(c *gin.Context) {
 	domain := c.Param("domain")
@@ -61,6 +94,13 @@ func SecurityScanHandler(c *gin.Context) {
 			})
 		}
 
+		if err := storeSecurityReport(report); err != nil {
+			c.JSON(500, gin.H{
+				"error": fmt.Sprintf("Failed to store report: %v", err),
+			})
+			return
+		}
+
 		c.JSON(200, report)
 		return
 	case <-time.After(30 * time.Second):
@@ -83,6 +123,15 @@ func ScreenshotHandler(c *gin.Context) {
 		domain = "https://" + domain
 	}
 
+	// Check if we have a recent screenshot
+	if screenshot, err := getRecentScreenshot(domain); err == nil {
+		// Set cache headers
+		c.Header("Cache-Control", "public, max-age=86400") // 24 hours
+		c.Header("Content-Type", screenshot.MIMEType)
+		c.Data(200, screenshot.MIMEType, screenshot.Data)
+		return
+	}
+
 	// Make request to screenshot service
 	err := captureAndSendScreenshot(c, domain)
 	if err != nil {
@@ -90,15 +139,37 @@ func ScreenshotHandler(c *gin.Context) {
 	}
 }
 
-func captureAndSendScreenshot(c *gin.Context, domain string) error {
-	// Internal response struct
-	type screenshotResponse struct {
-		Success   bool   `json:"success"`
-		Image     string `json:"image"`      // base64 encoded
-		ImageType string `json:"image_type"` // e.g., "image/png"
-		Error     string `json:"error,omitempty"`
+func LastSecurityScanHandler(c *gin.Context) {
+	serverID := c.Param("id")
+	if serverID == "" {
+		c.JSON(400, gin.H{"error": "server id parameter is required"})
+		return
 	}
 
+	db := database.GetDB()
+
+	// Get URL directly with raw query
+	var serverURL string
+	if err := db.Raw("SELECT url FROM servers WHERE id = ?", serverID).Scan(&serverURL).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			c.JSON(404, gin.H{"error": "server not found"})
+		} else {
+			c.JSON(500, gin.H{"error": fmt.Sprintf("Database error: %v", err)})
+		}
+		return
+	}
+
+	if serverURL == "" {
+		c.JSON(404, gin.H{"error": "server not found"})
+		return
+	}
+
+	// Set the URL param for the scan handler
+	c.Params = append(c.Params, gin.Param{Key: "domain", Value: serverURL})
+	SecurityScanHandler(c)
+}
+
+func captureAndSendScreenshot(c *gin.Context, domain string) error {
 	// Create request body
 	jsonData, err := json.Marshal(map[string]string{"url": domain})
 	if err != nil {
@@ -137,7 +208,7 @@ func captureAndSendScreenshot(c *gin.Context, domain string) error {
 		return fmt.Errorf("screenshot failed: %s", result.Error)
 	}
 
-	// Decode and send image
+	// Decode image
 	imgData, err := base64.StdEncoding.DecodeString(result.Image)
 	if err != nil {
 		return fmt.Errorf("failed to decode image: %v", err)
@@ -148,7 +219,97 @@ func captureAndSendScreenshot(c *gin.Context, domain string) error {
 		contentType = "image/png"
 	}
 
+	// Store screenshot in database first
+	err = storeScreenshot(domain, imgData, contentType)
+	if err != nil {
+		return fmt.Errorf("failed to store screenshot: %v", err)
+	}
+
+	// Send response to client
 	c.Header("Content-Type", contentType)
 	c.Data(200, contentType, imgData)
 	return nil
+}
+
+func storeSecurityReport(report *SecurityReport) error {
+	db := database.GetDB()
+
+	// Convert report to JSON
+	reportJSON, err := json.Marshal(report)
+	if err != nil {
+		return err
+	}
+
+	// Create security report record
+	reportRecord := SecurityReportRecord{
+		ServerURL:   strings.TrimPrefix(strings.TrimPrefix(report.TargetURL, "https://"), "http://"),
+		ReportData:  reportJSON,
+		CreatedAt:   report.ScanTimestamp,
+		RiskLevel:   determineOverallRisk(report),
+		Description: generateReportSummary(report),
+	}
+
+	return db.Create(&reportRecord).Error
+}
+
+func storeScreenshot(url string, data []byte, mimeType string) error {
+	db := database.GetDB()
+
+	screenshot := Screenshot{
+		ServerURL: url,
+		Data:      data,
+		CreatedAt: time.Now(),
+		MIMEType:  mimeType,
+	}
+	return db.Create(&screenshot).Error
+}
+
+func getRecentScreenshot(url string) (*Screenshot, error) {
+	db := database.GetDB()
+	var screenshot Screenshot
+
+	cutoff := time.Now().Add(-24 * time.Hour)
+
+	err := db.Where("server_url = ? AND created_at > ?", url, cutoff).
+		Order("created_at DESC").
+		First(&screenshot).Error
+
+	if err != nil {
+		return nil, err
+	}
+
+	return &screenshot, nil
+}
+
+func determineOverallRisk(report *SecurityReport) RiskLevel {
+	risks := []RiskLevel{
+		report.Headers.Risk,
+		report.Certificate.Risk,
+		report.AdminPages.Risk,
+		report.Swagger.Risk,
+		report.Infrastructure.Risk,
+		report.FileExposure.Risk,
+	}
+
+	// Return highest risk level found
+	for _, risk := range []RiskLevel{RiskCritical, RiskHigh, RiskMedium, RiskLow, RiskInfo} {
+		for _, r := range risks {
+			if r == risk {
+				return risk
+			}
+		}
+	}
+	return RiskInfo
+}
+
+func generateReportSummary(report *SecurityReport) string {
+	findings := len(report.Headers.Issues) +
+		len(report.Certificate.Findings) +
+		len(report.AdminPages.Findings) +
+		len(report.Swagger.Findings) +
+		len(report.Infrastructure.Findings)
+
+	return fmt.Sprintf("Security scan completed at %s with %d findings",
+		report.ScanTimestamp.Format(time.RFC3339),
+		findings)
 }

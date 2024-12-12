@@ -4,10 +4,10 @@ import (
 	"net/http"
 	"time"
 
-	"git.torden.tech/jonasbg/fit/database"
-	"git.torden.tech/jonasbg/fit/session"
-	"git.torden.tech/jonasbg/fit/types"
 	"github.com/gin-gonic/gin"
+	"github.com/norskhelsenett/chase/database"
+	"github.com/norskhelsenett/chase/session"
+	"github.com/norskhelsenett/chase/types"
 )
 
 func RequireToken() gin.HandlerFunc {

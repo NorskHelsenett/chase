@@ -5,8 +5,8 @@ import (
 	"encoding/base64"
 	"time"
 
-	"git.torden.tech/jonasbg/fit/database"
-	"git.torden.tech/jonasbg/fit/types"
+	"github.com/norskhelsenett/chase/database"
+	"github.com/norskhelsenett/chase/types"
 	"gorm.io/gorm"
 )
 

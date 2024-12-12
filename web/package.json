@@ -35,7 +35,8 @@
 	"type": "module",
 	"dependencies": {
 		"@floating-ui/dom": "^1.6.12",
-		"apexcharts": "^3.53.0",
+		"apexcharts": "^3.54.1",
+		"date-fns": "^4.1.0",
 		"lucide-svelte": "^0.445.0",
 		"md5": "^2.3.0"
 	}

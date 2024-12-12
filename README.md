@@ -51,3 +51,43 @@ curl -X POST http://localhost:8081/screenshot \
 
 ## Start debugging
 F5 to start debugging golang
+
+<details>
+<summary>Scripts to get started</summary>
+
+Create a script to push multiple hosts at once:
+```bash
+cat << EOF
+#!/bin/bash
+
+while IFS= read -r url; do
+    if curl -X POST 'http://localhost:8080/api/servers' \
+    -H 'Content-Type: application/json' \
+    -d "{
+        \"url\": \"$url\",
+        \"active\": true,
+        \"follow_redirect\": true,
+        \"expected_status\": 200
+    }"; then
+        echo -e "\nSuccessfully processed: $url\n"
+    else
+        echo -e "\nError processing: $url\n" >&2
+    fi
+done
+EOF > create_servers.sh
+```
+
+Then use it like:
+```bash
+chmod +x create_servers.sh
+```
+
+And mass insert domains with EOF:
+```bash
+cat << EOF | ./create_servers.sh
+https://nhn.no
+https://example.com
+EOF
+```
+
+</details>

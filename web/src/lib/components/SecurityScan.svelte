@@ -1,12 +1,13 @@
 <!-- SecurityDashboard.svelte -->
 <script lang="ts">
-  import { Lock, Wrench, AlertTriangle, Server, Globe, Shield, File, Book, Key, List, Bug, CheckCircle, XCircle, Settings } from 'lucide-svelte';
+  import { AlertTriangle, Server, Globe, Shield, File, Book } from 'lucide-svelte';
   import { fade } from 'svelte/transition';
   import { onMount } from 'svelte';
 	import Certificate from './scan/Certificate.svelte';
 	import Headers from './scan/Headers.svelte';
 
   export let domain: string = '';
+  export let searchResults = {}
 
   let loading = true;
   let results: any = null;
@@ -34,20 +35,38 @@
   }
 
   async function performScan() {
-    loading = true;
-    error = null;
-
-    try {
-      const response = await fetch(`/api/security/${encodeURIComponent(domain)}`);
-      if (!response.ok) throw new Error('Scan failed');
-      results = await response.json();
-    } catch (err) {
-      error = err.message;
-      console.error('Scan failed:', err);
-    } finally {
-      loading = false;
-    }
+  // If domain is empty but we have search results, just set the domain and return
+  if (!domain && searchResults) {
+    domain = extractDomain(searchResults.targetUrl);
+    results = searchResults;
+    loading = false;
+    return;
   }
+
+  // Only proceed with security scan if we had an original domain
+  if (!domain) {
+    return;
+  }
+
+  loading = true;
+  error = null;
+
+  try {
+    const response = await fetch(`/api/security/${encodeURIComponent(domain)}`);
+    if (!response.ok) throw new Error('Scan failed');
+    results = await response.json();
+  } catch (err) {
+    error = err.message;
+    console.error('Scan failed:', err);
+  } finally {
+    loading = false;
+  }
+}
+
+function extractDomain(url: string): string {
+  if (!url) return '';
+  return url.replace(/^(https?:\/\/)/, '').split('/')[0];
+}
 
   onMount(() => {
     performScan();
@@ -106,6 +125,12 @@
                     // Find and remove the loading overlay
                     const overlay = e.target.parentElement.querySelector('.loading-overlay');
                     if (overlay) overlay.remove();
+                  }}
+                  on:error={(e) => {
+                    // Remove the loading overlay on error too
+                    const overlay = e.target.parentElement.querySelector('.loading-overlay');
+                    if (overlay) overlay.remove();
+
                   }}
                 />
                 <div
