@@ -10,7 +10,7 @@
       highRisks: 1
     };
 
-    const sites = [
+  const sites = [
     {
       status: 'up',
       title: 'api.example.com',
