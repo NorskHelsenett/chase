@@ -20,9 +20,10 @@
 
   function mapServerToRowData(server: Server): ServerRowData {
     const lastPing = server.ping_results[0];
+    const sortedPings = [...server.ping_results].sort((a, b) => b.timestamp - a.timestamp);
 
     return {
-      status: server.active ? 'up' : 'down',
+      status: sortedPings[0]?.error || sortedPings[0]?.status_code >= 400 ? 'down' : 'up',
       title: server.url,
       headerScore: '',
       certScore: '',

@@ -1,8 +1,8 @@
 export interface BaseModel {
-  id: number;
-  created_at: Date;
-  updated_at: Date;
-  deleted_at?: Date;
+  ID: number;
+  CreatedAt: Date;
+  UpdatedAt: Date;
+  DeletedAt?: Date;
 }
 
 export interface Server extends BaseModel {

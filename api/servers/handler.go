@@ -1,7 +1,10 @@
 package servers
 
 import (
+	"errors"
+	"net/url"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -33,7 +36,6 @@ func ForceCheckServer(c *gin.Context) {
 	c.JSON(200, result)
 }
 
-// API Handlers (remaining handlers stay the same)
 func AddServer(c *gin.Context) {
 	db := database.GetDB()
 	var server Server
@@ -42,13 +44,84 @@ func AddServer(c *gin.Context) {
 		return
 	}
 
+	// Validate URL format
+	parsedURL, err := url.Parse(server.URL)
+	if err != nil {
+		c.JSON(400, gin.H{"error": "Invalid URL format"})
+		return
+	}
+
+	// Check if scheme is present and valid
+	if parsedURL.Scheme != "http" && parsedURL.Scheme != "https" {
+		c.JSON(400, gin.H{"error": "URL must start with http:// or https://"})
+		return
+	}
+
+	// Check if host is present
+	if parsedURL.Host == "" {
+		c.JSON(400, gin.H{"error": "URL must contain a valid host"})
+		return
+	}
+
+	// Remove scheme (http/https) from URL
+	server.URL = strings.TrimPrefix(strings.TrimPrefix(server.URL, "https://"), "http://")
+
+	// Set default status code if not provided
 	if server.ExpectedStatusCode == 0 {
 		server.ExpectedStatusCode = 200
 	}
 
 	server.NextCheck = time.Now() // Set initial check time
-	db.Create(&server)
+
+	// Attempt to create the server in the database
+	if err := db.Create(&server).Error; err != nil {
+		// Check for unique constraint violation
+		if strings.Contains(err.Error(), "unique constraint") || strings.Contains(err.Error(), "Duplicate entry") {
+			c.JSON(409, gin.H{"error": "Server URL already exists"})
+			return
+		}
+		c.JSON(500, gin.H{"error": "Failed to create server"})
+		return
+	}
+
 	c.JSON(201, server)
+}
+
+func GetServer(c *gin.Context) {
+	db := database.GetDB()
+	id := c.Param("id")
+	var server Server
+
+	// Get the limit from query parameter, default to 30 days in seconds
+	limitDays := c.DefaultQuery("limit", "30")
+	days, err := strconv.Atoi(limitDays)
+	if err != nil {
+		c.JSON(400, gin.H{"error": "Invalid limit parameter"})
+		return
+	}
+
+	// Calculate the cutoff time
+	cutoffTime := time.Now().AddDate(0, 0, -days)
+
+	// Create a subquery to get ping results within the time limit
+	subQuery := db.Table("ping_results").
+		Where("server_id = ? AND created_at >= ?", id, cutoffTime).
+		Order("created_at DESC")
+
+	err = db.Preload("PingResults", func(db *gorm.DB) *gorm.DB {
+		return db.Select("*").Table("(?) as ping_results", subQuery)
+	}).First(&server, id).Error
+
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			c.JSON(404, gin.H{"error": "Server not found"})
+			return
+		}
+		c.JSON(500, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(200, server)
 }
 
 func GetServers(c *gin.Context) {

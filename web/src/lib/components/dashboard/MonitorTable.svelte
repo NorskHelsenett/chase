@@ -1,6 +1,7 @@
 <script lang="ts">
   import MonitorRow from './MonitorRow.svelte';
   import type { Server } from '$lib/models';
+	import { goto } from '$app/navigation';
 
   export let sites: Server[] = [];
 </script>
@@ -55,7 +56,7 @@
         {/each}
       {:else}
         {#each sites as site}
-          <tr class="group transition-colors duration-200 ease-in-out hover:bg-[#2b2b2b] cursor-pointer rounded-lg">
+          <tr class="group transition-colors duration-200 ease-in-out hover:bg-[#2b2b2b] cursor-pointer rounded-lg" on:click={() => goto(`/server/${site.ID}`)}>
             <MonitorRow server={site} />
           </tr>
         {/each}

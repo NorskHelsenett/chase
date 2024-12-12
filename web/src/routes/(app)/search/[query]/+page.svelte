@@ -1,14 +1,14 @@
 <script>
   import { Clock, Globe, Share, Trash2 } from 'lucide-svelte';
-  import { fade, fly } from 'svelte/transition';
+  import { fade } from 'svelte/transition';
   import { onMount, onDestroy } from 'svelte';
   import { searchHistory } from '$lib/stores/searchStore';
   import { getRelativeTime } from '$lib/utils/time';
-	import SecurityScan from '$lib/components/SecurityScan.svelte';
-  
+  import SecurityScan from '$lib/components/SecurityScan.svelte';
+
   /** @type {import('./$types').PageData} */
   export let data;
-  
+
   let loading = true;
   let searchResults = [];
   let searchTimestamp = Date.now();
@@ -26,7 +26,7 @@
   onDestroy(() => {
       if (timeInterval) clearInterval(timeInterval);
   });
-  
+
   async function fetchSearchResults(query) {
       loading = true;
       searchTimestamp = Date.now();
@@ -84,7 +84,7 @@
           {#if loading}
               <!-- Loading states remain the same -->
               {#each Array(3) as _, i}
-                  <div 
+                  <div
                       class="bg-[#202020] rounded-lg p-4 animate-pulse"
                       in:fade|local={{ duration: 200, delay: i * 100 }}
                   >
@@ -101,14 +101,14 @@
               {/each}
           {:else}
               {#each searchResults as result, i}
-                  <div 
+                  <div
                       class="bg-[#202020] hover:bg-[#252525] transition-colors rounded-lg p-4"
                       in:fade|local={{ duration: 200, delay: i * 100 }}
                   >
                       <div class="flex items-center gap-4">
                           <div class="w-12 h-12 bg-[#2b2b2b] rounded-lg flex items-center justify-center">
-                              <img 
-                                  src={result.icon || "/api/placeholder/48/48"} 
+                              <img
+                                  src={result.icon || "/api/placeholder/48/48"}
                                   alt=""
                                   class="w-8 h-8 rounded"
                               />

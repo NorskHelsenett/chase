@@ -32,6 +32,7 @@ func setupRoutes(r *gin.Engine) {
 		api.POST("/servers", servers.AddServer)
 		api.GET("/servers", servers.GetServers)
 		api.PUT("/servers/:id", servers.UpdateServer)
+		api.GET("/servers/:id", servers.GetServer)
 		api.GET("/servers/:id/results", servers.GetServerResults)
 		api.POST("/servers/:id/force-check", servers.ForceCheckServer)
 
