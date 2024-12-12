@@ -13,6 +13,7 @@
   let serverID: number = 0;
   let server: Server | null = null;
   let isLoading = true;
+  let isLoadingResults = true;
   let error: string | null = null;
 
   let searchResults = null
@@ -27,10 +28,15 @@
   });
 
   async function fetchServerReport(id: number) {
-    const response = await fetch(`/api/servers/${id}/report`);
-    if (!response.ok) throw new Error('Failed to fetch server data');
+    try{
+      const response = await fetch(`/api/servers/${id}/report`);
+      if (!response.ok) throw new Error('Failed to fetch server data');
 
-    searchResults = await response.json();
+      searchResults = await response.json();
+    }
+    finally {
+      isLoadingResults = false
+    }
   }
 
   async function fetchServerData(id: number) {
@@ -114,7 +120,16 @@
       }))}
     />
   {/if}
-  {#if searchResults}
+  {#if isLoadingResults}
+    <div class="bg-[#202020] rounded-lg p-6 animate-pulse">
+      <div class="h-48 bg-gray-700 rounded-lg w-full mb-4"></div>
+      <div class="space-y-2">
+        {#each Array(3) as _}
+          <div class="h-4 bg-gray-700 rounded w-full"></div>
+        {/each}
+      </div>
+    </div>
+  {:else}
     <SecurityScan {searchResults}/>
   {/if}
 </div>

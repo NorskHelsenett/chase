@@ -30,13 +30,13 @@ func setupRoutes(r *gin.Engine) {
 		api.GET("/screenshot/:domain", security.ScreenshotHandler)
 
 		api.POST("/servers", servers.AddServer)
-		api.GET("/servers", servers.GetServers)
+		api.GET("/servers", servers.GetServersWithSecurityStatus)
 		api.PUT("/servers/:id", servers.UpdateServer)
 		api.GET("/servers/:id", servers.GetServer)
 		api.GET("/servers/:id/report", security.LastSecurityScanHandler)
 		api.GET("/servers/:id/results", servers.GetServerResults)
 		api.POST("/servers/:id/force-check", servers.ForceCheckServer)
-		
+
 		api.Use(auth.Middleware())
 		{
 			api.GET("/register", registerToken)

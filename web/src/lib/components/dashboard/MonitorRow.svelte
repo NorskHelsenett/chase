@@ -25,12 +25,12 @@
     const lastPing = sortedPings[0];
 
     return {
-      status: sortedPings[0]?.error || sortedPings[0]?.status_code >= 400 ? 'down' : 'up',
+      status: !sortedPings.length || sortedPings[0]?.error || sortedPings[0]?.status_code >= 400 ? 'down' : 'up',
       title: server.url,
-      headerScore: '',
-      certScore: '',
-      adminRisk: '',
-      apiRisk: '',
+      headerScore: server.security.headerRisk,
+      certScore: server.security.certRisk,
+      adminRisk: server.security.adminRisk,
+      apiRisk: server.security.apiRisk,
       ip: lastPing?.ip || '',
       uptime: server.ping_results
         .slice(0, 10)
@@ -40,7 +40,7 @@
   }
 
   const getRiskColor = (risk: string) => {
-    switch(risk) {
+    switch(risk?.toLowerCase()) {
       case 'critical': return 'text-red-500 bg-red-500/20';
       case 'high': return 'text-orange-500 bg-orange-500/20';
       case 'medium': return 'text-yellow-500 bg-yellow-500/20';
@@ -53,8 +53,9 @@
     switch(score) {
       case 'A+':
       case 'A': return 'text-green-500';
-      case 'B': return 'text-blue-500';
-      case 'C': return 'text-yellow-500';
+      case 'B+':
+      case 'B': return 'text-yellow-500';
+      case 'C': return 'text-blue-500';
       case 'D':
       case 'F': return 'text-red-500';
       default: return 'text-gray-500';
@@ -94,13 +95,13 @@
 
 <td>
   <div class={`px-2 py-1 w-[7em] text-center rounded-full text-sm ${getRiskColor(rowData.adminRisk)}`}>
-    {rowData.adminRisk}
+    {rowData.adminRisk || ''}
   </div>
 </td>
 
 <td>
   <div class={`px-2 py-1 w-[7em] text-center rounded-full text-sm ${getRiskColor(rowData.apiRisk)}`}>
-    {rowData.apiRisk}
+    {rowData.apiRisk || ''}
   </div>
 </td>
 

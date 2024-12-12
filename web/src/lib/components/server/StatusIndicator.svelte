@@ -2,13 +2,14 @@
   import type { PingResult } from '$lib/models';
 
   export let pingResults: PingResult[] = [];
-  let status: 'up' | 'down' = 'up';
+  let status: 'up' | 'down' = 'down';
   let sortedPingResults: PingResult[] = [];
 
-  $: if(pingResults){
-    sortedPingResults = [...pingResults].sort((a, b) => b.timestamp - a.timestamp);
-    status = sortedPingResults[0]?.error || sortedPingResults[0]?.status_code >= 400 ? 'down' : 'up';
-  }
+  $: sortedPingResults = pingResults ? [...pingResults].sort((a, b) => b.timestamp - a.timestamp) : [];
+
+$: status = !pingResults || !sortedPingResults.length ||
+    sortedPingResults[0]?.error ||
+    sortedPingResults[0]?.status_code >= 400 ? 'down' : 'up';
 
   const getStatusColor = (ping: PingResult) => {
     if (ping.error || ping.status_code >= 400) {

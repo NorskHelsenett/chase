@@ -14,6 +14,17 @@ export interface Server extends BaseModel {
   allow_insecure: boolean;
   expected_status: number;
   ping_results: PingResult[];
+  security: SecurityReport;
+}
+
+export interface SecurityReport {
+  serverUrl: string;
+  createdAt: Date;
+  riskLevel: string;
+  headerRisk: 'A+' | 'A' | 'B' | 'C' | 'D' | 'F' | '';
+  certRisk: 'A+' | 'A' | 'B' | 'C' | 'D' | 'F' | '';
+  adminRisk: 'critical' | 'high' | 'medium' | 'low' | '';
+  apiRisk: 'critical' | 'high' | 'medium' | 'low' | '';
 }
 
 export interface PingResult extends BaseModel {
