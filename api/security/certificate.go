@@ -50,7 +50,7 @@ func (s *Scanner) checkCertificate(domain string) (*CertificateAnalysis, error) 
 	analysis := &CertificateAnalysis{
 		ValidUntil:    cert.NotAfter,
 		Issuer:        cert.Issuer.CommonName,
-		Organization:  getOrganization(cert),
+		Organization:  GetOrganization(cert),
 		Findings:      make([]Finding, 0),
 		Warnings:      make([]Finding, 0),
 		Risk:          RiskLow,
@@ -127,7 +127,7 @@ func (s *Scanner) checkCertificate(domain string) (*CertificateAnalysis, error) 
 	return analysis, nil
 }
 
-func getOrganization(cert *x509.Certificate) string {
+func GetOrganization(cert *x509.Certificate) string {
 	// Try different certificate fields for organization info
 	if len(cert.Subject.Organization) > 0 {
 			return cert.Subject.Organization[0]

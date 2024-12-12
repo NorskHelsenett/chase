@@ -1,6 +1,50 @@
-<script>
+<script lang="ts">
+  import { onMount } from 'svelte';
 	import MonitorStats from "$lib/components/dashboard/MonitorStats.svelte";
   import MonitorTable from "$lib/components/dashboard/MonitorTable.svelte";
+
+    // Types based on Go structs
+    interface Server {
+    ID: number;
+    URL: string;
+    Active: boolean;
+    FollowRedirect: boolean;
+    LastSuccess: string;
+    FailureCount: number;
+    NextCheck: string;
+    AllowInsecure: boolean;
+    PingResults: PingResult[];
+  }
+
+  interface PingResult {
+    ID: number;
+    ServerID: number;
+    OrganizationName: string;
+    StatusCode: number;
+    IP: string;
+    ResponseTime: number;
+    Error: string;
+    RedirectCount: number;
+    Timestamp: string;
+    TLSValid: boolean;
+    CertExpiryDate: string;
+    CertIssuer: string;
+    CertCommonName: string;
+    InsecureSkipVerify: boolean;
+  }
+
+  let pingResults: PingResult[] = []
+
+  onMount(async () => {
+    try {
+      const response = await fetch('/api/servers');
+      pingResults = await response.json();
+      console.log(pingResults)
+    } catch (error) {
+      console.error('Failed to fetch server data:', error);
+    }
+  });
+
   const stats = {
       up: 5,
       down: 1,

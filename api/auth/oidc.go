@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"os"
 
-	"git.torden.tech/jonasbg/fit/types"
+	"github.com/norskhelsenett/chase/types"
 	"golang.org/x/oauth2"
 )
 

@@ -3,13 +3,14 @@ package main
 import (
 	"log"
 
-	"git.torden.tech/jonasbg/fit/auth"
-	"git.torden.tech/jonasbg/fit/database"
-	"git.torden.tech/jonasbg/fit/handlers"
-	"git.torden.tech/jonasbg/fit/security"
-	"git.torden.tech/jonasbg/fit/session"
-	"git.torden.tech/jonasbg/fit/spa"
-	"git.torden.tech/jonasbg/fit/utils"
+	"github.com/norskhelsenett/chase/auth"
+	"github.com/norskhelsenett/chase/database"
+	"github.com/norskhelsenett/chase/handlers"
+	"github.com/norskhelsenett/chase/security"
+	"github.com/norskhelsenett/chase/servers"
+	"github.com/norskhelsenett/chase/session"
+	"github.com/norskhelsenett/chase/spa"
+	"github.com/norskhelsenett/chase/utils"
 
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
@@ -27,6 +28,12 @@ func setupRoutes(r *gin.Engine) {
 
 		api.GET("/security/:domain", security.SecurityScanHandler)
 		api.GET("/screenshot/:domain", security.ScreenshotHandler)
+
+		api.POST("/servers", servers.AddServer)
+		api.GET("/servers", servers.GetServers)
+		api.PUT("/servers/:id", servers.UpdateServer)
+		api.GET("/servers/:id/results", servers.GetServerResults)
+		api.POST("/servers/:id/force-check", servers.ForceCheckServer)
 
 		api.Use(auth.Middleware())
 		{
@@ -55,7 +62,10 @@ func main() {
 	if err := database.InitDatabase(); err != nil {
 		log.Fatal(err)
 	}
+
 	db = database.GetDB()
+	db.AutoMigrate(&servers.Server{}, &servers.PingResult{})
+	go servers.StartMonitoring()
 
 	// Initialize the OIDC configuration
 	if err := auth.InitOIDC(); err != nil {
