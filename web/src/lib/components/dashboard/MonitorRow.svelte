@@ -7,7 +7,7 @@
     adminRisk: 'critical' | 'high' | 'medium' | 'low';
     apiRisk: 'critical' | 'high' | 'medium' | 'low';
     ip: string;
-    uptime: Array<-1 | 0 | 1>;;
+    uptime: Array<-1 | 0 | 1>;
   };
 
   const getRiskColor = (risk: string) => {
