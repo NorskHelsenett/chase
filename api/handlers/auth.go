@@ -7,11 +7,11 @@ import (
 	"net/http"
 	"time"
 
-	"git.torden.tech/jonasbg/fit/auth"
-	"git.torden.tech/jonasbg/fit/database"
-	"git.torden.tech/jonasbg/fit/session"
-	"git.torden.tech/jonasbg/fit/types"
-	"git.torden.tech/jonasbg/fit/utils"
+	"github.com/norskhelsenett/chase/auth"
+	"github.com/norskhelsenett/chase/database"
+	"github.com/norskhelsenett/chase/session"
+	"github.com/norskhelsenett/chase/types"
+	"github.com/norskhelsenett/chase/utils"
 	"gorm.io/gorm"
 
 	"github.com/gin-gonic/gin"

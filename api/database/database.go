@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"path/filepath"
 
-	"git.torden.tech/jonasbg/fit/types"
-	"git.torden.tech/jonasbg/fit/utils"
+	"github.com/norskhelsenett/chase/types"
+	"github.com/norskhelsenett/chase/utils"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )

@@ -51,3 +51,33 @@ curl -X POST http://localhost:8081/screenshot \
 
 ## Start debugging
 F5 to start debugging golang
+
+# Todo
+Velkommen tilbake fra ferie, veien videre:
+- [x] github bygging
+- [x] security.txt file
+- [x] robots.txt content
+- [x] implementere skjermbilder
+- [x] deploy til chase.sikkerhet.nhn.no
+- [x] helm chart fiksing
+- [+] Årsrapport i SLACK for teamet
+- [+] lag blogginnslag for CTL på sikkerhet
+- [+] Kursmodul II fastsett dato
+- [+] Føre timer før ferien
+- [+] Føre utlegg for reise
+- [+] Føre bredbånds utlegg
+- [+] Julekort for CAT
+- [ ] implementere integrasjon mot certstream for kontinuerlig søk på domener
+- [ ] lagre alle rapporter til database
+- [ ] hent fra database
+- [ ] whois info on the domain
+- [ ] email info on the site?
+- [ ] vis en liste over alle logger
+- [ ] fiks sikkerhetssjekk, lag et csv dokument for regelsett CHASE
+- [ ] lag mulighet for å enumerere subdomener
+- [ ] vis en liste over alle subdomener på en oversiktelig måte
+- [ ] integrer mot AI
+- [ ] kvittere ut/kommentere/skjule/favorisere domener av interesse
+- [ ] PDF rapport generering i PRISM
+- [ ] Årsrapport i PRISM
+- [ ] Fikse neste års julesang kalender til å telle opp hvem som har åpnet flest luker, vær litt random innenfor 2 timer fra når det er mulig å åpne luken. 

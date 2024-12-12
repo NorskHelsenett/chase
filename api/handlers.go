@@ -4,11 +4,11 @@ import (
 	"fmt"
 	"net/http"
 
-	"git.torden.tech/jonasbg/fit/database"
-	"git.torden.tech/jonasbg/fit/handlers"
-	"git.torden.tech/jonasbg/fit/types"
-	"git.torden.tech/jonasbg/fit/utils"
 	"github.com/gin-gonic/gin"
+	"github.com/norskhelsenett/chase/database"
+	"github.com/norskhelsenett/chase/handlers"
+	"github.com/norskhelsenett/chase/types"
+	"github.com/norskhelsenett/chase/utils"
 	"gorm.io/gorm"
 )
 
@@ -72,18 +72,18 @@ func getUserFromCookie(c *gin.Context) (*types.User, error) {
 	return &user, nil
 }
 
-func getUserFromToken(c *gin.Context) (*types.User, error) {
-	apiToken := c.GetHeader("x-api-token")
-	if apiToken == "" {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Missing API token"})
-		return nil, fmt.Errorf("missing API token")
-	}
+// func getUserFromToken(c *gin.Context) (*types.User, error) {
+// 	apiToken := c.GetHeader("x-api-token")
+// 	if apiToken == "" {
+// 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Missing API token"})
+// 		return nil, fmt.Errorf("missing API token")
+// 	}
 
-	var user types.User
-	if err := db.Where("api_token = ?", apiToken).First(&user).Error; err != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid API token"})
-		return nil, fmt.Errorf("invalid API token")
-	}
+// 	var user types.User
+// 	if err := db.Where("api_token = ?", apiToken).First(&user).Error; err != nil {
+// 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid API token"})
+// 		return nil, fmt.Errorf("invalid API token")
+// 	}
 
-	return &user, nil
-}
+// 	return &user, nil
+// }
