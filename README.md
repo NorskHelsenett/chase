@@ -57,7 +57,7 @@ F5 to start debugging golang
 
 Create a script to push multiple hosts at once:
 ```bash
-cat << EOF
+cat << 'EOF' > create_servers.sh
 #!/bin/bash
 
 while IFS= read -r url; do
@@ -74,7 +74,7 @@ while IFS= read -r url; do
         echo -e "\nError processing: $url\n" >&2
     fi
 done
-EOF > create_servers.sh
+EOF
 ```
 
 Then use it like:
@@ -86,7 +86,7 @@ And mass insert domains with EOF:
 ```bash
 cat << EOF | ./create_servers.sh
 https://nhn.no
-https://example.com
+https://github.com/NorskHelsenett
 EOF
 ```
 

@@ -37,6 +37,11 @@ func setupRoutes(r *gin.Engine) {
 		api.GET("/servers/:id/results", servers.GetServerResults)
 		api.POST("/servers/:id/force-check", servers.ForceCheckServer)
 
+		api.POST("/batch/start", security.StartBatchHandler)
+		api.GET("/batch/:jobID/status", security.GetBatchStatusHandler)
+		api.POST("/batch/:jobID/cancel", security.CancelBatchHandler)
+		api.GET("/batch/list", security.ListBatchesHandler)
+
 		api.Use(auth.Middleware())
 		{
 			api.GET("/register", registerToken)
@@ -67,6 +72,7 @@ func main() {
 
 	db = database.GetDB()
 	db.AutoMigrate(&servers.Server{}, &servers.PingResult{})
+	db.AutoMigrate(&security.BatchJobStore{}, &security.BatchResultStore{})
 	security.InitDatabase()
 
 	go servers.StartMonitoring()

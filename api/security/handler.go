@@ -225,6 +225,10 @@ func captureAndSendScreenshot(c *gin.Context, domain string) error {
 		return fmt.Errorf("failed to store screenshot: %v", err)
 	}
 
+	if c == nil {
+		return nil
+	}
+
 	// Send response to client
 	c.Header("Content-Type", contentType)
 	c.Data(200, contentType, imgData)
