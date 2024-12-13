@@ -65,31 +65,32 @@ func setupRoutes(r *gin.Engine) {
 }
 
 func loadEnv() error {
-	// Try to load from .env file first
-	if err := godotenv.Load(); err != nil {
+	// Try to load from .env file
+	if err := godotenv.Load(); err == nil {
+		log.Println("Loaded environment from .env file")
+	} else {
 		log.Println("No .env file found, checking ENV_FILE variable")
+	}
 
-		// Check if we have env content in an environment variable
-		if envContent := os.Getenv("ENV_FILE"); envContent != "" {
-			// Create a reader from the string content
-			reader := strings.NewReader(envContent)
-
-			// Parse returns map[string]string and error
-			envMap, err := godotenv.Parse(reader)
-			if err != nil {
-				return fmt.Errorf("failed to parse ENV_FILE content: %w", err)
-			}
-
-			// Set the environment variables
-			for key, value := range envMap {
-				os.Setenv(key, value)
-			}
-
-			log.Println("Loaded environment from ENV_FILE variable")
-			return nil
+	// Check if we have env file path in environment variable
+	if envPath := os.Getenv("ENV_FILE"); envPath != "" {
+		// Read the file content
+		content, err := os.ReadFile(envPath)
+		if err != nil {
+			return fmt.Errorf("failed to read file at %s: %w", envPath, err)
 		}
 
-		log.Println("No ENV_FILE content found, using system environment variables")
+		reader := strings.NewReader(string(content))
+		envMap, err := godotenv.Parse(reader)
+		if err != nil {
+			return fmt.Errorf("failed to parse env file at %s: %w", envPath, err)
+		}
+
+		// Set the environment variables
+		for key, value := range envMap {
+			os.Setenv(key, value)
+		}
+		log.Println("Loaded environment from", envPath)
 	}
 
 	return nil
