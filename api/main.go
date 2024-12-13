@@ -22,6 +22,62 @@ import (
 
 var db *gorm.DB
 
+func loadEnv() error {
+	// Try to load from .env file
+	if err := godotenv.Load(); err == nil {
+		log.Println("Loaded environment from .env file")
+	} else {
+		log.Println("No .env file found, checking ENV_FILE variable")
+	}
+
+	// Check if we have env file path in environment variable
+	if envPath := os.Getenv("ENV_FILE"); envPath != "" {
+		// Read the file content
+		content, err := os.ReadFile(envPath)
+		if err != nil {
+			return fmt.Errorf("failed to read file at %s: %w", envPath, err)
+		}
+
+		reader := strings.NewReader(string(content))
+		envMap, err := godotenv.Parse(reader)
+		if err != nil {
+			return fmt.Errorf("failed to parse env file at %s: %w", envPath, err)
+		}
+
+		// Set the environment variables
+		for key, value := range envMap {
+			os.Setenv(key, value)
+		}
+		log.Println("Loaded environment from", envPath)
+	}
+
+	return nil
+}
+
+func securityHeaders() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		// Prevent browsers from performing MIME type sniffing
+		c.Header("X-Content-Type-Options", "nosniff")
+
+		// Protect against clickjacking
+		c.Header("X-Frame-Options", "DENY")
+
+		// Enable browser's XSS filter
+		c.Header("X-XSS-Protection", "1; mode=block")
+
+		// Control how much information the browser includes with referrers
+		c.Header("Referrer-Policy", "strict-origin-when-cross-origin")
+
+		// Enforce HTTPS
+		c.Header("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
+
+		// Permissions Policy (formerly Feature-Policy)
+		c.Header("Permissions-Policy", "geolocation=(), microphone=(), camera=()")
+
+		c.Next()
+	}
+}
+
 func setupRoutes(r *gin.Engine) {
 	api := r.Group("/api")
 	{
@@ -64,38 +120,6 @@ func setupRoutes(r *gin.Engine) {
 	}
 }
 
-func loadEnv() error {
-	// Try to load from .env file
-	if err := godotenv.Load(); err == nil {
-		log.Println("Loaded environment from .env file")
-	} else {
-		log.Println("No .env file found, checking ENV_FILE variable")
-	}
-
-	// Check if we have env file path in environment variable
-	if envPath := os.Getenv("ENV_FILE"); envPath != "" {
-		// Read the file content
-		content, err := os.ReadFile(envPath)
-		if err != nil {
-			return fmt.Errorf("failed to read file at %s: %w", envPath, err)
-		}
-
-		reader := strings.NewReader(string(content))
-		envMap, err := godotenv.Parse(reader)
-		if err != nil {
-			return fmt.Errorf("failed to parse env file at %s: %w", envPath, err)
-		}
-
-		// Set the environment variables
-		for key, value := range envMap {
-			os.Setenv(key, value)
-		}
-		log.Println("Loaded environment from", envPath)
-	}
-
-	return nil
-}
-
 func main() {
 	if err := loadEnv(); err != nil {
 		log.Fatal(err)
@@ -123,6 +147,8 @@ func main() {
 	}
 
 	r := gin.Default()
+	r.Use(gin.Recovery())
+	r.Use(securityHeaders())
 
 	setupRoutes(r)
 

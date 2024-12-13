@@ -27,16 +27,23 @@ func RequireToken() gin.HandlerFunc {
 
 func Middleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		apiToken := c.GetHeader("x-api-token")
-		if apiToken != "" {
+
+		// Check API token first
+		if apiToken := c.GetHeader("x-api-token"); apiToken != "" {
+			// Basic format validation before DB lookup
+			if len(apiToken) != 35 {
+				c.AbortWithStatus(http.StatusUnauthorized)
+				return
+			}
+
 			exists, err := isTokenInDatabase(apiToken)
-			if err == nil || !exists {
+			if err == nil && exists {
 				c.Next()
 				return
 			}
-			// If token is invalid, fall through to cookie check
 		}
 
+		// Fall back to session cookie
 		sessionID, err := c.Cookie("session")
 		if err != nil {
 			c.AbortWithStatus(http.StatusUnauthorized)
@@ -44,11 +51,19 @@ func Middleware() gin.HandlerFunc {
 		}
 
 		sessionInfo, ok := session.GetSession(sessionID)
-		if !ok || time.Now().After(sessionInfo.Exp) {
+		if !ok {
 			c.AbortWithStatus(http.StatusUnauthorized)
 			return
 		}
 
+		// Check expiration
+		if time.Now().After(sessionInfo.Exp) {
+			c.SetCookie("session", "", -1, "/", "", true, true)
+			c.AbortWithStatus(http.StatusUnauthorized)
+			return
+		}
+
+		// Set user context
 		c.Set("email", sessionInfo.UserInfo.Email)
 		c.Next()
 	}
