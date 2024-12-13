@@ -7,9 +7,9 @@
 	import { tooltip } from '$lib/actions/tooltip';
 
 	const routes = [
-    { path: '/', icon: Home, tooltip: 'Home' },
-    { path: '/dashboard', icon: LayoutDashboard, tooltip: 'Dashboard' },
-    { path: '/settings', icon: Settings, tooltip: 'Settings' }
+    { path: '/', icon: Home, tooltip: 'Home', auth: false },
+    { path: '/dashboard', icon: LayoutDashboard, tooltip: 'Dashboard', auth: true },
+    { path: '/settings', icon: Settings, tooltip: 'Settings', auth: true }
   ];
 
 	let showModal = false;
@@ -37,17 +37,19 @@
 	<!-- Center icons -->
 	<div class="flex-grow flex flex-col items-center justify-center space-y-8">
 		{#each routes as route}
-			<button
-				class="text-gray-300 hover:text-white transition-colors duration-200 ease-in-out p-2 tooltip"
-				class:text-white={$page.url.pathname === route.path}
-				class:bg-gray-700={$page.url.pathname === route.path}
-				class:rounded-full={$page.url.pathname === route.path}
-				on:click={() => goto(route.path)}
-				use:tooltip
-				data-tooltip={route.tooltip}
-			>
-				<svelte:component this={route.icon} size={24} />
-			</button>
+			{#if !route.auth || $isLoggedIn}
+				<button
+					class="text-gray-300 hover:text-white transition-colors duration-200 ease-in-out p-2 tooltip"
+					class:text-white={$page.url.pathname === route.path}
+					class:bg-gray-700={$page.url.pathname === route.path}
+					class:rounded-full={$page.url.pathname === route.path}
+					on:click={() => goto(route.path)}
+					use:tooltip
+					data-tooltip={route.tooltip}
+				>
+					<svelte:component this={route.icon} size={24} />
+				</button>
+			{/if}
 		{/each}
 	</div>
 

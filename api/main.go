@@ -29,21 +29,21 @@ func setupRoutes(r *gin.Engine) {
 		api.GET("/security/:domain", security.SecurityScanHandler)
 		api.GET("/screenshot/:domain", security.ScreenshotHandler)
 
-		api.POST("/servers", servers.AddServer)
-		api.GET("/servers", servers.GetServersWithSecurityStatus)
-		api.PUT("/servers/:id", servers.UpdateServer)
-		api.GET("/servers/:id", servers.GetServer)
-		api.GET("/servers/:id/report", security.LastSecurityScanHandler)
-		api.GET("/servers/:id/results", servers.GetServerResults)
-		api.POST("/servers/:id/force-check", servers.ForceCheckServer)
-
-		api.POST("/batch/start", security.StartBatchHandler)
-		api.GET("/batch/:jobID/status", security.GetBatchStatusHandler)
-		api.POST("/batch/:jobID/cancel", security.CancelBatchHandler)
-		api.GET("/batch/list", security.ListBatchesHandler)
-
 		api.Use(auth.Middleware())
 		{
+			api.POST("/servers", servers.AddServer)
+			api.GET("/servers", servers.GetServersWithSecurityStatus)
+			api.PUT("/servers/:id", servers.UpdateServer)
+			api.GET("/servers/:id", servers.GetServer)
+			api.GET("/servers/:id/report", security.LastSecurityScanHandler)
+			api.GET("/servers/:id/results", servers.GetServerResults)
+			api.POST("/servers/:id/force-check", servers.ForceCheckServer)
+
+			api.POST("/batch/start", security.StartBatchHandler)
+			api.GET("/batch/:jobID/status", security.GetBatchStatusHandler)
+			api.POST("/batch/:jobID/cancel", security.CancelBatchHandler)
+			api.GET("/batch/list", security.ListBatchesHandler)
+
 			api.GET("/register", registerToken)
 
 			api.GET("/profile", getProfile)
