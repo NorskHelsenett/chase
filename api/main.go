@@ -1,7 +1,10 @@
 package main
 
 import (
+	"fmt"
 	"log"
+	"os"
+	"strings"
 
 	"github.com/norskhelsenett/chase/auth"
 	"github.com/norskhelsenett/chase/database"
@@ -61,9 +64,40 @@ func setupRoutes(r *gin.Engine) {
 	}
 }
 
-func main() {
+func loadEnv() error {
+	// Try to load from .env file first
 	if err := godotenv.Load(); err != nil {
-		log.Println("No .env file found, using system environment variables")
+		log.Println("No .env file found, checking ENV_FILE variable")
+
+		// Check if we have env content in an environment variable
+		if envContent := os.Getenv("ENV_FILE"); envContent != "" {
+			// Create a reader from the string content
+			reader := strings.NewReader(envContent)
+
+			// Parse returns map[string]string and error
+			envMap, err := godotenv.Parse(reader)
+			if err != nil {
+				return fmt.Errorf("failed to parse ENV_FILE content: %w", err)
+			}
+
+			// Set the environment variables
+			for key, value := range envMap {
+				os.Setenv(key, value)
+			}
+
+			log.Println("Loaded environment from ENV_FILE variable")
+			return nil
+		}
+
+		log.Println("No ENV_FILE content found, using system environment variables")
+	}
+
+	return nil
+}
+
+func main() {
+	if err := loadEnv(); err != nil {
+		log.Fatal(err)
 	}
 
 	if err := database.InitDatabase(); err != nil {
