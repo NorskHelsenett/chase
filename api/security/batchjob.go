@@ -146,9 +146,49 @@ func ListBatchesHandler(c *gin.Context) {
 func StartBatchHandler(c *gin.Context) {
 	db := database.GetDB()
 
-	var servers []types.Server
-	if err := db.Where("active = ?", true).Find(&servers).Error; err != nil {
-		c.JSON(500, gin.H{"error": "Failed to fetch servers"})
+	// Using a subquery to get the latest ping result for each server
+	// Then LEFT JOIN with servers table to get all active servers
+	query := `
+		WITH LatestPings AS (
+			SELECT server_id, status_code, error,
+				   ROW_NUMBER() OVER (PARTITION BY server_id ORDER BY timestamp DESC) as rn
+			FROM ping_results
+		)
+		SELECT s.*, 
+			   lp.status_code as last_status_code,
+			   lp.error as last_error
+		FROM servers s
+		LEFT JOIN LatestPings lp ON s.id = lp.server_id AND lp.rn = 1
+		WHERE s.active = true`
+
+	type ServerWithPing struct {
+		types.Server
+		LastStatusCode *int    `gorm:"column:last_status_code"`
+		LastError      *string `gorm:"column:last_error"`
+	}
+
+	var serversWithPing []ServerWithPing
+	if err := db.Raw(query).Scan(&serversWithPing).Error; err != nil {
+		c.JSON(500, gin.H{"error": "Failed to fetch servers with ping results"})
+		return
+	}
+
+	var eligibleServers []types.Server
+	for _, s := range serversWithPing {
+		// Server is eligible if:
+		// 1. No ping results yet (LastStatusCode is nil) OR
+		// 2. Last ping was successful (no error and status 200-399)
+		if s.LastStatusCode == nil ||
+			(s.LastError == nil || *s.LastError == "") &&
+				*s.LastStatusCode >= 200 && *s.LastStatusCode < 400 {
+			eligibleServers = append(eligibleServers, s.Server)
+		}
+	}
+
+	if len(eligibleServers) == 0 {
+		c.JSON(400, gin.H{
+			"error": "No eligible servers found - all servers have errors in their last ping",
+		})
 		return
 	}
 
@@ -157,7 +197,7 @@ func StartBatchHandler(c *gin.Context) {
 	job := &BatchJob{
 		ID:        jobID,
 		Status:    "running",
-		Total:     len(servers),
+		Total:     len(eligibleServers),
 		StartTime: time.Now(),
 		Cancel:    cancel,
 	}
@@ -166,12 +206,12 @@ func StartBatchHandler(c *gin.Context) {
 	activeJobs[jobID] = job
 	jobsMutex.Unlock()
 
-	go processBatch(ctx, servers, job)
+	go processBatch(ctx, eligibleServers, job)
 
 	c.JSON(200, gin.H{
 		"job_id": jobID,
 		"status": "started",
-		"total":  len(servers),
+		"total":  len(eligibleServers),
 	})
 }
 

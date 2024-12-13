@@ -24,6 +24,12 @@
 		}
 	},
 
+	"portsAttributes": {
+    "8080": {
+      "onAutoForward": "ignore"
+    }
+  },
+
 	// Features to add to the dev container. More info: https://containers.dev/features.
 	// "features": {},
 
