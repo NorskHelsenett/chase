@@ -11,6 +11,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/norskhelsenett/chase/database"
 	"github.com/norskhelsenett/chase/security"
+	"github.com/norskhelsenett/chase/utils"
 	"gorm.io/gorm"
 )
 
@@ -73,18 +74,17 @@ func AddServer(c *gin.Context) {
 		return
 	}
 
-	// Validate URL format
-	parsedURL, err := url.Parse(server.URL)
-	if err != nil {
+	var err error
+	if server.URL, err = utils.EnsureHTTPS(server.URL); err != nil {
 		tx.Rollback()
 		c.JSON(400, gin.H{"error": "Invalid URL format"})
 		return
 	}
 
-	// Check if scheme is present and valid
-	if parsedURL.Scheme != "http" && parsedURL.Scheme != "https" {
+	parsedURL, err := url.Parse(server.URL)
+	if err != nil {
 		tx.Rollback()
-		c.JSON(400, gin.H{"error": "URL must start with http:// or https://"})
+		c.JSON(400, gin.H{"error": "Invalid URL format"})
 		return
 	}
 

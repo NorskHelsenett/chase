@@ -14,6 +14,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/norskhelsenett/chase/database"
+	"github.com/norskhelsenett/chase/utils"
 	"gorm.io/gorm"
 )
 
@@ -118,11 +119,6 @@ func ScreenshotHandler(c *gin.Context) {
 		return
 	}
 
-	// Add https:// if not present
-	if !strings.HasPrefix(domain, "http") {
-		domain = "https://" + domain
-	}
-
 	// Check if we have a recent screenshot
 	if screenshot, err := getRecentScreenshot(domain); err == nil {
 		// Set cache headers
@@ -170,6 +166,12 @@ func LastSecurityScanHandler(c *gin.Context) {
 }
 
 func captureAndSendScreenshot(c *gin.Context, domain string) error {
+	var err error
+	if domain, err = utils.EnsureHTTPS(domain); err != nil {
+		c.JSON(400, gin.H{"error": "Invalid URL format"})
+		return err
+	}
+
 	// Create request body
 	jsonData, err := json.Marshal(map[string]string{"url": domain})
 	if err != nil {
@@ -260,7 +262,7 @@ func storeScreenshot(url string, data []byte, mimeType string) error {
 	db := database.GetDB()
 
 	screenshot := Screenshot{
-		ServerURL: url,
+		ServerURL: utils.StripProtocol(url),
 		Data:      data,
 		CreatedAt: time.Now(),
 		MIMEType:  mimeType,

@@ -16,7 +16,6 @@
     try {
       const response = await fetch('/api/servers');
       servers = await response.json();
-      console.log(servers)
 
       stats = servers.reduce((acc: Stats, server: Server) => {
         const sortedPings = [...server.ping_results].sort((a, b) =>
