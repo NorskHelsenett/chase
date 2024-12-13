@@ -45,8 +45,49 @@ spec:
           mountPath: /data
       containers:
       - name: {{ $key }}
-        # ... main container configuration remains unchanged ...
+        image: {{ $value.repository }}:{{ $value.tag | default "latest" }}
+        resources:
+          {{- if $value.resources }}
+          {{- toYaml $value.resources | nindent 10 }}
+          {{- else }}
+          requests:
+            memory: "100Mi"  # Request 100 MiB of memory
+            cpu: "100m"      # Request 100 millicpu (0.1 CPU cores)
+          limits:
+            memory: "200Mi"  # Limit to 200 MiB of memory
+            cpu: "500m"      # Limit to 500 millicpu (0.5 CPU cores)
+          {{- end }}
+        imagePullPolicy: {{ $value.pullPolicy }}
+        ports:
+        {{- range $value.services }}
+        - name: {{ .name }}
+          containerPort: {{ .port }}
+        {{- end }}
+        env:
+        {{- range $value.env }}
+        - name: {{ .name }}
+          value: "{{ .value }}"
+        {{- end }}
+        volumeMounts:
+        {{- range $value.mounts }}
+        - name: {{ .name }}
+          mountPath: {{ .mountPath }}
+          readOnly: {{ .readOnly | default false }}
+        {{- end }}
+        securityContext:
+          capabilities:
+            drop:
+              - ALL
+          seccompProfile:
+            type: RuntimeDefault
+          privileged: false
+          allowPrivilegeEscalation: false
+          runAsNonRoot: true
+          runAsUser: 101
+          runAsGroup: 101
+          readOnlyRootFilesystem: true
 
+      {{- if $value.sidecar }}
       {{- if $value.sidecar.enabled }}
       - name: {{ $value.sidecar.name }}
         image: {{ $value.sidecar.repository }}:{{ $value.sidecar.tag }}
@@ -66,11 +107,6 @@ spec:
             mountPath: {{ .mountPath }}
             readOnly: {{ .readOnly | default false }}
           {{- end }}
-          {{- range $value.sidecar.secrets }}
-          - name: {{ .name }}
-            mountPath: {{ .mountPath }}
-            readOnly: true
-          {{- end }}
         securityContext:
           capabilities:
             drop:
@@ -83,6 +119,7 @@ spec:
           runAsUser: 101
           runAsGroup: 101
           readOnlyRootFilesystem: true
+      {{- end }}
       {{- end }}
 
       volumes:
@@ -102,18 +139,16 @@ spec:
         {{- end }}
       {{- end }}
       {{- end }}
+      
+      {{- if $value.sidecar }}
       {{- if $value.sidecar.enabled }}
-      {{- range $value.sidecar.secrets }}
-      - name: {{ .name }}
-        secret:
-          secretName: {{ .fromSecret }}
-      {{- end }}
       {{- range $value.sidecar.mounts }}
       {{- if .inMemory }}
       - name: {{ .name }}
         emptyDir:
           medium: Memory
           sizeLimit: {{ .storage | default "64Mi" }}
+      {{- end }}
       {{- end }}
       {{- end }}
       {{- end }}
