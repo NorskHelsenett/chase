@@ -26,7 +26,7 @@ func runMonitoring() {
 
 	now := time.Now()
 
-	if err := db.Debug().Where("active = ? AND next_check <= ?", true, now).Find(&servers).Error; err != nil {
+	if err := db.Where("active = ? AND next_check <= ?", true, now).Find(&servers).Error; err != nil {
 		log.Printf("Error fetching servers: %v", err)
 		return
 	}
