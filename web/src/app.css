@@ -46,6 +46,14 @@
 	}
 }
 
+.bg-card {
+  @apply bg-[#202020] rounded-lg p-6 border-none;
+}
+
+.text-muted-foreground {
+  @apply text-gray-400;
+}
+
 .bg-secondary{
 	background-color: var(--bg-secondary);
 }

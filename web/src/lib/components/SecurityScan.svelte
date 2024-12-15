@@ -13,26 +13,30 @@
 	let results: any = null;
 	let error: string | null = null;
 
-	function getRiskColor(risk: string): string {
-		switch (risk?.toLowerCase()) {
-			case 'critical':
-			case 'f':
-				return 'text-red-600';
-			case 'high':
-			case 'c':
-				return 'text-red-500';
-			case 'medium':
-			case 'b':
-			case 'b+':
-				return 'text-yellow-500';
-			case 'low':
-			case 'a':
-			case 'a+':
-				return 'text-green-500';
-			default:
-				return 'text-gray-500';
-		}
-	}
+	function getRiskColor(value: string): string {
+    switch (value?.toLowerCase()) {
+        // Risk levels
+        case 'critical':
+        case 'f':
+        case 'e':
+            return 'text-red-500';
+        case 'high':
+        case 'd':
+            return 'text-orange-500';
+        case 'medium':
+        case 'c':
+            return 'text-yellow-500';
+        case 'low':
+        case 'b':
+            return 'text-blue-500';
+        case 'info':
+        case 'a':
+        case 'a+':
+            return 'text-green-500';
+        default:
+            return 'text-gray-500';
+    }
+}
 
 	async function performScan() {
 		// If domain is empty but we have search results, just set the domain and return

@@ -7,19 +7,20 @@ import (
 	"strings"
 )
 
-// calculateGrade converts a numeric score to a letter grade
 func calculateGrade(score int) string {
 	switch {
-	case score >= 90:
+	case score >= 95:
 		return "A+"
-	case score >= 80:
+	case score >= 85:
 		return "A"
 	case score >= 70:
-		return "B+"
-	case score >= 60:
 		return "B"
-	case score >= 50:
+	case score >= 55:
 		return "C"
+	case score >= 40:
+		return "D"
+	case score >= 20:
+		return "E"
 	default:
 		return "F"
 	}

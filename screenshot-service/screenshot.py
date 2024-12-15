@@ -13,7 +13,7 @@ class ScreenshotUtility:
         self.output_dir = output_dir
         self.driver = None
         os.makedirs(output_dir, exist_ok=True)
-        
+
         options = Options()
         options.binary_location = os.getenv('FIREFOX_BIN', '/usr/bin/firefox')
         options.add_argument('--headless')
@@ -24,7 +24,7 @@ class ScreenshotUtility:
         options.set_preference('font.name.sans-serif', 'Liberation Sans')
         options.set_preference('permissions.default.image', 1)
         options.set_preference('webdriver.log.file', '/dev/null')
-        
+
         try:
             service = Service('/usr/local/bin/geckodriver', service_log_path=devnull)
             self.driver = webdriver.Firefox(service=service, options=options)
@@ -36,18 +36,20 @@ class ScreenshotUtility:
     def take_screenshot(self, url, filename=None):
         if not self.driver:
             raise Exception("Driver not initialized")
-            
+
         try:
             if not filename:
                 filename = url.replace('://', '_').replace('/', '_') + '.png'
             filepath = os.path.join(self.output_dir, filename)
-            
+
             self.driver.get(url)
-            
+
             WebDriverWait(self.driver, 10).until(
                 lambda driver: driver.execute_script('return document.readyState') == 'complete'
             )
-            
+
+            time.sleep(5) #wait for images to load
+
             try:
                 WebDriverWait(self.driver, 10).until(
                     lambda d: d.execute_script("""
@@ -57,19 +59,19 @@ class ScreenshotUtility:
                 )
             except:
                 print("Warning: Timeout waiting for images")
-            
+
             time.sleep(2)
-            
+
             self.driver.save_screenshot(filepath)
-            
+
             if os.path.exists(filepath) and os.path.getsize(filepath) > 0:
                 return filepath
             raise Exception("Screenshot file empty or missing")
-            
+
         except Exception as e:
             print(f"Failed to capture screenshot of {url}: {e}")
             return None
-            
+
     def __del__(self):
         if self.driver:
             self.driver.quit()

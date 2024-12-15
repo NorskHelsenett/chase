@@ -274,7 +274,7 @@ func getRecentScreenshot(url string) (*Screenshot, error) {
 	db := database.GetDB()
 	var screenshot Screenshot
 
-	cutoff := time.Now().Add(-24 * time.Hour)
+	cutoff := time.Now().Add(-168 * time.Hour)
 
 	err := db.Where("server_url = ? AND created_at > ?", url, cutoff).
 		Order("created_at DESC").

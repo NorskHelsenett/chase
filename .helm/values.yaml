@@ -48,10 +48,10 @@ screenshotr:
   tag: ""
   resources:
     requests:
-      memory: "512Mi"    # Request 512 MiB of memory
+      memory: "128Mi"    # Request 512 MiB of memory
       cpu: "250m"        # Request 0.25 CPU cores
     limits:
-      memory: "1024Mi"   # Limit to 1 GiB of memory
+      memory: "2048Mi"   # Limit to 1 GiB of memory
       cpu: "500m"        # Limit to 0.5 CPU cores
   services:
   - name: web
