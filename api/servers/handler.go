@@ -32,7 +32,6 @@ func checkServer(serverID uint, resultChan chan<- any) {
 	if result.Error == "" && result.StatusCode < 500 {
 		db.Model(&server).Updates(map[string]interface{}{
 			"failure_count": 0,
-			"last_success":  time.Now(),
 			"next_check":    time.Now().Add(time.Hour),
 		})
 	}
