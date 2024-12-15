@@ -607,7 +607,7 @@
 						<div>
 							<div class="text-gray-400 mb-1">Content Type</div>
 							<div
-								class={results.securityTxt.contentType === 'text/plain'
+								class={results.securityTxt.contentType?.startsWith('text/plain')
 									? 'text-green-400'
 									: 'text-red-400'}
 							>
@@ -626,7 +626,7 @@
 						{/if}
 					</div>
 
-					{#if results.securityTxt.exists && results.securityTxt.contentType === 'text/plain'}
+					{#if results.securityTxt.exists && results.securityTxt.contentType?.startsWith('text/plain')}
 						{#if results.securityTxt.contacts?.length > 0}
 							<div>
 								<h3 class="text-gray-400 mb-2">Contact Points</h3>
