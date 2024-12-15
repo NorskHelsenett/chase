@@ -64,9 +64,8 @@ spec:
           containerPort: {{ .port }}
         {{- end }}
         env:
-        {{- range $value.env }}
-        - name: {{ .name }}
-          value: "{{ .value }}"
+        {{- with $value.env }}
+        {{- toYaml . | nindent 8 }}
         {{- end }}
         volumeMounts:
         {{- range $value.mounts }}
@@ -96,10 +95,9 @@ spec:
           {{- toYaml $value.sidecar.resources | nindent 10 }}
         {{- if $value.sidecar.env }}
         env:
-          {{- range $value.sidecar.env }}
-          - name: {{ .name }}
-            value: "{{ .value }}"
-          {{- end }}
+        {{- with $value.sidecar.env }}
+        {{- toYaml . | nindent 10 }}
+        {{- end }}
         {{- end }}
         volumeMounts:
           {{- range $value.sidecar.mounts }}
@@ -139,7 +137,7 @@ spec:
         {{- end }}
       {{- end }}
       {{- end }}
-      
+
       {{- if $value.sidecar }}
       {{- if $value.sidecar.enabled }}
       {{- range $value.sidecar.mounts }}
