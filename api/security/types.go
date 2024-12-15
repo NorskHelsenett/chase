@@ -57,8 +57,9 @@ type DNSAnalysis struct {
 }
 
 type FileExposureAnalysis struct {
-	ExposedFiles []ExposedFile `json:"exposedFiles"`
-	Risk         RiskLevel     `json:"risk"`
+	ExposedFiles []ExposedFile     `json:"exposedFiles"`
+	Risk         RiskLevel         `json:"risk"`
+	Evidence     map[string]string `json:"evidence"`
 }
 
 type ExposedFile struct {
@@ -139,10 +140,11 @@ type Cipher struct {
 }
 
 type AdminPagesAnalysis struct {
-	Exposed         []string  `json:"exposed"`
-	Risk            RiskLevel `json:"risk"`
-	Findings        []Finding `json:"findings"`
-	Recommendations []string  `json:"recommendations"`
+	Exposed         []string          `json:"exposed"`
+	Risk            RiskLevel         `json:"risk"`
+	Findings        []Finding         `json:"findings"`
+	Recommendations []string          `json:"recommendations"`
+	Evidence        map[string]string `json:"evidence"`
 }
 
 type SwaggerAnalysis struct {

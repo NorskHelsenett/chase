@@ -1,4 +1,3 @@
-// securityfiles.go
 package security
 
 import (
@@ -9,6 +8,35 @@ import (
 	"sync"
 	"time"
 )
+
+// isValidTextFile checks if the response is actually a text file
+func isValidTextFile(contentType string, content string) bool {
+	// Parse the media type
+	mediaType, _, err := mime.ParseMediaType(contentType)
+	if err != nil {
+		return false
+	}
+
+	// Check if it's a text file
+	if !strings.HasPrefix(mediaType, "text/") {
+		return false
+	}
+
+	// Check for common HTML indicators
+	contentLower := strings.ToLower(content)
+	htmlIndicators := []string{
+		"<!doctype", "<html", "<head", "<body",
+		"<script", "<style", "<div", "<span",
+	}
+
+	for _, indicator := range htmlIndicators {
+		if strings.Contains(contentLower, indicator) {
+			return false
+		}
+	}
+
+	return true
+}
 
 func (s *Scanner) checkRobotsTxt(domain string) (*RobotsAnalysis, error) {
 	robotsPaths := []string{
@@ -38,32 +66,31 @@ func (s *Scanner) checkRobotsTxt(domain string) (*RobotsAnalysis, error) {
 
 			if resp.StatusCode == 200 {
 				contentType := resp.Header.Get("Content-Type")
-				mediaType, _, err := mime.ParseMediaType(contentType)
-				if err != nil {
-					return
-				}
-
-				// Read the content
 				bodyBytes, err := io.ReadAll(resp.Body)
 				if err != nil {
 					return
 				}
 
-				mu.Lock()
-				analysis.Exists = true
-				analysis.ContentType = mediaType
-				analysis.Content = string(bodyBytes)
+				content := string(bodyBytes)
 
-				// Check if it's actually a text file
-				if mediaType != "text/plain" {
-					analysis.Risk = RiskMedium
+				mu.Lock()
+				defer mu.Unlock()
+
+				// Validate that it's actually a text file
+				if !isValidTextFile(contentType, content) {
+					analysis.Risk = RiskHigh
 					analysis.Findings = append(analysis.Findings, Finding{
-						Description: "robots.txt served with incorrect content type",
-						Risk:        RiskMedium,
-						Evidence:    fmt.Sprintf("Content-Type: %s", contentType),
-						Mitigation:  "Serve robots.txt with Content-Type: text/plain",
+						Description: "robots.txt is not a valid text file",
+						Risk:        RiskHigh,
+						Evidence:    fmt.Sprintf("Content-Type: %s, content appears to be non-text", contentType),
+						Mitigation:  "Ensure robots.txt is served as a plain text file",
 					})
+					return
 				}
+
+				analysis.Exists = true
+				analysis.ContentType = contentType
+				analysis.Content = content
 
 				// Check for sensitive patterns
 				sensitivePatterns := []string{
@@ -71,7 +98,7 @@ func (s *Scanner) checkRobotsTxt(domain string) (*RobotsAnalysis, error) {
 					"/wp-admin", "/phpmyadmin", "/config",
 				}
 
-				contentLower := strings.ToLower(string(bodyBytes))
+				contentLower := strings.ToLower(content)
 				for _, pattern := range sensitivePatterns {
 					if strings.Contains(contentLower, pattern) {
 						analysis.Risk = RiskHigh
@@ -83,7 +110,6 @@ func (s *Scanner) checkRobotsTxt(domain string) (*RobotsAnalysis, error) {
 						})
 					}
 				}
-				mu.Unlock()
 			}
 		}(path)
 	}
@@ -126,28 +152,37 @@ func (s *Scanner) checkSecurityTxt(domain string) (*SecurityTxtAnalysis, error) 
 
 			if resp.StatusCode == 200 {
 				contentType := resp.Header.Get("Content-Type")
-				mediaType, _, err := mime.ParseMediaType(contentType)
-				if err != nil {
-					return
-				}
-
 				bodyBytes, err := io.ReadAll(resp.Body)
 				if err != nil {
 					return
 				}
 
+				content := string(bodyBytes)
+
 				mu.Lock()
 				defer mu.Unlock()
 
+				// Validate that it's actually a text file
+				if !isValidTextFile(contentType, content) {
+					analysis.Risk = RiskHigh
+					analysis.Findings = append(analysis.Findings, Finding{
+						Description: "security.txt is not a valid text file",
+						Risk:        RiskHigh,
+						Evidence:    fmt.Sprintf("Content-Type: %s, content appears to be non-text", contentType),
+						Mitigation:  "Ensure security.txt is served as a plain text file",
+					})
+					return
+				}
+
 				analysis.Exists = true
-				analysis.ContentType = mediaType
-				analysis.Content = string(bodyBytes)
+				analysis.ContentType = contentType
+				analysis.Content = content
 
 				// Check if signed
-				analysis.ValidSignature = strings.Contains(analysis.Content, "-----BEGIN PGP SIGNED MESSAGE-----")
+				analysis.ValidSignature = strings.Contains(content, "-----BEGIN PGP SIGNED MESSAGE-----")
 
 				// Parse fields
-				lines := strings.Split(analysis.Content, "\n")
+				lines := strings.Split(content, "\n")
 				for _, line := range lines {
 					line = strings.TrimSpace(line)
 					switch {
@@ -160,7 +195,6 @@ func (s *Scanner) checkSecurityTxt(domain string) (*SecurityTxtAnalysis, error) 
 						if expiryTime, err := time.Parse(time.RFC3339, expiry); err == nil {
 							analysis.Expiration = expiryTime
 
-							// Check expiration timeframes
 							daysUntilExpiry := time.Until(expiryTime).Hours() / 24
 							switch {
 							case daysUntilExpiry < 30:

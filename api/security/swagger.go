@@ -1,10 +1,70 @@
-// swagger.go
 package security
 
 import (
+	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
+	"strings"
 	"sync"
 )
+
+// SwaggerResponse represents a basic structure to validate Swagger/OpenAPI JSON
+type SwaggerResponse struct {
+	Swagger string                 `json:"swagger,omitempty"` // Swagger 2.0
+	OpenAPI string                 `json:"openapi,omitempty"` // OpenAPI 3.0
+	Info    map[string]interface{} `json:"info"`
+	Paths   map[string]interface{} `json:"paths"`
+}
+
+func isSwaggerHTML(body string) bool {
+	// Check for common Swagger UI HTML indicators
+	indicators := []string{
+		"swagger-ui",
+		"SwaggerUIBundle",
+		"swagger-ui.css",
+		"swagger-ui-bundle.js",
+	}
+
+	for _, indicator := range indicators {
+		if strings.Contains(strings.ToLower(body), strings.ToLower(indicator)) {
+			return true
+		}
+	}
+	return false
+}
+
+func validateSwaggerResponse(resp *http.Response) (bool, string) {
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return false, ""
+	}
+	defer resp.Body.Close()
+
+	contentType := resp.Header.Get("Content-Type")
+
+	// Check if it's HTML
+	if strings.Contains(contentType, "text/html") {
+		return isSwaggerHTML(string(body)), "HTML"
+	}
+
+	// Check if it's JSON
+	if strings.Contains(contentType, "application/json") {
+		var swaggerDoc SwaggerResponse
+		if err := json.Unmarshal(body, &swaggerDoc); err != nil {
+			return false, ""
+		}
+
+		// Validate basic Swagger/OpenAPI structure
+		if (swaggerDoc.Swagger != "" || swaggerDoc.OpenAPI != "") &&
+			swaggerDoc.Info != nil &&
+			swaggerDoc.Paths != nil {
+			return true, "JSON"
+		}
+	}
+
+	return false, ""
+}
 
 func (s *Scanner) checkSwaggerDocs(domain string) (*SwaggerAnalysis, error) {
 	swaggerPaths := []string{
@@ -41,22 +101,26 @@ func (s *Scanner) checkSwaggerDocs(domain string) (*SwaggerAnalysis, error) {
 		wg.Add(1)
 		go func(p string) {
 			defer wg.Done()
-			status, err := checkRealStatus(s.client, domain+p)
+
+			resp, err := s.client.Get(domain + p)
 			if err != nil {
 				return
 			}
 
-			if status != 404 {
-				mu.Lock()
-				analysis.Endpoints = append(analysis.Endpoints, p)
-				analysis.Exposed = true
-				analysis.Findings = append(analysis.Findings, Finding{
-					Description: fmt.Sprintf("API documentation exposed at %s", p),
-					Risk:        RiskHigh,
-					Evidence:    fmt.Sprintf("Path %s returned status code %d", p, status),
-					Mitigation:  "Restrict access to API documentation in production",
-				})
-				mu.Unlock()
+			if resp.StatusCode == http.StatusOK {
+				isValid, docType := validateSwaggerResponse(resp)
+				if isValid {
+					mu.Lock()
+					analysis.Endpoints = append(analysis.Endpoints, p)
+					analysis.Exposed = true
+					analysis.Findings = append(analysis.Findings, Finding{
+						Description: fmt.Sprintf("Valid Swagger %s documentation exposed at %s", docType, p),
+						Risk:        RiskHigh,
+						Evidence:    fmt.Sprintf("Path %s returned valid Swagger %s documentation", p, docType),
+						Mitigation:  "Restrict access to API documentation in production",
+					})
+					mu.Unlock()
+				}
 			}
 		}(path)
 	}
