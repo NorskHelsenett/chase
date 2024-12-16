@@ -14,6 +14,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/norskhelsenett/chase/database"
+	"github.com/norskhelsenett/chase/types"
 	"github.com/norskhelsenett/chase/utils"
 	"gorm.io/gorm"
 )
@@ -144,9 +145,9 @@ func LastSecurityScanHandler(c *gin.Context) {
 
 	db := database.GetDB()
 
-	// Get URL directly with raw query
-	var serverURL string
-	if err := db.Raw("SELECT url FROM servers WHERE id = ?", serverID).Scan(&serverURL).Error; err != nil {
+	// Get URL and check if server exists
+	var server types.Server
+	if err := db.Where("id = ?", serverID).First(&server).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			c.JSON(404, gin.H{"error": "server not found"})
 		} else {
@@ -155,14 +156,32 @@ func LastSecurityScanHandler(c *gin.Context) {
 		return
 	}
 
-	if serverURL == "" {
-		c.JSON(404, gin.H{"error": "server not found"})
+	// Check if security scan exists
+	var securityReport types.SecurityReportRecord
+	err := db.Where("server_url = ?", server.URL).
+		Order("created_at DESC").
+		First(&securityReport).Error
+
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			// No existing scan found - trigger new security scan
+			c.Params = append(c.Params, gin.Param{Key: "domain", Value: server.URL})
+			SecurityScanHandler(c)
+			return
+		}
+		// Database error
+		c.JSON(500, gin.H{"error": fmt.Sprintf("Database error: %v", err)})
 		return
 	}
 
-	// Set the URL param for the scan handler
-	c.Params = append(c.Params, gin.Param{Key: "domain", Value: serverURL})
-	SecurityScanHandler(c)
+	// Return existing security report
+	var report types.SecurityReport
+	if err := json.Unmarshal(securityReport.ReportData, &report); err != nil {
+		c.JSON(500, gin.H{"error": "Failed to parse security report"})
+		return
+	}
+
+	c.JSON(200, report)
 }
 
 func captureAndSendScreenshot(c *gin.Context, domain string) error {

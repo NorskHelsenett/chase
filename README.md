@@ -27,7 +27,7 @@ Open with VSCode Devcontainer support
 ## Setup OIDC (optional)
 Create an `.env` file,
 ```bash
-cat <<EOF > /api/.env
+cat <<EOF > api/.env
 OIDC_ISSUER_URL=
 OIDC_CLIENT_ID=
 OIDC_CLIENT_SECRET=

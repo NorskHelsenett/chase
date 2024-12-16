@@ -18,16 +18,6 @@ export interface Server extends BaseModel {
   security: SecurityReport;
 }
 
-export interface SecurityReport {
-  serverUrl: string;
-  createdAt: Date;
-  riskLevel: string;
-  headerRisk: 'A+' | 'A' | 'B' | 'C' | 'D' | 'F' | '';
-  certRisk: 'A+' | 'A' | 'B' | 'C' | 'D' | 'F' | '';
-  adminRisk: 'critical' | 'high' | 'medium' | 'low' | '';
-  apiRisk: 'critical' | 'high' | 'medium' | 'low' | '';
-}
-
 export interface PingResult extends BaseModel {
   server_id: number;
   organization_name: string;
@@ -41,6 +31,16 @@ export interface PingResult extends BaseModel {
   cert_expiry_date: Date;
   cert_issuer: string;
   cert_common_name: string;
+}
+
+export interface SecurityReport {
+  serverUrl: string;
+  createdAt: Date;
+  riskLevel: string;
+  headerRisk: 'A+' | 'A' | 'B' | 'C' | 'D' | 'F' | '';
+  certRisk: 'A+' | 'A' | 'B' | 'C' | 'D' | 'F' | '';
+  adminRisk: 'critical' | 'high' | 'medium' | 'low' | '';
+  apiRisk: 'critical' | 'high' | 'medium' | 'low' | '';
 }
 
 export interface Stats {
