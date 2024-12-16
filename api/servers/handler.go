@@ -99,7 +99,7 @@ func AddServer(c *gin.Context) {
 	// Attempt to create the server in the transaction
 	if err := tx.Create(&server).Error; err != nil {
 		tx.Rollback()
-		if strings.Contains(err.Error(), "unique constraint") || strings.Contains(err.Error(), "Duplicate entry") {
+		if strings.Contains(err.Error(), "UNIQUE constraint") || strings.Contains(err.Error(), "Duplicate entry") {
 			c.JSON(409, gin.H{"error": "Server URL already exists"})
 			return
 		}
