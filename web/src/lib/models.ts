@@ -13,6 +13,7 @@ export interface Server extends BaseModel {
   next_check: Date;
   allow_insecure: boolean;
   expected_status: number;
+  comment: string;
   ping_results: PingResult[];
   security: SecurityReport;
 }
