@@ -84,7 +84,7 @@
         bind:value={searchQuery}
         on:input={handleSearch}
         placeholder="Search domains..."
-        class="w-full px-4 py-2 bg-[#2b2b2b] rounded-lg text-gray-200 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+        class="w-full px-4 py-2 bg-[#2b2b2b] rounded-lg text-gray-200 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-green-500"
       />
     </div>
 
@@ -127,7 +127,7 @@
             type="text"
             bind:value={newServer.url}
             required
-            class="w-full px-4 py-2 bg-[#2b2b2b] rounded-lg text-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            class="w-full px-4 py-2 bg-[#2b2b2b] rounded-lg text-gray-200 focus:outline-none focus:ring-2 focus:ring-green-500"
           />
         </div>
 
@@ -157,7 +157,7 @@
               bind:value={newServer.expected_status}
               min="100"
               max="599"
-              class="w-full px-4 py-2 bg-[#2b2b2b] rounded-lg text-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              class="w-full px-4 py-2 bg-[#2b2b2b] rounded-lg text-gray-200 focus:outline-none focus:ring-2 focus:ring-green-500"
             />
           </div>
         {/if}
@@ -168,7 +168,7 @@
             id="comment"
             bind:value={newServer.comment}
             rows="3"
-            class="w-full px-4 py-2 bg-[#2b2b2b] rounded-lg text-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            class="w-full px-4 py-2 bg-[#2b2b2b] rounded-lg text-gray-200 focus:outline-none focus:ring-2 focus:ring-green-500"
           ></textarea>
         </div>
 
