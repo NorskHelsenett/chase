@@ -7,7 +7,7 @@ COPY web/package*.json ./
 
 # Install dependencies with clean npm cache and production only
 RUN npm install --include=dev
-    
+
 # Copy the rest of the frontend code
 COPY web .
 
@@ -31,16 +31,18 @@ COPY api .
 # Build with security flags and optimizations
 RUN CGO_ENABLED=1 GOOS=linux go build -a \
     -ldflags='-w -s -linkmode external -extldflags "-static"' \
-    -o main .
+    -o chase .
 
 # Stage 3: Final stage
 FROM scratch
+
+ENV GIN_MODE=release
 
 # Copy SSL certificates for HTTPS support
 COPY --from=backend-builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
 
 # Copy the binary and web files as user 101
-COPY --from=backend-builder --chown=101:101 /app/backend/main /main
+COPY --from=backend-builder --chown=101:101 /app/backend/chase /chase
 COPY --from=frontend-builder --chown=101:101 /app/frontend/build /web
 
 # Define any necessary volumes
@@ -52,7 +54,6 @@ USER 101
 # Expose port 8080
 EXPOSE 8080
 
-
 # Run with explicit entrypoint and cmd
-ENTRYPOINT ["/main"]
+ENTRYPOINT ["/chase"]
 CMD []
