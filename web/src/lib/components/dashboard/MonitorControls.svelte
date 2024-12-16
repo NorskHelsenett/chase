@@ -2,13 +2,14 @@
   import { fade } from 'svelte/transition';
   import { createEventDispatcher } from 'svelte';
   import type { Server } from '$lib/models';
-	import CustomCheckbox from '../CustomCheckbox.svelte';
+  import CustomCheckbox from '../CustomCheckbox.svelte';
 
   const dispatch = createEventDispatcher();
 
   // Modal state
   let showModal = false;
   let searchQuery = '';
+  let isLoading = false;
   
   // Form state
   let newServer: Server = {
@@ -39,6 +40,8 @@
       newServer.expected_status = 0;
     }
 
+    isLoading = true;
+
     try {
       const response = await fetch('/api/servers', {
         method: 'POST',
@@ -61,6 +64,8 @@
       }
     } catch (error) {
       console.error('Error adding server:', error);
+    } finally {
+      isLoading = false;
     }
   }
 
@@ -70,8 +75,16 @@
   }
 
   // Handle refresh
-  function handleRefresh() {
-    dispatch('refresh');
+  async function handleRefresh() {
+    isLoading = true;
+    try {
+      dispatch('refresh');
+    } finally {
+      // Add a small delay to make the loading state visible
+      setTimeout(() => {
+        isLoading = false;
+      }, 500);
+    }
   }
 </script>
 
@@ -92,17 +105,29 @@
     <div class="flex gap-3">
       <button
         on:click={handleRefresh}
-        class="px-4 py-2 bg-[#2b2b2b] hover:bg-[#333] rounded-lg text-gray-200 flex items-center gap-2 transition-colors"
+        disabled={isLoading}
+        class="px-4 py-2 bg-[#2b2b2b] hover:bg-[#333] rounded-lg text-gray-200 flex items-center gap-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
       >
-        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+        <svg 
+          class="w-4 h-4 {isLoading ? 'animate-spin' : ''}" 
+          fill="none" 
+          stroke="currentColor" 
+          viewBox="0 0 24 24"
+        >
+          <path 
+            stroke-linecap="round" 
+            stroke-linejoin="round" 
+            stroke-width="2" 
+            d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" 
+          />
         </svg>
-        Refresh
+        {isLoading ? 'Refresh' : 'Refresh'}
       </button>
       
       <button
         on:click={() => showModal = true}
-        class="px-4 py-2 bg-green-600 hover:bg-green-700 rounded-lg text-white flex items-center gap-2 transition-colors"
+        disabled={isLoading}
+        class="px-4 py-2 bg-green-600 hover:bg-green-700 rounded-lg text-white flex items-center gap-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
       >
         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
@@ -176,15 +201,17 @@
           <button
             type="button"
             on:click={() => { showModal = false; resetForm(); }}
-            class="px-4 py-2 bg-[#2b2b2b] hover:bg-[#333] rounded-lg text-gray-200 transition-colors"
+            disabled={isLoading}
+            class="px-4 py-2 bg-[#2b2b2b] hover:bg-[#333] rounded-lg text-gray-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
             Cancel
           </button>
           <button
             type="submit"
-            class="px-4 py-2 bg-green-600 hover:bg-green-700 rounded-lg text-white transition-colors"
+            disabled={isLoading}
+            class="px-4 py-2 bg-green-600 hover:bg-green-700 rounded-lg text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            Add Server
+            {isLoading ? 'Adding...' : 'Add Server'}
           </button>
         </div>
       </form>
