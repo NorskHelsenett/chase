@@ -34,7 +34,9 @@
 <div class="bg-[#202020] rounded-lg p-4">
   <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
     {#each sites as site, index}
+      <!-- svelte-ignore a11y-no-static-element-interactions -->
       {#if site.active}
+        <!-- svelte-ignore a11y-click-events-have-key-events -->
         <div
           class="relative group rounded-lg transition-all duration-200 hover:ring-2 hover:ring-green-500 overflow-hidden cursor-pointer"
           on:click={() => openModal(index)}
@@ -57,6 +59,7 @@
               class="absolute inset-0 w-full h-full object-cover transition-transform duration-200 group-hover:scale-105 rounded-lg [&:not([src])]:hidden"
               on:load={() => handleImageLoad(site.url)}
               on:error={() => handleImageError(site.url)}
+              loading="lazy"
             />
 
             <div class="absolute bottom-0 left-0 right-0 bg-black/75 p-2 transform translate-y-full transition-transform duration-200 group-hover:translate-y-0 rounded-b-lg">
