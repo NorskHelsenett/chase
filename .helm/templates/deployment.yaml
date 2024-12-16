@@ -64,6 +64,7 @@ spec:
             path: /healthz
             port: 8080
           initialDelaySeconds: 30
+          restartPolicy: OnFailure
           periodSeconds: 10
           failureThreshold: 2
         readinessProbe:
