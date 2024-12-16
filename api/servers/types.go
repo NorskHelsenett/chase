@@ -8,14 +8,14 @@ import (
 
 type Server struct {
 	gorm.Model
-	URL                string                 `json:"url" gorm:"uniqueIndex"`
-	Active             bool                   `json:"active"`
-	FollowRedirect     bool                   `json:"follow_redirect"`
-	FailureCount       int                    `json:"failure_count"`
-	NextCheck          time.Time              `json:"next_check"`
-	AllowInsecure      bool                   `json:"allow_insecure"`
-	ExpectedStatusCode int                    `json:"expected_status"`
-	PingResults        []PingResult           `gorm:"foreignKey:ServerID;references:ID;OnDelete:CASCADE" json:"ping_results"`
+	URL                string       `json:"url" gorm:"uniqueIndex"`
+	Active             bool         `json:"active"`
+	FollowRedirect     bool         `json:"follow_redirect"`
+	NextCheck          time.Time    `json:"next_check"`
+	AllowInsecure      bool         `json:"allow_insecure"`
+	ExpectedStatusCode int          `json:"expected_status"`
+	Comment            string       `json:"comment"`
+	PingResults        []PingResult `gorm:"foreignKey:ServerID;references:ID;OnDelete:CASCADE" json:"ping_results"`
 }
 
 type PingResult struct {

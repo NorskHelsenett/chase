@@ -11,22 +11,49 @@ import (
 )
 
 // calculateNextCheckInterval determines when to next check a server based on failure count
-func calculateNextCheckInterval(failureCount int) time.Duration {
+func calculateNextCheckInterval(server Server) (time.Duration, bool) {
+	// Look at recent history - last 7 days
+	cutoff := time.Now().Add(-7 * 24 * time.Hour)
+
+	var recentResults []PingResult
+	for _, result := range server.PingResults {
+		if result.Timestamp.After(cutoff) {
+			recentResults = append(recentResults, result)
+		}
+	}
+
+	if len(recentResults) == 0 {
+		return 15 * time.Minute, true // Default interval for new servers
+	}
+
+	// Calculate failure rate
+	failureCount := 0
+	for _, result := range recentResults {
+		if result.StatusCode != server.ExpectedStatusCode || result.Error != "" {
+			failureCount++
+		}
+	}
+	failureRate := float64(failureCount) / float64(len(recentResults))
+
+	// If we have enough data and very high failure rate, suggest deactivation
+	if len(recentResults) >= 10 && failureRate > 0.95 {
+		return 24 * time.Hour, false // Recommend deactivation
+	}
+
+	// Dynamic interval based on failure rate
 	switch {
-	case failureCount == 0:
-		return 15 * time.Minute
-	case failureCount <= 6: // 1-6 failures: check every hour
-		return 1 * time.Hour
-	case failureCount <= 12: // 1-6 failures: check every 3 hours
-		return 3 * time.Hour
-	case failureCount <= 24: // 7-24 failures: check every 12 hours
-		return 12 * time.Hour
-	case failureCount <= 72: // 25-72 failures: check daily
-		return 24 * time.Hour
-	case failureCount <= 168: // 73-168 failures: check weekly
-		return 7 * 24 * time.Hour
-	default: // More than a week of failures: check bi-weekly
-		return 14 * 24 * time.Hour
+	case failureRate == 0:
+		return 15 * time.Minute, true
+	case failureRate <= 0.1:
+		return 30 * time.Minute, true
+	case failureRate <= 0.25:
+		return 1 * time.Hour, true
+	case failureRate <= 0.5:
+		return 3 * time.Hour, true
+	case failureRate <= 0.75:
+		return 6 * time.Hour, true
+	default:
+		return 12 * time.Hour, true
 	}
 }
 
@@ -92,7 +119,6 @@ func pingServer(server Server) PingResult {
 		// If we got here, the request was successful
 		result.ResponseTime = float64(time.Since(startTime).Milliseconds())
 		result.StatusCode = resp.StatusCode
-		server.FailureCount = 0
 
 		// Get IP address
 		host := req.URL.Hostname()
@@ -122,6 +148,5 @@ func pingServer(server Server) PingResult {
 
 	// If we get here, both HTTPS and HTTP failed
 	result.Error = lastErr.Error()
-	server.FailureCount++
 	return result
 }

@@ -20,21 +20,13 @@ func checkServer(serverID uint, resultChan chan<- any) {
 	var server Server
 	if err := db.First(&server, serverID).Error; err != nil {
 		if resultChan != nil {
-			resultChan <- nil // or some error result
+			resultChan <- nil
 		}
 		return
 	}
 
 	result := pingServer(server)
 	db.Create(&result)
-
-	// Reset the failure count if successful
-	if result.Error == "" && result.StatusCode < 500 {
-		db.Model(&server).Updates(map[string]interface{}{
-			"failure_count": 0,
-			"next_check":    time.Now().Add(time.Hour),
-		})
-	}
 
 	if resultChan != nil {
 		resultChan <- result
