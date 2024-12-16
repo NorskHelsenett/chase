@@ -146,7 +146,7 @@
 									<img
 										src={`/api/screenshot/${encodeURIComponent(domain)}`}
 										alt="Website preview"
-										class="w-autofill h-full object-cover opacity-0 transition-opacity duration-300"
+										class="absolute w-full h-full object-cover opacity-0 transition-opacity duration-300"
 										on:load={(e) => {
 											e.target.classList.remove('opacity-0');
 											e.target.classList.add('opacity-80');
