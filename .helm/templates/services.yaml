@@ -5,7 +5,7 @@ kind: Service
 metadata:
   name: {{ $key }}-service
 spec:
-  type: {{ default "ClusterIP" $value.serviceType }}
+  type: {{ default "ClusterIP" $value.type }}
   selector:
     app: {{ $key }}
   ports:
@@ -15,4 +15,5 @@ spec:
     targetPort: {{ .port }}
   {{- end }}
 {{- end }}
+---
 {{- end }}

@@ -17,19 +17,14 @@ chase:
     mountPath: /tmp
     readOnly: false
     storage: 50Mi
-  ingress:
-    host: chase.example.com
-    ingressClassName: avi-ingress-class-helsenett
-    annotations:
-      cert-manager.io/cluster-issuer: letsencrypt-staging
+  host: chase.example.com
   env:
   - name: DATA_FOLDER
     value: "/data"
   - name: SCREENSHOT_SERVICE_URL
     value: "http://screenshotr-service:8080"
   services:
-  - name: chase-service
-    serviceType: NodePort
+  - name: http
     port: 8080
   sidecar:
     enabled: false

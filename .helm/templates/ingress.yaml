@@ -15,21 +15,20 @@ spec:
   {{- end }}
   tls:
   - hosts:
-    - {{ .host }}
+    - {{ $value.host }}
     secretName: {{ $key }}-tls-secret
   rules:
-  - host: {{ .host }}
+  - host: {{ $value.host }}
     http:
       paths:
       - pathType: Prefix
         path: "/"
         backend:
           service:
-            {{- with (first $value.services) }}
-            name: {{ .name }}
+            name: {{ $key }}-service
             port:
-              number: {{ .port }}
-            {{- end }}
+              number: {{ index $value.services 0 "port" }}
 {{- end }}
 {{- end }}
+---
 {{- end }}
