@@ -1,10 +1,11 @@
 {{- range $key, $value := .Values }}
+{{- if $value.services }}
 apiVersion: v1
 kind: Service
 metadata:
   name: {{ $key }}-service
 spec:
-  type: NodePort
+  type: {{ default "ClusterIP" $value.serviceType }}
   selector:
     app: {{ $key }}
   ports:
@@ -13,5 +14,5 @@ spec:
     port: {{ .port }}
     targetPort: {{ .port }}
   {{- end }}
----
+{{- end }}
 {{- end }}
