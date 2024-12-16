@@ -17,7 +17,6 @@ spec:
         app: {{ $key }}
     spec:
       automountServiceAccountToken: false
-      restartPolicy: OnFailure
       securityContext:
         seccompProfile:
           type: RuntimeDefault
