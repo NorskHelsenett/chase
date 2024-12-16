@@ -7,6 +7,7 @@
 
   let servers: Server[] = [];
   let filteredServers: Server[] = [];
+  let isLoading = false;
   let stats: Stats = {
     up: 0,
     down: 0,
@@ -15,6 +16,7 @@
   };
 
   async function fetchServers() {
+    isLoading = true;
     try {
       const response = await fetch('/api/servers');
       servers = await response.json();
@@ -22,6 +24,8 @@
       updateStats();
     } catch (error) {
       console.error('Failed to fetch server data:', error);
+    } finally {
+      isLoading = false;
     }
   }
 
@@ -79,6 +83,7 @@
 <div class="p-4 min-h-screen w-full">
   <MonitorStats {stats} />
   <MonitorControls
+    {isLoading}
     on:search={handleSearch}
     on:refresh={fetchServers}
     on:serverAdded={fetchServers}

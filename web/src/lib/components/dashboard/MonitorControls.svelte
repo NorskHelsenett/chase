@@ -9,7 +9,7 @@
   // Modal state
   let showModal = false;
   let searchQuery = '';
-  let isLoading = false;
+  export let isLoading = false;
   
   // Form state
   let newServer: Server = {
