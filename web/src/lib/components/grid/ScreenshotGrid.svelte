@@ -79,3 +79,9 @@
     />
   {/if}
 </div>
+
+<style>
+  img{
+    color: transparent;
+  }
+</style>

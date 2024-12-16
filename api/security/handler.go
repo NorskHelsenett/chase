@@ -203,7 +203,7 @@ func captureAndSendScreenshot(c *gin.Context, domain string) error {
 		serviceURL = "http://screenshot:8080"
 	}
 
-	client := &http.Client{Timeout: 25 * time.Second}
+	client := &http.Client{Timeout: 60 * time.Second}
 	resp, err := client.Post(
 		serviceURL+"/screenshot",
 		"application/json",
