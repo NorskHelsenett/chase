@@ -63,15 +63,15 @@ spec:
           httpGet:
             path: /healthz
             port: 8080
-          initialDelaySeconds: 30
+          initialDelaySeconds: 5
           periodSeconds: 10
           failureThreshold: 2
         readinessProbe:
           httpGet:
             path: /healthz
             port: 8080
-          initialDelaySeconds: 30
-          periodSeconds: 10
+          initialDelaySeconds: 3
+          periodSeconds: 2
         securityContext:
           capabilities:
             drop:
