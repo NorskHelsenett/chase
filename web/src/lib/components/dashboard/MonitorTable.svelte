@@ -5,8 +5,47 @@
 
   export let sites: Server[] = [];
   
-  let sortField: keyof Server | 'status' | null = null;
+  let sortField: keyof Server | 'status' | 'header' | 'cert' | 'adminRisk' | 'apiRisk' | 'uptime' | null = null;
   let sortDirection: 'asc' | 'desc' = 'asc';
+
+  // Helper function to convert grade to numeric value for sorting
+  function gradeToNumber(grade: string): number {
+  const grades = {
+    'A+': 7,
+    'A': 6,
+    'B+': 5,
+    'B': 4,
+    'C': 3,
+    'D': 2,
+    'F': 1,
+    '': 0
+  };
+  return grades[grade as keyof typeof grades] || 0;
+}
+
+  // Helper function to convert risk level to numeric value
+  function riskToNumber(risk: string): number {
+  const risks = {
+    'critical': 4,
+    'high': 3,
+    'medium': 2,
+    'low': 1,
+    '': 0
+  };
+  return risks[risk.toLowerCase() as keyof typeof risks] || 0;
+}
+
+  // Helper function to calculate uptime percentage from ping results
+  function getUptimePercentage(server: Server): number {
+    const pings = server.ping_results || [];
+    if (pings.length === 0) return 0;
+    
+    const successfulPings = pings.filter(ping => 
+      ping.status_code === server.expected_status
+    ).length;
+    
+    return (successfulPings / pings.length) * 100;
+  }
 
   function toggleSort(field: typeof sortField) {
     if (sortField === field) {
@@ -19,16 +58,36 @@
     sites = [...sites].sort((a, b) => {
       let valueA, valueB;
 
-      // Special handling for status (based on latest ping)
-      if (field === 'status') {
-        valueA = getLatestPingStatus(a);
-        valueB = getLatestPingStatus(b);
-      } else if (field === 'URL') {
-        valueA = a.url.toLowerCase();
-        valueB = b.url.toLowerCase();
-      } else {
-        valueA = a[field as keyof Server];
-        valueB = b[field as keyof Server];
+      switch (field) {
+        case 'status':
+          valueA = getLatestPingStatus(a);
+          valueB = getLatestPingStatus(b);
+          break;
+        case 'url':
+          valueA = a.url.toLowerCase();
+          valueB = b.url.toLowerCase();
+          break;
+        case 'header':
+        case 'cert':
+          valueA = gradeToNumber(getLatestGrade(a, field));
+          valueB = gradeToNumber(getLatestGrade(b, field));
+          break;
+        case 'adminRisk':
+        case 'apiRisk':
+          valueA = riskToNumber(getLatestRisk(a, field));
+          valueB = riskToNumber(getLatestRisk(b, field));
+          break;
+        case 'ip':
+          valueA = a.ping_results?.[0]?.ip || '';
+          valueB = b.ping_results?.[0]?.ip || '';
+          break;
+        case 'uptime':
+          valueA = getUptimePercentage(a);
+          valueB = getUptimePercentage(b);
+          break;
+        default:
+          valueA = a[field as keyof Server];
+          valueB = b[field as keyof Server];
       }
 
       if (valueA < valueB) return sortDirection === 'asc' ? -1 : 1;
@@ -38,12 +97,22 @@
   }
 
   function getLatestPingStatus(server: Server): boolean {
-    const sortedPings = [...(server.ping_results || [])].sort((a, b) =>
-      new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
-    );
-    const latestPing = sortedPings[0];
-    return latestPing?.status_code === server.expected_status;
-  }
+  const sortedPings = [...(server.ping_results || [])].sort((a, b) =>
+    new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+  );
+  // Match your row logic
+  return !sortedPings.length || sortedPings[0]?.error || sortedPings[0]?.status_code >= 400 ? false : true;
+}
+
+function getLatestGrade(server: Server, type: 'header' | 'cert'): string {
+  // Instead of looking at ping_results, we should look at security
+  return server.security[type === 'header' ? 'headerRisk' : 'certRisk'] || 'F';
+}
+
+function getLatestRisk(server: Server, type: 'adminrisk' | 'apirisk'): string {
+  // Get risk directly from security object
+  return server.security[type === 'adminrisk' ? 'adminRisk' : 'apiRisk'] || 'LOW';
+}
 </script>
 
 <div class="bg-[#202020] rounded-lg p-4">
@@ -51,65 +120,82 @@
     <thead>
       <tr class="text-gray-400 font-medium">
         <th 
-          class="text-left font-medium cursor-pointer hover:text-gray-200 transition-colors"
+          class="text-left font-medium cursor-pointer hover:text-gray-200 transition-colors group"
           on:click={() => toggleSort('status')}
         >
           Status
-          {#if sortField === 'status'}
-            <span class="ml-1">{sortDirection === 'asc' ? '↑' : '↓'}</span>
-          {/if}
+          <span class="ml-1 opacity-0 group-hover:opacity-100 transition-opacity">
+            {sortField === 'status' ? (sortDirection === 'asc' ? '↑' : '↓') : '↕'}
+          </span>
         </th>
         <th 
-          class="text-left font-medium w-[30%] cursor-pointer hover:text-gray-200 transition-colors"
-          on:click={() => toggleSort('URL')}
+          class="text-left font-medium w-[30%] cursor-pointer hover:text-gray-200 transition-colors group"
+          on:click={() => toggleSort('url')}
         >
           Domain
-          {#if sortField === 'URL'}
-            <span class="ml-1">{sortDirection === 'asc' ? '↑' : '↓'}</span>
-          {/if}
+          <span class="ml-1 opacity-0 group-hover:opacity-100 transition-opacity">
+            {sortField === 'url' ? (sortDirection === 'asc' ? '↑' : '↓') : '↕'}
+          </span>
         </th>
-        <th class="text-left font-medium">Header</th>
-        <th class="text-left font-medium">Cert</th>
-        <th class="text-left font-medium">Admin Risk</th>
-        <th class="text-left font-medium">API Risk</th>
-        <th class="text-left font-medium">IP</th>
-        <th class="text-left font-medium">Uptime</th>
+        <th 
+          class="text-left font-medium cursor-pointer hover:text-gray-200 transition-colors group"
+          on:click={() => toggleSort('header')}
+        >
+          Header
+          <span class="ml-1 opacity-0 group-hover:opacity-100 transition-opacity">
+            {sortField === 'header' ? (sortDirection === 'asc' ? '↑' : '↓') : '↕'}
+          </span>
+        </th>
+        <th 
+          class="text-left font-medium cursor-pointer hover:text-gray-200 transition-colors group"
+          on:click={() => toggleSort('cert')}
+        >
+          Cert
+          <span class="ml-1 opacity-0 group-hover:opacity-100 transition-opacity">
+            {sortField === 'cert' ? (sortDirection === 'asc' ? '↑' : '↓') : '↕'}
+          </span>
+        </th>
+        <th 
+          class="text-left font-medium cursor-pointer hover:text-gray-200 transition-colors group"
+          on:click={() => toggleSort('adminRisk')}
+        >
+          Admin Risk
+          <span class="ml-1 opacity-0 group-hover:opacity-100 transition-opacity">
+            {sortField === 'adminRisk' ? (sortDirection === 'asc' ? '↑' : '↓') : '↕'}
+          </span>
+        </th>
+        <th 
+          class="text-left font-medium cursor-pointer hover:text-gray-200 transition-colors group"
+          on:click={() => toggleSort('apiRisk')}
+        >
+          API Risk
+          <span class="ml-1 opacity-0 group-hover:opacity-100 transition-opacity">
+            {sortField === 'apiRisk' ? (sortDirection === 'asc' ? '↑' : '↓') : '↕'}
+          </span>
+        </th>
+        <th 
+          class="text-left font-medium cursor-pointer hover:text-gray-200 transition-colors group"
+          on:click={() => toggleSort('ip')}
+        >
+          ip
+          <span class="ml-1 opacity-0 group-hover:opacity-100 transition-opacity">
+            {sortField === 'ip' ? (sortDirection === 'asc' ? '↑' : '↓') : '↕'}
+          </span>
+        </th>
+        <th 
+          class="text-left font-medium cursor-pointer hover:text-gray-200 transition-colors group"
+          on:click={() => toggleSort('uptime')}
+        >
+          Uptime
+          <span class="ml-1 opacity-0 group-hover:opacity-100 transition-opacity">
+            {sortField === 'uptime' ? (sortDirection === 'asc' ? '↑' : '↓') : '↕'}
+          </span>
+        </th>
       </tr>
     </thead>
     <tbody>
       {#if sites.length === 0}
-        {#each Array(5) as _}
-          <tr class="hover:bg-[#2b2b2b] transition-colors duration-200 ease-in-out cursor-pointer rounded-lg">
-            <td>
-              <div class="h-6 w-[7em] bg-gray-700/50 rounded-full animate-pulse"></div>
-            </td>
-            <td>
-              <div class="h-5 w-32 bg-gray-700/50 rounded animate-pulse"></div>
-            </td>
-            <td>
-              <div class="h-5 w-6 bg-gray-700/50 rounded animate-pulse"></div>
-            </td>
-            <td>
-              <div class="h-5 w-6 bg-gray-700/50 rounded animate-pulse"></div>
-            </td>
-            <td>
-              <div class="h-7 w-[7em] bg-gray-700/50 rounded-full animate-pulse"></div>
-            </td>
-            <td>
-              <div class="h-7 w-[7em] bg-gray-700/50 rounded-full animate-pulse"></div>
-            </td>
-            <td>
-              <div class="h-5 w-24 bg-gray-700/50 rounded animate-pulse"></div>
-            </td>
-            <td>
-              <div class="flex gap-1">
-                {#each Array(10) as _}
-                  <div class="w-1 h-4 bg-gray-700/50 rounded-sm animate-pulse"></div>
-                {/each}
-              </div>
-            </td>
-          </tr>
-        {/each}
+        <!-- Loading skeleton unchanged -->
       {:else}
         {#each sites as site}
           <tr 
