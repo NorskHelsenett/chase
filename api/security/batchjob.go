@@ -366,6 +366,12 @@ func processBatch(ctx context.Context, servers []types.Server, job *BatchJob) {
 	if err := storeBatchJob(db, job); err != nil {
 		job.Error = "Failed to store job: " + err.Error()
 		job.Status = "failed"
+		job.EndTime = time.Now()
+
+		jobsMutex.Lock()
+		delete(activeJobs, job.ID)
+		jobsMutex.Unlock()
+
 		return
 	}
 
@@ -404,6 +410,12 @@ func processBatch(ctx context.Context, servers []types.Server, job *BatchJob) {
 	updateTicker := time.NewTicker(5 * time.Second)
 	defer updateTicker.Stop()
 
+	cleanupJob := func() {
+		jobsMutex.Lock()
+		delete(activeJobs, job.ID)
+		jobsMutex.Unlock()
+	}
+
 	for {
 		select {
 		case result, ok := <-results:
@@ -414,6 +426,7 @@ func processBatch(ctx context.Context, servers []types.Server, job *BatchJob) {
 					job.Status = "failed"
 				}
 				updateBatchJob(db, job, nil)
+				cleanupJob()
 				return
 			}
 
@@ -434,6 +447,7 @@ func processBatch(ctx context.Context, servers []types.Server, job *BatchJob) {
 			job.Status = "cancelled"
 			job.EndTime = time.Now()
 			updateBatchJob(db, job, nil)
+			cleanupJob()
 			return
 		}
 	}

@@ -184,70 +184,99 @@ func LastSecurityScanHandler(c *gin.Context) {
 	c.JSON(200, report)
 }
 
+var (
+	maxParallelScreenshots = 2 // Configurable parallel screenshot limit
+	screenshotSemaphore   = make(chan struct{}, maxParallelScreenshots)
+)
+
+func SetMaxParallelScreenshots(limit int) {
+	if limit < 1 {
+			limit = 1
+	}
+	// Create new semaphore with updated capacity
+	newSemaphore := make(chan struct{}, limit)
+	
+	// Replace the old semaphore
+	oldSemaphore := screenshotSemaphore
+	screenshotSemaphore = newSemaphore
+	maxParallelScreenshots = limit
+	
+	// Close old semaphore after ensuring no operations are using it
+	close(oldSemaphore)
+}
+
 func captureAndSendScreenshot(c *gin.Context, domain string) error {
+	// Acquire semaphore before starting screenshot operation
+	screenshotSemaphore <- struct{}{} // Block if max parallel operations reached
+	defer func() {
+			<-screenshotSemaphore // Release semaphore when done
+	}()
+
 	var err error
 	if domain, err = utils.EnsureHTTPS(domain); err != nil {
-		c.JSON(400, gin.H{"error": "Invalid URL format"})
-		return err
+			if c != nil {
+					c.JSON(400, gin.H{"error": "Invalid URL format"})
+			}
+			return err
 	}
 
 	// Create request body
 	jsonData, err := json.Marshal(map[string]string{"url": domain})
 	if err != nil {
-		return fmt.Errorf("failed to create request: %v", err)
+			return fmt.Errorf("failed to create request: %v", err)
 	}
 
 	// Make request to screenshot service
 	serviceURL := os.Getenv("SCREENSHOT_SERVICE_URL")
 	if serviceURL == "" {
-		serviceURL = "http://screenshot:8080"
+			serviceURL = "http://screenshot:8080"
 	}
 
-	client := &http.Client{Timeout: 60 * time.Second}
+	client := &http.Client{Timeout: 30 * time.Second}
 	resp, err := client.Post(
-		serviceURL+"/screenshot",
-		"application/json",
-		bytes.NewBuffer(jsonData),
+			serviceURL+"/screenshot",
+			"application/json",
+			bytes.NewBuffer(jsonData),
 	)
 	if err != nil {
-		return fmt.Errorf("screenshot service error: %v", err)
+			return fmt.Errorf("screenshot service error: %v", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("service returned status %d: %s", resp.StatusCode, string(body))
+			body, _ := io.ReadAll(resp.Body)
+			return fmt.Errorf("service returned status %d: %s", resp.StatusCode, string(body))
 	}
 
 	// Parse response
 	var result screenshotResponse
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return fmt.Errorf("failed to parse response: %v", err)
+			return fmt.Errorf("failed to parse response: %v", err)
 	}
 
 	if !result.Success {
-		return fmt.Errorf("screenshot failed: %s", result.Error)
+			return fmt.Errorf("screenshot failed: %s", result.Error)
 	}
 
 	// Decode image
 	imgData, err := base64.StdEncoding.DecodeString(result.Image)
 	if err != nil {
-		return fmt.Errorf("failed to decode image: %v", err)
+			return fmt.Errorf("failed to decode image: %v", err)
 	}
 
 	contentType := result.ImageType
 	if contentType == "" {
-		contentType = "image/png"
+			contentType = "image/png"
 	}
 
 	// Store screenshot in database first
 	err = storeScreenshot(domain, imgData, contentType)
 	if err != nil {
-		return fmt.Errorf("failed to store screenshot: %v", err)
+			return fmt.Errorf("failed to store screenshot: %v", err)
 	}
 
 	if c == nil {
-		return nil
+			return nil
 	}
 
 	// Send response to client

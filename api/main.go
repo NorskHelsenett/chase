@@ -133,6 +133,7 @@ func main() {
 	db.AutoMigrate(&servers.Server{}, &servers.PingResult{})
 	db.AutoMigrate(&security.BatchJobStore{}, &security.BatchResultStore{})
 	security.InitDatabase()
+	security.SetMaxParallelScreenshots(2)
 
 	go servers.StartMonitoring()
 

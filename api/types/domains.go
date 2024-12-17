@@ -11,7 +11,6 @@ type Server struct {
 	URL                string       `json:"url" gorm:"uniqueIndex"`
 	Active             bool         `json:"active"`
 	FollowRedirect     bool         `json:"follow_redirect"`
-	FailureCount       int          `json:"failure_count"`
 	NextCheck          time.Time    `json:"next_check"`
 	AllowInsecure      bool         `json:"allow_insecure"`
 	ExpectedStatusCode int          `json:"expected_status"`

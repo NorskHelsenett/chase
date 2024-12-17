@@ -14,6 +14,7 @@
   // Form state
   let newServer: Server = {
     url: '',
+    active: true,
     follow_redirect: true,
     allow_insecure: false,
     expected_status: 200,
@@ -26,6 +27,7 @@
   function resetForm() {
     newServer = {
       url: '',
+      active: true,
       follow_redirect: true,
       allow_insecure: false,
       expected_status: 200,
