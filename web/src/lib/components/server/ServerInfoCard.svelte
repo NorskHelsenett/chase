@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { Server } from '$lib/models';
   import { formatDistanceToNow } from 'date-fns';
+	import { Globe } from 'lucide-svelte';
 
   export let server: Server;
 
@@ -13,7 +14,18 @@
   <div class="grid gap-4">
     <div class="flex items-center justify-between p-3 rounded-md bg-[#2b2b2b]">
       <span class="text-gray-400">URL</span>
-      <span class="text-white font-medium">{server.url}</span>
+      <span class="text-white font-medium">
+        <a
+        href={`https://${server.url}`}
+        target="_blank"
+        rel="noopener noreferrer"
+        class="block text-blue-400 hover:underline break-all"
+      >
+        <Globe size={20} class="inline-block mr-2" />
+        {server.url}
+      </a>
+
+      </span>
     </div>
 
     <div class="grid grid-cols-2 gap-4">

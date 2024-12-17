@@ -261,7 +261,9 @@
 						<h3 class="text-red-400 mb-2">Exposed Pages</h3>
 						<ul class="space-y-1 text-gray-300">
 							{#each results.adminPages.exposed as page}
-								<li>• {page}</li>
+								<li>• <a href="{`https://${domain}${page}`}" target="_blank"
+									rel="noopener noreferrer"
+									class="text-orange-400 hover:underline break-all">{`${page}`}</a></li>
 							{/each}
 						</ul>
 					</div>
@@ -316,7 +318,9 @@
 						<h3 class="text-red-400 mb-2">Exposed Endpoints</h3>
 						<ul class="space-y-1 text-gray-300">
 							{#each results.swagger.endpoints as endpoint}
-								<li>• {endpoint}</li>
+								<li>• <a href="{`https://${domain}${endpoint}`}" target="_blank"
+									rel="noopener noreferrer"
+									class="text-orange-400 hover:underline break-all">{`${endpoint}`}</a></li>
 							{/each}
 						</ul>
 					</div>
