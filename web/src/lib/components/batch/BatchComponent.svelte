@@ -212,11 +212,16 @@
           </div>
 
           <div class="space-y-2">
-            <div class="h-2 bg-[#2b2b2b] rounded-full overflow-hidden">
+              <div class="h-2 bg-[#2b2b2b] rounded-full overflow-hidden">
+                <div
+              class="h-full bg-gradient-to-r from-blue-600 via-blue-400 to-blue-600 rounded-full transition-all duration-500 relative"
+              style="width: {(job.completed / job.total) * 100}%"
+            >
               <div
-                class="h-full bg-blue-500 transition-all duration-500"
-                style="width: {(job.completed / job.total) * 100}%"
+                class="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent animate-shimmer"
+                style="background-size: 200% 100%;"
               />
+            </div>
             </div>
             
             <div class="flex justify-between text-sm text-gray-400">
@@ -270,12 +275,14 @@
           </div>
 
           <div class="space-y-2">
-            <div class="h-2 bg-[#2b2b2b] rounded-full overflow-hidden">
-              <div
-                class="h-full {job.status === 'completed' ? 'bg-green-500' : 'bg-red-500'} transition-all duration-500"
-                style="width: 100%"
-              />
-            </div>
+              <div class="h-2 bg-[#2b2b2b] rounded-full overflow-hidden">
+                <div
+                  class="h-full rounded-full transition-all duration-500"
+                  class:bg-green-500={job.status === 'completed'}
+                  class:bg-red-500={job.status === 'failed'}
+                  style="width: 100%"
+                />
+              </div>
             
             <div class="flex justify-between text-sm text-gray-400">
               <div class="flex items-center gap-4">
@@ -375,3 +382,18 @@
   </div>
 </div>
 {/if}
+
+<style>
+   @keyframes shimmer {
+    0% {
+      background-position: 200% 0;
+    }
+    100% {
+      background-position: -200% 0;
+    }
+  }
+
+  .animate-shimmer {
+    animation: shimmer 3s linear infinite;
+  }
+</style>
