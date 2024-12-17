@@ -191,7 +191,7 @@
       </div>
     </div>
 
-    <div class="space-y-4">
+    <div class="space-y-4 max-h-[calc(3*144px)] overflow-y-auto">
       {#each activeJobs as job (job.id)}
         <div class="bg-[#202020] rounded-lg p-4 space-y-3">
           <div class="flex justify-between items-center">
@@ -343,7 +343,7 @@
       aria-modal="true"
     >
     <!-- Header -->
-    <div class="flex justify-between items-center p-4 border-b border-[#2b2b2b]">
+    <div class="flex justify-between items-center p-4 ">
       <h2 class="text-xl font-semibold">Error Details</h2>
       <button
         on:click={closeErrorModal}
