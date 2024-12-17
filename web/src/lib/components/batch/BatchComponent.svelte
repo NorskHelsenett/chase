@@ -15,7 +15,7 @@
     failed: number;
     start_time: string;
     end_time?: string;
-    error?: string;
+    errors?: string[];
   }
 
   interface BatchJobsResponse {
@@ -33,16 +33,16 @@
   let pollingIntervals: { [key: string]: number } = {};
   let isLoading = false;
   let showErrorModal = false;
-  let selectedError: string | null = null;
+  let selectedError: string[] = [];
 
-  function showError(error: string) {
-    selectedError = error;
+  function showError(errors: string | string[]) {
+    selectedError = Array.isArray(errors) ? errors : [errors];
     showErrorModal = true;
   }
 
   function closeErrorModal() {
     showErrorModal = false;
-    selectedError = null;
+    selectedError = [];
   }
 
   function sortJobsByDate(jobs: BatchJob[]): BatchJob[] {
@@ -226,9 +226,9 @@
                   <!-- svelte-ignore a11y-click-events-have-key-events -->
                   <!-- svelte-ignore a11y-no-static-element-interactions -->
                   <span 
-                    class="text-red-400 flex items-center gap-1 cursor-pointer hover:text-red-300 transition-colors"
-                    on:click|stopPropagation={() => showError(job.error || 'No error details available')}
-                  >
+  class="text-red-400 flex items-center gap-1 cursor-pointer hover:text-red-300 transition-colors"
+  on:click|stopPropagation={() => showError(job.errors?.length ? job.errors : ['No error details available'])}
+>
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                     </svg>
@@ -285,7 +285,7 @@
                   <!-- svelte-ignore a11y-no-static-element-interactions -->
                   <span 
                     class="text-red-400 flex items-center gap-1 cursor-pointer hover:text-red-300 transition-colors"
-                    on:click|stopPropagation={() => showError(job.error || 'No error details available')}
+                    on:click|stopPropagation={() => showError(job.errors || 'No error details available')}
                   >
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -311,14 +311,13 @@
   <!-- svelte-ignore a11y-click-events-have-key-events -->
   <!-- svelte-ignore a11y-no-static-element-interactions -->
   <div 
-    class="fixed bottom-4 right-4 p-2 bg-[#202020] rounded-full shadow-lg cursor-pointer hover:bg-[#2b2b2b] transition-colors"
-    on:click={() => showError('Error logs for batch operations:\n\n' + 
-      completedJobs
-        .filter(job => job.error)
-        .map(job => `Batch ${job.id}:\n${job.error}`)
-        .join('\n\n')
-    )}
-  >
+  class="fixed bottom-4 right-4 p-2 bg-[#202020] rounded-full shadow-lg cursor-pointer hover:bg-[#2b2b2b] transition-colors"
+  on:click={() => showError(
+    completedJobs
+      .filter(job => job.errors && job.errors.length > 0)
+      .flatMap(job => job.errors.map(error => `Batch ${job.id}: ${error}`))
+  )}
+>
     <svg class="w-6 h-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
     </svg>
@@ -357,8 +356,10 @@
 
     <!-- Content -->
     <div class="p-4">
-      <div class="bg-[#2b2b2b] p-4 rounded-lg">
-        <pre class="text-sm text-red-400 whitespace-pre-wrap">{selectedError}</pre>
+      <div class="p-4 rounded-lg space-y-2 max-h-[60vh] overflow-y-auto">
+        {#each selectedError as error}
+          <pre class="text-sm text-red-400 whitespace-pre-wrap p-2 rounded bg-[#2b2b2b]">{error}</pre>
+        {/each}
       </div>
     </div>
 

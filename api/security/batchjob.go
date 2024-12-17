@@ -24,7 +24,7 @@ type BatchJobStore struct {
 	Failed    int       `gorm:"type:integer" json:"failed"`
 	StartTime time.Time `gorm:"type:datetime;index" json:"start_time"`
 	EndTime   time.Time `gorm:"type:datetime" json:"end_time"`
-	Error     string    `gorm:"type:text" json:"error"`
+	Errors    []string  `gorm:"-" json:"errors"`
 }
 
 // BatchResultStore stores individual server processing results
@@ -66,7 +66,6 @@ var (
 	jobsMutex  sync.RWMutex
 )
 
-// ListBatchesHandler returns a list of all batch jobs
 // ListBatchesHandler returns a list of all batch jobs
 func ListBatchesHandler(c *gin.Context) {
 	db := database.GetDB()
@@ -116,6 +115,17 @@ func ListBatchesHandler(c *gin.Context) {
 		if err := db.Where("batch_job_id = ?", batchJobs[i].ID).
 			Find(&results).Error; err != nil {
 			continue
+		}
+
+		// Initialize errors slice
+		batchJobs[i].Errors = make([]string, 0)
+
+		// Collect non-empty errors from results
+		for _, result := range results {
+			if result.Error != "" {
+				errorWithDomain := fmt.Sprintf("%s: %s", result.ServerURL, result.Error)
+				batchJobs[i].Errors = append(batchJobs[i].Errors, errorWithDomain)
+			}
 		}
 	}
 
@@ -463,7 +473,6 @@ func storeBatchJob(db *gorm.DB, job *BatchJob) error {
 		Failed:    job.Failed,
 		StartTime: job.StartTime,
 		EndTime:   job.EndTime,
-		Error:     job.Error,
 	}
 	return db.Create(&jobStore).Error
 }
