@@ -59,19 +59,19 @@ spec:
           {{- end }}
           readOnly: {{ .readOnly | default false }}
         {{- end }}
-        livenessProbe:
-          httpGet:
-            path: /healthz
-            port: 8080
-          initialDelaySeconds: 5
-          periodSeconds: 10
-          failureThreshold: 2
-        readinessProbe:
-          httpGet:
-            path: /healthz
-            port: 8080
-          initialDelaySeconds: 3
-          periodSeconds: 2
+        # livenessProbe:
+        #   httpGet:
+        #     path: /healthz
+        #     port: 8080
+        #   initialDelaySeconds: 5
+        #   periodSeconds: 10
+        #   failureThreshold: 2
+        # readinessProbe:
+        #   httpGet:
+        #     path: /healthz
+        #     port: 8080
+        #   initialDelaySeconds: 3
+        #   periodSeconds: 2
         securityContext:
           capabilities:
             drop:
