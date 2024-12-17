@@ -57,7 +57,12 @@
           strokeDashArray: 3,
           xaxis: {
             lines: {
-              show: true
+              show: false
+            }
+          },
+          yaxis: {
+            lines: {
+              show: false
             }
           }
         },
