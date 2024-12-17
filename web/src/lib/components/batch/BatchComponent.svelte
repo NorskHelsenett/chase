@@ -215,7 +215,7 @@
               <div class="h-2 bg-[#2b2b2b] rounded-full overflow-hidden">
                 <div
               class="h-full bg-gradient-to-r from-blue-600 via-blue-400 to-blue-600 rounded-full transition-all duration-500 relative"
-              style="width: {(job.completed / job.total) * 100}%"
+              style="width: {((job.completed + (job.errors?.length || 0)) / job.total) * 100}%"
             >
               <div
                 class="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent animate-shimmer"
