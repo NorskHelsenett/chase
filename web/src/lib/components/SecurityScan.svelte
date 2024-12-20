@@ -356,18 +356,22 @@
 
 			<div class="space-y-6">
 				<div class="grid grid-cols-2 md:grid-cols-3 gap-4">
-					<div>
-						<div class="text-gray-400 mb-1">IP Address</div>
-						<div>{results.infrastructure.ip}</div>
-					</div>
-					<div>
-						<div class="text-gray-400 mb-1">HTTP Status</div>
-						<div>{results.infrastructure.status}</div>
-					</div>
-					<div>
-						<div class="text-gray-400 mb-1">Server</div>
-						<div>{results.infrastructure.server || 'Not disclosed'}</div>
-					</div>
+						<div>
+								<div class="text-gray-400 mb-1">IP Address</div>
+								<div class="text-orange-500">{results.infrastructure.ip}</div>
+						</div>
+						<div>
+								<div class="text-gray-400 mb-1">HTTP Status</div>
+								<div class="text-{results.infrastructure.status === "200 OK" ? 'green' : 'gray'}-500">
+										{results.infrastructure.status}
+								</div>
+						</div>
+						<div>
+								<div class="text-gray-400 mb-1">Server</div>
+								<div class="text-green-500">
+										{results.infrastructure.server || 'Not disclosed'}
+								</div>
+						</div>
 				</div>
 
 				{#if results.infrastructure.tech?.length > 0}
