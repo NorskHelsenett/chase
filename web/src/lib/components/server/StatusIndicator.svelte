@@ -12,7 +12,7 @@ $: status = !pingResults || !sortedPingResults.length ||
     sortedPingResults[0]?.status_code >= 400 ? 'down' : 'up';
 
   const getStatusColor = (ping: PingResult) => {
-    if (ping.error || ping.status_code >= 400) {
+    if (ping?.error || ping?.status_code >= 400) {
       return 'bg-red-900';
     }
     return 'bg-green-400';
@@ -28,8 +28,8 @@ $: status = !pingResults || !sortedPingResults.length ||
 <div class="flex justify-between items-center bg-[#202020] rounded-lg p-4">
   <div class="flex items-center gap-2">
     <div class="flex gap-1">
-      {#each Array(50) as _, i}
-        {#if i < (50 - sortedPingResults.length)}
+      {#each Array(56) as _, i}
+        {#if i < (56 - sortedPingResults.length)}
           <div class="w-2 h-6 rounded-sm bg-green-200/20"></div>
         {:else}
           <div class={`w-2 h-6 rounded-sm ${getStatusColor(sortedPingResults[sortedPingResults.length - (i - (50 - sortedPingResults.length) + 1)])}`}></div>
