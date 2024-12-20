@@ -8,6 +8,17 @@
   let chart: any;
   let ApexCharts: any;
 
+  // Calculate moving average
+  const calculateMovingAverage = (data: Array<{ timestamp: Date; value: number }>, window: number = 5) => {
+    return data.map((point, index) => {
+      const start = Math.max(0, index - Math.floor(window / 2));
+      const end = Math.min(data.length, index + Math.floor(window / 2) + 1);
+      const values = data.slice(start, end).map(p => p.value);
+      const avg = values.reduce((sum, val) => sum + val, 0) / values.length;
+      return [new Date(point.timestamp).getTime(), Math.round(avg)];
+    });
+  };
+
   const initChart = async () => {
     if (browser) {
       ApexCharts = (await import('apexcharts')).default;
@@ -23,13 +34,17 @@
           animations: {
             enabled: true,
             easing: 'linear',
-            speed: 300
+            speed: 300,
+            dynamicAnimation: {
+              speed: 350
+            }
           }
         },
         stroke: {
           curve: 'smooth',
           width: 2,
-          colors: ['#4ade80']
+          colors: ['#4ade80'],
+          lineCap: 'round'
         },
         fill: {
           type: 'gradient',
@@ -88,7 +103,7 @@
         },
         yaxis: {
           min: 0,
-          max: Math.max(...data.map(d => d.value)) + 100,
+          max: Math.max(...data.map(d => d.value)) + 50, // Reduced padding
           tickAmount: 6,
           labels: {
             style: {
@@ -100,12 +115,15 @@
           theme: 'dark',
           x: {
             format: 'HH:mm'
+          },
+          y: {
+            formatter: (value: number) => `${value}ms`
           }
         },
         series: [
           {
             name: 'Response Time',
-            data: data.map(d => [new Date(d.timestamp).getTime(), d.value])
+            data: calculateMovingAverage(data)
           }
         ]
       };
@@ -116,10 +134,11 @@
   };
 
   $: if (chart && data) {
+    const smoothedData = calculateMovingAverage(data);
     chart.updateOptions({
       yaxis: {
         min: 0,
-        max: Math.max(...data.map(d => d.value)) + 100,
+        max: Math.max(...data.map(d => d.value)) + 50,
         tickAmount: 6,
         labels: {
           style: {
@@ -129,7 +148,7 @@
       },
       series: [{
         name: 'Response Time',
-        data: data.map(d => [new Date(d.timestamp).getTime(), d.value])
+        data: smoothedData
       }]
     });
   }
