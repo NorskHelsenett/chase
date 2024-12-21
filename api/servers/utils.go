@@ -2,12 +2,9 @@ package servers
 
 import (
 	"crypto/tls"
-	"fmt"
 	"net"
 	"net/http"
 	"time"
-
-	"github.com/norskhelsenett/chase/security"
 )
 
 func calculateNextCheckInterval(server Server) (time.Duration, bool) {
@@ -56,6 +53,7 @@ func calculateNextCheckInterval(server Server) (time.Duration, bool) {
 	}
 }
 
+// @todo make the pingresults much smaller to save space
 func pingServer(server Server) PingResult {
 	result := PingResult{
 		ServerID:  server.ID,
@@ -89,7 +87,6 @@ func pingServer(server Server) PingResult {
 				if !server.FollowRedirect {
 					return http.ErrUseLastResponse
 				}
-				result.RedirectCount = len(via)
 				if len(via) >= 10 {
 					return http.ErrUseLastResponse
 				}
@@ -118,29 +115,6 @@ func pingServer(server Server) PingResult {
 		// If we got here, the request was successful
 		result.ResponseTime = float64(time.Since(startTime).Milliseconds())
 		result.StatusCode = resp.StatusCode
-
-		// Get IP address
-		host := req.URL.Hostname()
-		ips, err := net.LookupIP(host)
-		if err == nil && len(ips) > 0 {
-			result.IP = ips[0].String()
-		}
-
-		// Check TLS certificate
-		if resp.TLS != nil && len(resp.TLS.PeerCertificates) > 0 {
-			cert := resp.TLS.PeerCertificates[0]
-			result.TLSValid = true
-			result.CertExpiryDate = cert.NotAfter
-			result.CertIssuer = cert.Issuer.CommonName
-			result.CertCommonName = cert.Subject.CommonName
-			result.OrganizationName = security.GetOrganization(cert)
-
-			// Check if cert is expired or about to expire
-			if time.Now().After(cert.NotAfter) {
-				result.TLSValid = false
-				result.Error = fmt.Sprintf("Certificate expired on %v", cert.NotAfter)
-			}
-		}
 
 		return result
 	}

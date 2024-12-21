@@ -21,15 +21,21 @@ type Server struct {
 
 type PingResult struct {
 	gorm.Model
-	ServerID         uint      `json:"server_id"`
-	Server           Server    `gorm:"foreignKey:ServerID" json:"-"`
+	ServerID     uint        `json:"server_id"`
+	Server       Server      `gorm:"foreignKey:ServerID" json:"-"`
+	StatusCode   int         `json:"status_code"`
+	ResponseTime float64     `json:"response_time_ms"`
+	Error        string      `json:"error"`
+	Timestamp    time.Time   `json:"timestamp"`
+	DetailID     *uint       `json:"detail_id,omitempty"`
+	PingDetail   *PingDetail `gorm:"foreignKey:DetailID" json:"detail,omitempty"`
+}
+
+type PingDetail struct {
+	gorm.Model
 	OrganizationName string    `json:"organization_name"`
-	StatusCode       int       `json:"status_code"`
 	IP               string    `json:"ip"`
-	ResponseTime     float64   `json:"response_time_ms"`
-	Error            string    `json:"error"`
 	RedirectCount    int       `json:"redirect_count"`
-	Timestamp        time.Time `json:"timestamp"`
 	TLSValid         bool      `json:"tls_valid"`
 	CertExpiryDate   time.Time `json:"cert_expiry_date"`
 	CertIssuer       string    `json:"cert_issuer"`
