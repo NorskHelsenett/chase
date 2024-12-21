@@ -15,6 +15,7 @@ type Server struct {
 	AllowInsecure      bool         `json:"allow_insecure"`
 	ExpectedStatusCode int          `json:"expected_status"`
 	Comment            string       `json:"comment"`
+	UpdateInterval     int          `json:"update_interval" gorm:"default:15"` // in minutes
 	PingResults        []PingResult `gorm:"foreignKey:ServerID;references:ID;OnDelete:CASCADE" json:"ping_results"`
 }
 

@@ -3,13 +3,16 @@ package servers
 import (
 	"fmt"
 	"log"
+	"os"
+	"strconv"
 	"time"
 
 	"github.com/norskhelsenett/chase/database"
 )
 
 func StartMonitoring() {
-	ticker := time.NewTicker(15 * time.Minute)
+	interval := getMonitoringInterval()
+	ticker := time.NewTicker(time.Duration(interval) * time.Minute)
 	defer ticker.Stop()
 
 	go runMonitoring()
@@ -17,6 +20,15 @@ func StartMonitoring() {
 	for range ticker.C {
 		go runMonitoring()
 	}
+}
+
+func getMonitoringInterval() int {
+	intervalStr := os.Getenv("MONITORING_INTERVAL")
+	interval, err := strconv.Atoi(intervalStr)
+	if err != nil || interval <= 0 {
+		return 5
+	}
+	return interval
 }
 
 func runMonitoring() {

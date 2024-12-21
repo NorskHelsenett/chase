@@ -10,7 +10,6 @@ import (
 	"github.com/norskhelsenett/chase/security"
 )
 
-// calculateNextCheckInterval determines when to next check a server based on failure count
 func calculateNextCheckInterval(server Server) (time.Duration, bool) {
 	// Look at recent history - last 7 days
 	cutoff := time.Now().Add(-7 * 24 * time.Hour)
@@ -23,7 +22,7 @@ func calculateNextCheckInterval(server Server) (time.Duration, bool) {
 	}
 
 	if len(recentResults) == 0 {
-		return 15 * time.Minute, true // Default interval for new servers
+		return time.Duration(server.UpdateInterval*3) * time.Minute, true // 3x base interval for new servers
 	}
 
 	// Calculate failure rate
@@ -43,17 +42,17 @@ func calculateNextCheckInterval(server Server) (time.Duration, bool) {
 	// Dynamic interval based on failure rate
 	switch {
 	case failureRate == 0:
-		return 15 * time.Minute, true
+		return time.Duration(float64(server.UpdateInterval)*3) * time.Minute, true
 	case failureRate <= 0.1:
-		return 30 * time.Minute, true
+		return time.Duration(float64(server.UpdateInterval)*6) * time.Minute, true
 	case failureRate <= 0.25:
-		return 1 * time.Hour, true
+		return time.Duration(float64(server.UpdateInterval)*12) * time.Minute, true
 	case failureRate <= 0.5:
-		return 3 * time.Hour, true
+		return time.Duration(float64(server.UpdateInterval)*36) * time.Minute, true
 	case failureRate <= 0.75:
-		return 6 * time.Hour, true
+		return time.Duration(float64(server.UpdateInterval)*72) * time.Minute, true
 	default:
-		return 12 * time.Hour, true
+		return time.Duration(float64(server.UpdateInterval)*144) * time.Minute, true
 	}
 }
 
