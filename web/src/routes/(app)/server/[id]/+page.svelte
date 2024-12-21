@@ -62,6 +62,7 @@
   }
 
   function calculateMetrics(server: Server) {
+    const decimals = 3;
     const latestPing = getLatestPing(server);
     const last24hPings = server.ping_results.filter(
       ping => new Date(ping.timestamp).getTime() > Date.now() - 24 * 60 * 60 * 1000
@@ -71,16 +72,18 @@
       last24hPings.reduce((acc, ping) => acc + ping.response_time_ms, 0) / last24hPings.length
     );
 
-    const uptimeDay = Math.round(
-      (last24hPings.filter(ping => !ping.error && ping.status_code < 400).length / last24hPings.length) * 100
+    const uptimeDay = Number(
+      ((last24hPings.filter(ping => !ping.error && ping.status_code < 400).length / last24hPings.length) * 100)
+      .toFixed(decimals)
     );
 
     const last30DayPings = server.ping_results.filter(
       ping => new Date(ping.timestamp).getTime() > Date.now() - 30 * 24 * 60 * 60 * 1000
     );
 
-    const uptimeMonth = Math.round(
-      (last30DayPings.filter(ping => !ping.error && ping.status_code < 400).length / last30DayPings.length) * 100
+    const uptimeMonth = Number(
+      ((last30DayPings.filter(ping => !ping.error && ping.status_code < 400).length / last30DayPings.length) * 100)
+      .toFixed(decimals)
     );
 
     return {

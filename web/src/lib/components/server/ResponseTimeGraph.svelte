@@ -103,7 +103,7 @@
         },
         yaxis: {
           min: 0,
-          max: Math.max(...data.map(d => d.value)) + 50, // Reduced padding
+          max: Math.max(...data.map(d => d.value)) + 50,
           tickAmount: 6,
           labels: {
             style: {
@@ -113,11 +113,16 @@
         },
         tooltip: {
           theme: 'dark',
-          x: {
-            format: 'HH:mm'
-          },
-          y: {
-            formatter: (value: number) => `${value}ms`
+          shared: true,
+          custom: function({ series, seriesIndex, dataPointIndex }: any) {
+            const timestamp = new Date(data[dataPointIndex].timestamp);
+            const value = series[0][dataPointIndex];
+            return `
+              <div class="apexcharts-tooltip-box">
+                <div class="timestamp">${timestamp.toLocaleTimeString()}</div>
+                <div class="value">Response Time: ${Math.round(value)}ms</div>
+              </div>
+            `;
           }
         },
         series: [
@@ -163,6 +168,32 @@
     };
   });
 </script>
+
+<style>
+    :global(.apexcharts-tooltip-box) {
+    background: #2a2a2a !important;
+    /* border: 1px solid #3a3a3a !important; */
+    padding: 8px 12px !important;
+    border-radius: 6px;
+  }
+
+  :global(.apexcharts-tooltip-box .timestamp) {
+    color: #999;
+    font-size: 0.9em;
+    margin-bottom: 4px;
+  }
+
+  :global(.apexcharts-tooltip-box .average) {
+    color: #4ade80;
+    font-weight: 500;
+    margin-bottom: 2px;
+  }
+
+  :global(.apexcharts-tooltip-box .range) {
+    color: #888;
+    font-size: 0.9em;
+  }
+</style>
 
 <div class="bg-[#202020] rounded-lg p-4">
   {#if browser}
