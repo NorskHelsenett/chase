@@ -39,17 +39,17 @@ func calculateNextCheckInterval(server Server) (time.Duration, bool) {
 	// Dynamic interval based on failure rate
 	switch {
 	case failureRate == 0:
-		return time.Duration(float64(server.UpdateInterval)*3) * time.Minute, true
+		return time.Duration(float64(server.UpdateInterval)) * time.Minute, true
 	case failureRate <= 0.1:
-		return time.Duration(float64(server.UpdateInterval)*6) * time.Minute, true
+		return time.Duration(float64(server.UpdateInterval)*3) * time.Minute, true
 	case failureRate <= 0.25:
-		return time.Duration(float64(server.UpdateInterval)*12) * time.Minute, true
+		return time.Duration(float64(server.UpdateInterval)*6) * time.Minute, true
 	case failureRate <= 0.5:
-		return time.Duration(float64(server.UpdateInterval)*36) * time.Minute, true
+		return time.Duration(float64(server.UpdateInterval)*12) * time.Minute, true
 	case failureRate <= 0.75:
-		return time.Duration(float64(server.UpdateInterval)*72) * time.Minute, true
+		return time.Duration(float64(server.UpdateInterval)*36) * time.Minute, true
 	default:
-		return time.Duration(float64(server.UpdateInterval)*144) * time.Minute, true
+		return time.Duration(float64(server.UpdateInterval)*72) * time.Minute, true
 	}
 }
 
