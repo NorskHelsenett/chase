@@ -15,12 +15,6 @@ jobs:
   helm-and-docker:
     runs-on: ubuntu-latest
     steps:
-      - name: Install Node.js and npm
-        run: |
-          apk add --no-cache nodejs npm
-            - name: Checkout
-              uses: actions/checkout@v3
-
       # Set up Docker environment
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v2
