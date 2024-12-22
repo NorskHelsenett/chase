@@ -1,5 +1,8 @@
 <!-- IntervalSlider.svelte -->
 <script lang="ts">
+  import { createEventDispatcher } from 'svelte';
+  const dispatch = createEventDispatcher();
+
   export let value = 5;
   export let label = 'Update Interval';
 
@@ -22,7 +25,7 @@
 
   function handleClick(index: number) {
     currentStepIndex = index;
-    value = intervals[index].value;
+    dispatch('change', intervals[index].value);
   }
 
   $: displayValue = intervals[currentStepIndex].label;
@@ -50,6 +53,7 @@
         <button
           class="group relative w-4 h-4 -ml-2 first:ml-0 last:mr-0 focus:outline-none"
           on:click={() => handleClick(i)}
+          type="button"
         >
           <!-- Marker dot -->
           <div

@@ -333,6 +333,8 @@ func UpdateServer(c *gin.Context) {
 		return
 	}
 
+	server.NextCheck = time.Now().Add(time.Duration(server.UpdateInterval) * time.Minute)
+
 	db.Save(&server)
 	c.JSON(200, server)
 }

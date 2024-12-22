@@ -14,7 +14,7 @@
   export let initialData: Partial<Server> | null = null;
   export let mode: 'add' | 'edit' = 'add';
 
-  let formData = {
+  const defaultFormData = {
     id: undefined as number | undefined,
     url: '',
     active: true,
@@ -25,43 +25,56 @@
     update_interval: 5
   };
 
+  let formData = { ...defaultFormData };
   let expectedDown = false;
-
-  // Initialize form data when modal opens or initialData changes
-  $: if (showDialog && initialData) {
-    formData = {
-      id: initialData.id,
-      url: initialData.url || '',
-      active: initialData.active ?? true,
-      follow_redirect: initialData.follow_redirect ?? true,
-      allow_insecure: initialData.allow_insecure ?? false,
-      expected_status: initialData.expected_status ?? 200,
-      comment: initialData.comment || '',
-      update_interval: initialData.update_interval ?? 5
-    };
-    expectedDown = initialData.expected_status === 0;
-  } else if (showDialog) {
-    resetForm();
-  }
+  let currentStatus = true;
+  let intervalValue = 5;
+  let title = mode === 'add' ? 'Add New Server' : 'Edit Server';
+  let submitLabel = mode === 'add' ? 'Add Server' : 'Save Changes';
+  let loadingLabel = mode === 'add' ? 'Adding...' : 'Saving...';
+  let hasInitialized = false;
 
   function resetForm() {
-    formData = {
-      id: undefined,
-      url: '',
-      active: true,
-      follow_redirect: true,
-      allow_insecure: false,
-      expected_status: 200,
-      comment: '',
-      update_interval: 5
-    };
+    formData = { ...defaultFormData };
     expectedDown = false;
+    currentStatus = true;
+    intervalValue = 5;
+    hasInitialized = false;
+  }
+
+  // Watch both showDialog and initialData
+  $: if (showDialog) {
+    if (mode === 'add') {
+      resetForm();
+    } else if (initialData && !hasInitialized) {
+      hasInitialized = true;
+      formData = {
+        id: initialData.id,
+        url: initialData.url || '',
+        active: initialData.active ?? true,
+        follow_redirect: initialData.follow_redirect ?? true,
+        allow_insecure: initialData.allow_insecure ?? false,
+        expected_status: initialData.expected_status ?? 200,
+        comment: initialData.comment || '',
+        update_interval: initialData.update_interval ?? 5
+      };
+      expectedDown = initialData.expected_status === 0;
+      currentStatus = initialData.active ?? true;
+      intervalValue = initialData.update_interval ?? 5;
+    }
+  }
+
+  // Reset initialization flag when dialog closes
+  $: if (!showDialog) {
+    hasInitialized = false;
   }
 
   function handleSubmit() {
     const serverData = {
       ...formData,
-      expected_status: expectedDown ? 0 : formData.expected_status
+      expected_status: expectedDown ? 0 : formData.expected_status,
+      active: currentStatus,
+      update_interval: intervalValue
     };
 
     dispatch('submit', {
@@ -75,9 +88,17 @@
     dispatch('close');
   }
 
-  $: title = mode === 'add' ? 'Add New Server' : 'Edit Server';
-  $: submitLabel = mode === 'add' ? 'Add Server' : 'Save Changes';
-  $: loadingLabel = mode === 'add' ? 'Adding...' : 'Saving...';
+  function handleIntervalChange(event: CustomEvent) {
+    intervalValue = event.detail;
+  }
+
+  function handleStatusChange(event: CustomEvent) {
+    currentStatus = event.detail;
+  }
+
+  function handleCheckboxChange(field: string, event: CustomEvent) {
+    formData[field] = event.detail;
+  }
 </script>
 
 {#if showDialog}
@@ -87,7 +108,8 @@
         <h2 class="text-xl text-gray-200 font-semibold">{title}</h2>
         {#if mode === 'edit'}
           <RadioToggle
-            bind:value={formData.active}
+            value={currentStatus}
+            on:change={handleStatusChange}
             label="Status"
           />
         {/if}
@@ -109,19 +131,22 @@
         <div class="grid grid-cols-2 gap-4">
           <div class="space-y-4">
             <CustomCheckbox
-              bind:checked={formData.follow_redirect}
+              checked={formData.follow_redirect}
+              on:change={e => handleCheckboxChange('follow_redirect', e)}
               label="Follow Redirects"
             />
 
             <CustomCheckbox
-              bind:checked={formData.allow_insecure}
+              checked={formData.allow_insecure}
+              on:change={e => handleCheckboxChange('allow_insecure', e)}
               label="Allow Insecure"
             />
           </div>
 
           <div class="space-y-4">
             <CustomCheckbox
-              bind:checked={expectedDown}
+              checked={expectedDown}
+              on:change={e => expectedDown = e.detail}
               label="Expected Down"
             />
 
@@ -143,7 +168,8 @@
 
         <div>
           <IntervalSlider
-            bind:value={formData.update_interval}
+            value={intervalValue}
+            on:change={handleIntervalChange}
             label="Check Interval"
           />
         </div>

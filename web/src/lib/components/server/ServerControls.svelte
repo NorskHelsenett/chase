@@ -12,21 +12,7 @@
 
   let showDialog = false;
   let serverActive = server?.active ?? false;
-  let serverData: Server;
-
-  $: {
-    // Clone server data whenever server prop changes
-    serverData = JSON.parse(JSON.stringify(server));
-    serverData.active = serverActive;
-  }
-
-  // Handle keyboard shortcuts
-  function handleKeyDown(event: KeyboardEvent) {
-    if (event.key === 'e' && !event.ctrlKey && !event.altKey && !event.metaKey) {
-      event.preventDefault();
-      showDialog = true;
-    }
-  }
+  let dialogData: Partial<Server> | null = null;
 
   function handleActiveChange(active: boolean) {
     serverActive = active;
@@ -34,44 +20,37 @@
   }
 
   function handleDelete() {
-    if (confirm(`Are you sure you want to delete ${serverData.url}?`)) {
+    if (confirm(`Are you sure you want to delete ${server.url}?`)) {
       dispatch('delete');
     }
   }
 
-  async function handleDialogSubmit(event: CustomEvent) {
+  function handleDialogOpen() {
+    // Create a deep copy of the server data when opening the dialog
+    dialogData = {
+      id: server.id,
+      url: server.url,
+      active: server.active,
+      follow_redirect: server.follow_redirect,
+      allow_insecure: server.allow_insecure,
+      expected_status: server.expected_status,
+      comment: server.comment,
+      update_interval: server.update_interval
+    };
+    showDialog = true;
+  }
+
+  function handleDialogSubmit(event: CustomEvent) {
     const { data } = event.detail;
-
-    try {
-      const response = await fetch(`/api/servers/${serverData.id}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          ...data,
-          id: serverData.id
-        }),
-      });
-
-      if (response.ok) {
-        dispatch('update', { data });
-        showDialog = false;
-      } else {
-        const errorText = await response.text();
-        console.error('Failed to update server:', errorText);
-      }
-    } catch (error) {
-      console.error('Error updating server:', error);
-    }
+    dispatch('update', { data });
+    showDialog = false;
   }
 
   function onClose() {
     showDialog = false;
+    dialogData = null;
   }
 </script>
-
-<svelte:window on:keydown={handleKeyDown} />
 
 <div class="bg-[#202020] rounded-lg p-4 flex items-center justify-between gap-4">
   <div class="flex items-center gap-6">
@@ -80,18 +59,14 @@
       on:change={({ detail }) => handleActiveChange(detail)}
       label="Status"
     />
-
-    <div class="text-gray-400 text-sm">
-      Press 'e' to edit
-    </div>
   </div>
 
   <div class="flex items-center gap-3">
     <button
-      on:click={() => showDialog = true}
+      on:click={handleDialogOpen}
       disabled={isLoading}
       class="p-2 text-gray-400 hover:text-gray-200 transition-colors rounded-lg hover:bg-[#2b2b2b] disabled:opacity-50"
-      title="Edit server (press 'e')"
+      title="Edit server"
     >
       <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
@@ -115,7 +90,7 @@
   bind:showDialog
   {isLoading}
   mode="edit"
-  initialData={serverData}
+  initialData={dialogData}
   on:submit={handleDialogSubmit}
   on:close={onClose}
 />
