@@ -132,7 +132,7 @@ func main() {
 	}
 
 	db = database.GetDB()
-	db.AutoMigrate(&servers.Server{}, &servers.PingResult{})
+  servers.AutoMigrate(db)
 	db.AutoMigrate(&security.BatchJobStore{}, &security.BatchResultStore{})
 	security.InitDatabase()
 	security.SetMaxParallelScreenshots(2)

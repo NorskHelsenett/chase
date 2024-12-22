@@ -8,7 +8,25 @@ import (
 	"time"
 
 	"github.com/norskhelsenett/chase/database"
+	"gorm.io/gorm"
 )
+
+func AutoMigrate(db *gorm.DB) error {
+	// Migrate the schemas
+	if err := db.AutoMigrate(&Server{}, &PingResult{}); err != nil {
+		return err
+	}
+
+	// Create composite indexes if they don't exist
+	if err := db.Exec(`
+		CREATE INDEX IF NOT EXISTS idx_active_next_check ON servers (active, next_check);
+		CREATE INDEX IF NOT EXISTS idx_server_timestamp ON ping_results (server_id, timestamp);
+	`).Error; err != nil {
+		return err
+	}
+
+	return nil
+}
 
 func StartMonitoring() {
 	interval := getMonitoringInterval()
