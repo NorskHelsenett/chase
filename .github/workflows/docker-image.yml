@@ -15,6 +15,11 @@ jobs:
   helm-and-docker:
     runs-on: ubuntu-latest
     steps:
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 'latest'  # or specify a specific version like '20.x'
+
       - name: Checkout
         uses: actions/checkout@v3
 
