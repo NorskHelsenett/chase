@@ -52,7 +52,7 @@ jobs:
         with:
           registry: git.torden.tech
           username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          password: ${{ secrets.GITEA_TOKEN }}
 
       # Build and push Docker image with caching
       - name: Build and push Docker image
