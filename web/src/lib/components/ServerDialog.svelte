@@ -99,7 +99,6 @@
   function handleCheckboxChange(field: string, event: CustomEvent) {
     formData[field] = event.detail;
   }
-  $: if(expectedDown) {console.log(expectedDown)}
 </script>
 
 {#if showDialog}
@@ -146,7 +145,7 @@
 
           <div class="space-y-4">
             <CustomCheckbox
-              checked={expectedDown}
+              bind:checked={expectedDown}
               on:change={e => expectedDown = e.detail}
               label="Expected Down"
             />
