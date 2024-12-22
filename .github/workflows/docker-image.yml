@@ -17,7 +17,7 @@ jobs:
     steps:
       - name: Install Node.js
         run: |
-          apt install curl -y
+          apk add curl -y
           curl -fsSL https://deb.nodesource.com/setup_lts.x | bash -
           apt-get install -y nodejs npm
 
