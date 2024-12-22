@@ -16,6 +16,7 @@ export interface Server extends BaseModel {
   comment: string;
   ping_results: PingResult[];
   security: SecurityReport;
+  update_interval: number;
   certificate: Certificate;
 }
 

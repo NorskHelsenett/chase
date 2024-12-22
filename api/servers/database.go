@@ -26,7 +26,7 @@ func getMonitoringInterval() int {
 	intervalStr := os.Getenv("MONITORING_INTERVAL")
 	interval, err := strconv.Atoi(intervalStr)
 	if err != nil || interval <= 0 {
-		return 5
+		return 1
 	}
 	return interval
 }
@@ -38,7 +38,7 @@ func runMonitoring() {
 	now := time.Now()
 
 	weekAgo := now.Add(-7 * 24 * time.Hour)
-	if err := db.Preload("PingResults", "timestamp > ?", weekAgo).
+	if err := db.Debug().Preload("PingResults", "timestamp > ?", weekAgo).
 		Where("active = ? AND next_check <= ?", true, now).
 		Find(&servers).Error; err != nil {
 		log.Printf("Error fetching servers: %v", err)

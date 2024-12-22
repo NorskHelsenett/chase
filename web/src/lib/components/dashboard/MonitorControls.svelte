@@ -1,48 +1,18 @@
+<!-- MonitorControls.svelte -->
 <script lang="ts">
-  import { fade } from 'svelte/transition';
   import { createEventDispatcher } from 'svelte';
-  import type { Server } from '$lib/models';
-  import CustomCheckbox from '../CustomCheckbox.svelte';
+  import ServerDialog from '../ServerDialog.svelte';
 
   const dispatch = createEventDispatcher();
 
-  // Modal state
-  let showModal = false;
-  let searchQuery = '';
   export let isLoading = false;
-  
-  // Form state
-  let newServer: Server = {
-    url: '',
-    active: true,
-    follow_redirect: true,
-    allow_insecure: false,
-    expected_status: 200,
-    comment: ''
-  };
-  
-  let expectedDown = false; // Toggle for unreachable status
 
-  // Reset form
-  function resetForm() {
-    newServer = {
-      url: '',
-      active: true,
-      follow_redirect: true,
-      allow_insecure: false,
-      expected_status: 200,
-      comment: ''
-    };
-    expectedDown = false;
-  }
+  let showDialog = false;
+  let searchQuery = '';
 
-  // Handle form submission
-  async function handleSubmit() {
-    if (expectedDown) {
-      newServer.expected_status = 0;
-    }
-
-    isLoading = true;
+  // Handle dialog submission
+  async function handleDialogSubmit(event: CustomEvent) {
+    const { data, mode } = event.detail;
 
     try {
       const response = await fetch('/api/servers', {
@@ -50,24 +20,18 @@
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(newServer),
+        body: JSON.stringify(data),
       });
 
       if (response.ok) {
         dispatch('serverAdded');
-        showModal = false;
-        resetForm();
-
-        setTimeout(() => {
-          handleRefresh();
-        }, 1000);
+        showDialog = false;
+        handleRefresh();
       } else {
         console.error('Failed to add server:', await response.text());
       }
     } catch (error) {
       console.error('Error adding server:', error);
-    } finally {
-      isLoading = false;
     }
   }
 
@@ -77,16 +41,12 @@
   }
 
   // Handle refresh
-  async function handleRefresh() {
-    isLoading = true;
-    try {
-      dispatch('refresh');
-    } finally {
-      // Add a small delay to make the loading state visible
-      setTimeout(() => {
-        isLoading = false;
-      }, 500);
-    }
+  function handleRefresh() {
+    dispatch('refresh');
+  }
+
+  function onClose() {
+    showDialog = false;
   }
 </script>
 
@@ -110,24 +70,24 @@
         disabled={isLoading}
         class="px-4 py-2 bg-[#2b2b2b] hover:bg-[#333] rounded-lg text-gray-200 flex items-center gap-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
       >
-        <svg 
-          class="w-4 h-4 {isLoading ? 'animate-spin' : ''}" 
-          fill="none" 
-          stroke="currentColor" 
+        <svg
+          class="w-4 h-4 {isLoading ? 'animate-spin' : ''}"
+          fill="none"
+          stroke="currentColor"
           viewBox="0 0 24 24"
         >
-          <path 
-            stroke-linecap="round" 
-            stroke-linejoin="round" 
-            stroke-width="2" 
-            d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" 
+          <path
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            stroke-width="2"
+            d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
           />
         </svg>
-        {isLoading ? 'Refresh' : 'Refresh'}
+        {isLoading ? 'Refreshing...' : 'Refresh'}
       </button>
-      
+
       <button
-        on:click={() => showModal = true}
+        on:click={() => showDialog = true}
         disabled={isLoading}
         class="px-4 py-2 bg-green-600 hover:bg-green-700 rounded-lg text-white flex items-center gap-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
       >
@@ -140,83 +100,11 @@
   </div>
 </div>
 
-<!-- Modal -->
-{#if showModal}
-  <div class="fixed inset-0 bg-black/50 flex items-center justify-center z-50" transition:fade>
-    <div class="bg-[#202020] rounded-lg p-6 w-full max-w-xl">
-      <h2 class="text-xl text-gray-200 font-semibold mb-4">Add New Server</h2>
-      
-      <form on:submit|preventDefault={handleSubmit} class="space-y-4">
-        <div>
-          <label class="block text-gray-300 mb-1" for="url">URL</label>
-          <input
-            id="url"
-            type="text"
-            bind:value={newServer.url}
-            required
-            class="w-full px-4 py-2 bg-[#2b2b2b] rounded-lg text-gray-200 focus:outline-none focus:ring-2 focus:ring-green-500"
-          />
-        </div>
-
-        <div class="flex gap-6">
-          <CustomCheckbox
-            bind:checked={newServer.follow_redirect}
-            label="Follow Redirects"
-          />
-          
-          <CustomCheckbox
-            bind:checked={newServer.allow_insecure}
-            label="Allow Insecure"
-          />
-          
-          <CustomCheckbox
-            bind:checked={expectedDown}
-            label="Expected Down"
-          />
-        </div>
-
-        {#if !expectedDown}
-          <div>
-            <label class="block text-gray-300 mb-1" for="status">Expected Status Code</label>
-            <input
-              id="status"
-              type="number"
-              bind:value={newServer.expected_status}
-              min="100"
-              max="599"
-              class="w-full px-4 py-2 bg-[#2b2b2b] rounded-lg text-gray-200 focus:outline-none focus:ring-2 focus:ring-green-500"
-            />
-          </div>
-        {/if}
-
-        <div>
-          <label class="block text-gray-300 mb-1" for="comment">Comment</label>
-          <textarea
-            id="comment"
-            bind:value={newServer.comment}
-            rows="3"
-            class="w-full px-4 py-2 bg-[#2b2b2b] rounded-lg text-gray-200 focus:outline-none focus:ring-2 focus:ring-green-500"
-          ></textarea>
-        </div>
-
-        <div class="flex justify-end gap-3 mt-6">
-          <button
-            type="button"
-            on:click={() => { showModal = false; resetForm(); }}
-            disabled={isLoading}
-            class="px-4 py-2 bg-[#2b2b2b] hover:bg-[#333] rounded-lg text-gray-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            Cancel
-          </button>
-          <button
-            type="submit"
-            disabled={isLoading}
-            class="px-4 py-2 bg-green-600 hover:bg-green-700 rounded-lg text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {isLoading ? 'Adding...' : 'Add Server'}
-          </button>
-        </div>
-      </form>
-    </div>
-  </div>
-{/if}
+<ServerDialog
+  bind:showDialog
+  {isLoading}
+  mode="add"
+  initialData={null}
+  on:submit={handleDialogSubmit}
+  on:close={onClose}
+/>

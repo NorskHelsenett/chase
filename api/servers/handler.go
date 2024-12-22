@@ -48,6 +48,52 @@ func ForceCheckServer(c *gin.Context) {
 	c.JSON(200, result)
 }
 
+func DeleteServer(c *gin.Context) {
+	db := database.GetDB()
+
+	// Get server ID from URL parameter
+	serverID := c.Param("id")
+	if serverID == "" {
+		c.JSON(400, gin.H{"error": "Server ID is required"})
+		return
+	}
+
+	// Start a database transaction
+	tx := db.Begin()
+	if tx.Error != nil {
+		c.JSON(500, gin.H{"error": "Failed to start transaction"})
+		return
+	}
+
+	// Check if server exists
+	var server Server
+	if err := tx.First(&server, serverID).Error; err != nil {
+		tx.Rollback()
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			c.JSON(404, gin.H{"error": "Server not found"})
+			return
+		}
+		c.JSON(500, gin.H{"error": "Failed to query server"})
+		return
+	}
+
+	// Delete the server
+	if err := tx.Delete(&server).Error; err != nil {
+		tx.Rollback()
+		c.JSON(500, gin.H{"error": "Failed to delete server"})
+		return
+	}
+
+	// Commit the transaction
+	if err := tx.Commit().Error; err != nil {
+		tx.Rollback()
+		c.JSON(500, gin.H{"error": "Failed to commit transaction"})
+		return
+	}
+
+	c.Status(204)
+}
+
 func AddServer(c *gin.Context) {
 	db := database.GetDB()
 
@@ -94,7 +140,7 @@ func AddServer(c *gin.Context) {
 		server.ExpectedStatusCode = 200
 	}
 
-	server.NextCheck = time.Now().Add(-1 * time.Hour)
+	server.NextCheck = time.Now().Add(time.Duration(server.UpdateInterval) * time.Minute)
 
 	// Attempt to create the server in the transaction
 	if err := tx.Create(&server).Error; err != nil {

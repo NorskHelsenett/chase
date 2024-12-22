@@ -1,11 +1,13 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { goto } from '$app/navigation';
   import type { Server } from '$lib/models';
   import StatusIndicator from '$lib/components/server/StatusIndicator.svelte';
   import StatusMetrics from '$lib/components/server/StatusMetrics.svelte';
   import ResponseTimeGraph from '$lib/components/server/ResponseTimeGraph.svelte';
-	import ServerInfoCard from '$lib/components/server/ServerInfoCard.svelte';
-	import SecurityScan from '$lib/components/SecurityScan.svelte';
+  import ServerInfoCard from '$lib/components/server/ServerInfoCard.svelte';
+  import SecurityScan from '$lib/components/SecurityScan.svelte';
+  import ServerControls from '$lib/components/server/ServerControls.svelte';
 
   /** @type {import('./$types').PageData} */
   export let data;
@@ -15,8 +17,7 @@
   let isLoading = true;
   let isLoadingResults = true;
   let error: string | null = null;
-
-  let searchResults = null
+  let searchResults = null;
 
   $: if (data.id) {
     serverID = data.id;
@@ -28,13 +29,12 @@
   });
 
   async function fetchServerReport(id: number) {
-    try{
+    try {
       const response = await fetch(`/api/servers/${id}/report`);
       if (!response.ok) throw new Error('Failed to fetch server data');
       searchResults = await response.json();
-    }
-    finally {
-      isLoadingResults = false
+    } finally {
+      isLoadingResults = false;
     }
   }
 
@@ -52,6 +52,67 @@
       error = e instanceof Error ? e.message : 'An error occurred';
       server = null;
     } finally {
+      isLoading = false;
+    }
+  }
+
+  // Server management functions
+  async function handleServerUpdate(event: CustomEvent) {
+    const { data: updatedServer } = event.detail;
+    isLoading = true;
+
+    try {
+      const response = await fetch(`/api/servers/${serverID}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(updatedServer),
+      });
+
+      if (!response.ok) throw new Error('Failed to update server');
+
+      await fetchServerData(serverID);
+    } catch (e) {
+      error = e instanceof Error ? e.message : 'Failed to update server';
+    }
+  }
+
+  async function handleToggleActive(event: CustomEvent) {
+    const { active } = event.detail;
+    isLoading = true;
+
+    try {
+      const response = await fetch(`/api/servers/${serverID}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ active }),
+      });
+
+      if (!response.ok) throw new Error('Failed to update server status');
+
+      await fetchServerData(serverID);
+    } catch (e) {
+      error = e instanceof Error ? e.message : 'Failed to update server status';
+    }
+  }
+
+  async function handleDelete() {
+    isLoading = true;
+
+    try {
+      const response = await fetch(`/api/servers/${serverID}`, {
+        method: 'DELETE',
+      });
+
+      if (!response.ok) throw new Error('Failed to delete server');
+
+      // Navigate back to servers list
+      goto('/dashboard');
+    } catch (e) {
+      error = e instanceof Error ? e.message : 'Failed to delete server';
       isLoading = false;
     }
   }
@@ -106,9 +167,17 @@
   {:else if error}
     <div class="text-red-400">Error: {error}</div>
   {:else if server}
+    <!-- Server Controls -->
+    <ServerControls
+      {server}
+      {isLoading}
+      on:update={handleServerUpdate}
+      on:toggleActive={handleToggleActive}
+      on:delete={handleDelete}
+    />
 
     <StatusIndicator
-    pingResults={server.ping_results}
+      pingResults={server.ping_results}
     />
 
     <ServerInfoCard {server} />
@@ -124,6 +193,7 @@
       }))}
     />
   {/if}
+
   {#if isLoadingResults}
     <div class="bg-[#202020] rounded-lg p-6 animate-pulse">
       <div class="h-48 bg-gray-700 rounded-lg w-full mb-4"></div>
