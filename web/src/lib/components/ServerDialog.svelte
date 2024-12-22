@@ -99,6 +99,7 @@
   function handleCheckboxChange(field: string, event: CustomEvent) {
     formData[field] = event.detail;
   }
+  $: if(expectedDown) {console.log(expectedDown)}
 </script>
 
 {#if showDialog}
@@ -149,22 +150,22 @@
               on:change={e => expectedDown = e.detail}
               label="Expected Down"
             />
-
-            {#if !expectedDown}
-              <div>
-                <label class="block text-gray-300 mb-1" for="status">Expected Status</label>
-                <input
-                  id="status"
-                  type="number"
-                  bind:value={formData.expected_status}
-                  min="100"
-                  max="599"
-                  class="w-full px-4 py-2 bg-[#2b2b2b] rounded-lg text-gray-200 focus:outline-none focus:ring-2 focus:ring-green-500"
-                />
-              </div>
-            {/if}
           </div>
         </div>
+
+        {#if !expectedDown}
+        <div>
+          <label class="block text-gray-300 mb-1" for="status">Expected Status</label>
+          <input
+            id="status"
+            type="number"
+            bind:value={formData.expected_status}
+            min="100"
+            max="599"
+            class="w-full px-4 py-2 bg-[#2b2b2b] rounded-lg text-gray-200 focus:outline-none focus:ring-2 focus:ring-green-500"
+          />
+        </div>
+      {/if}
 
         <div>
           <IntervalSlider
@@ -175,7 +176,7 @@
         </div>
 
         <div>
-          <label class="block text-gray-300 mb-1" for="comment">Comment</label>
+          <label class="block text-gray-300 mb-1" for="comment">Note</label>
           <textarea
             id="comment"
             bind:value={formData.comment}
