@@ -15,6 +15,8 @@ jobs:
   helm-and-docker:
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout
+        uses: actions/checkout@v3
       # Set up Docker environment
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v2
