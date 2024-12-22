@@ -8,8 +8,8 @@
   let chart: any;
   let ApexCharts: any;
 
-  // Calculate moving average
-  const calculateMovingAverage = (data: Array<{ timestamp: Date; value: number }>, window: number = 5) => {
+  // Increased window size for smoother moving average
+  const calculateMovingAverage = (data: Array<{ timestamp: Date; value: number }>, window: number = 1.5) => {
     return data.map((point, index) => {
       const start = Math.max(0, index - Math.floor(window / 2));
       const end = Math.min(data.length, index + Math.floor(window / 2) + 1);
@@ -33,31 +33,38 @@
           background: '#202020',
           animations: {
             enabled: true,
-            easing: 'linear',
-            speed: 300,
+            easing: 'cubicBezier', // Changed to cubicBezier for smoother animation
+            speed: 800, // Increased animation duration
             dynamicAnimation: {
-              speed: 350
+              speed: 650
             }
           }
         },
         stroke: {
-          curve: 'smooth',
-          width: 2,
+          width: 3, // Slightly thicker line
           colors: ['#4ade80'],
-          lineCap: 'round'
+          lineCap: 'round',
+          // Added curve smoothness
+          curve: 'smooth',
+          smoothing: 0.35
         },
         fill: {
           type: 'gradient',
           gradient: {
             shadeIntensity: 1,
-            opacityFrom: 0.2,
-            opacityTo: 0,
-            stops: [0, 90, 100],
+            opacityFrom: 0.25, // Slightly increased opacity
+            opacityTo: 0.05,  // Added slight opacity at the end
+            stops: [0, 95, 100],
             colorStops: [
               {
                 offset: 0,
                 color: '#4ade80',
-                opacity: 0.2
+                opacity: 0.25
+              },
+              {
+                offset: 95,
+                color: '#4ade80',
+                opacity: 0.05
               },
               {
                 offset: 100,
@@ -99,6 +106,15 @@
           },
           axisTicks: {
             show: false
+          },
+          // Added tooltip animation
+          tooltip: {
+            enabled: true,
+            animate: true,
+            animateGradually: {
+              enabled: true,
+              delay: 150
+            }
           }
         },
         yaxis: {
@@ -108,12 +124,14 @@
           labels: {
             style: {
               colors: '#666'
-            }
+            },
+            formatter: (value: number) => Math.round(value)
           }
         },
         tooltip: {
           theme: 'dark',
           shared: true,
+          intersect: false, // Prevents tooltip from flickering
           custom: function({ series, seriesIndex, dataPointIndex }: any) {
             const timestamp = new Date(data[dataPointIndex].timestamp);
             const value = series[0][dataPointIndex];
@@ -143,7 +161,7 @@
     chart.updateOptions({
       yaxis: {
         min: 0,
-        max: Math.max(...data.map(d => d.value)) + 50,
+        max: Math.max(...data.map(d => d.value)) + 5,
         tickAmount: 6,
         labels: {
           style: {
@@ -170,11 +188,11 @@
 </script>
 
 <style>
-    :global(.apexcharts-tooltip-box) {
+  :global(.apexcharts-tooltip-box) {
     background: #2a2a2a !important;
-    /* border: 1px solid #3a3a3a !important; */
     padding: 8px 12px !important;
     border-radius: 6px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.25) !important;
   }
 
   :global(.apexcharts-tooltip-box .timestamp) {
