@@ -11,6 +11,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/norskhelsenett/chase/database"
 	"github.com/norskhelsenett/chase/security"
+	"github.com/norskhelsenett/chase/types"
 	"github.com/norskhelsenett/chase/utils"
 	"gorm.io/gorm"
 )
@@ -318,6 +319,53 @@ func GetServersWithSecurityStatus(c *gin.Context) {
 	}
 
 	c.JSON(200, response)
+}
+
+func PatchServer(c *gin.Context) {
+	db := database.GetDB()
+	var server Server
+	if err := db.First(&server, c.Param("id")).Error; err != nil {
+		c.JSON(404, gin.H{"error": "Server not found"})
+		return
+	}
+
+	var patch types.ServerPatch
+	if err := c.ShouldBindJSON(&patch); err != nil {
+		c.JSON(400, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Only update fields that are present in the request
+	if patch.URL != nil {
+		server.URL = *patch.URL
+	}
+	if patch.Active != nil {
+		server.Active = *patch.Active
+	}
+	if patch.FollowRedirect != nil {
+		server.FollowRedirect = *patch.FollowRedirect
+	}
+	if patch.AllowInsecure != nil {
+		server.AllowInsecure = *patch.AllowInsecure
+	}
+	if patch.ExpectedStatusCode != nil {
+		server.ExpectedStatusCode = *patch.ExpectedStatusCode
+	}
+	if patch.Comment != nil {
+		server.Comment = *patch.Comment
+	}
+	if patch.UpdateInterval != nil {
+		server.UpdateInterval = *patch.UpdateInterval
+		// Update NextCheck when interval changes
+		server.NextCheck = time.Now().Add(time.Duration(server.UpdateInterval) * time.Minute)
+	}
+
+	if err := db.Save(&server).Error; err != nil {
+		c.JSON(500, gin.H{"error": "Failed to update server"})
+		return
+	}
+
+	c.JSON(200, server)
 }
 
 func UpdateServer(c *gin.Context) {

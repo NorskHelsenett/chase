@@ -38,7 +38,7 @@
 
       <div class="flex items-center justify-between p-3 rounded-md bg-[#2b2b2b]">
         <span class="text-gray-400">Next Check</span>
-        <span class="text-white font-medium">{nextCheckIn}</span>
+        <span class="text-white font-medium">{server.active ? nextCheckIn : "Never"}</span>
       </div>
     </div>
 

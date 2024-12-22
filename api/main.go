@@ -93,6 +93,7 @@ func setupRoutes(r *gin.Engine) {
 			api.POST("/servers", servers.AddServer)
 			api.GET("/servers", servers.GetServersWithSecurityStatus)
 			api.PUT("/servers/:id", servers.UpdateServer)
+			api.PATCH("/servers/:id", servers.PatchServer)
 			api.GET("/servers/:id", servers.GetServer)
 			api.DELETE("/servers/:id", servers.DeleteServer)
 			api.GET("/servers/:id/report", security.LastSecurityScanHandler)
