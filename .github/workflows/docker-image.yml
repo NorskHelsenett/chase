@@ -16,9 +16,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Install Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 'latest'  # or specify a specific version like '20.x'
+        run: |
+          curl -fsSL https://deb.nodesource.com/setup_lts.x | bash -
+          apt-get install -y nodejs npm
 
       - name: Checkout
         uses: actions/checkout@v3
