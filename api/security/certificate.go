@@ -47,10 +47,31 @@ func (s *Scanner) checkCertificate(domain string) (*CertificateAnalysis, error) 
 	defer conn.Close()
 
 	cert := conn.ConnectionState().PeerCertificates[0]
+	// Get public key information
+	var keyType string
+	var keyBits int
+	switch pub := cert.PublicKey.(type) {
+	case *rsa.PublicKey:
+		keyType = "RSA"
+		keyBits = pub.N.BitLen()
+	case *ecdsa.PublicKey:
+		keyType = "ECDSA"
+		keyBits = pub.Curve.Params().BitSize
+	default:
+		keyType = fmt.Sprintf("%T", cert.PublicKey)
+		keyBits = 0
+	}
+
 	analysis := &CertificateAnalysis{
+		ValidFrom:     cert.NotBefore,
 		ValidUntil:    cert.NotAfter,
 		Issuer:        cert.Issuer.CommonName,
 		Organization:  GetOrganization(cert),
+		SubjectDNS:    cert.DNSNames,
+		SerialNumber:  cert.SerialNumber.Text(16),
+		SignatureAlg:  cert.SignatureAlgorithm.String(),
+		PublicKeyType: keyType,
+		PublicKeyBits: keyBits,
 		Findings:      make([]Finding, 0),
 		Warnings:      make([]Finding, 0),
 		Risk:          RiskLow,
@@ -130,36 +151,36 @@ func (s *Scanner) checkCertificate(domain string) (*CertificateAnalysis, error) 
 func GetOrganization(cert *x509.Certificate) string {
 	// Try different certificate fields for organization info
 	if len(cert.Subject.Organization) > 0 {
-			return cert.Subject.Organization[0]
+		return cert.Subject.Organization[0]
 	}
 
 	if len(cert.Issuer.Organization) > 0 {
-			return cert.Issuer.Organization[0]
+		return cert.Issuer.Organization[0]
 	}
 
 	// Try CommonName if no Organization is set
 	if cert.Subject.CommonName != "" {
-			// Remove any wildcard prefixes
-			cn := strings.TrimPrefix(cert.Subject.CommonName, "*.")
-			// If it looks like a domain, don't use it as organization
-			if !strings.Contains(cn, ".") {
-					return cn
-			}
+		// Remove any wildcard prefixes
+		cn := strings.TrimPrefix(cert.Subject.CommonName, "*.")
+		// If it looks like a domain, don't use it as organization
+		if !strings.Contains(cn, ".") {
+			return cn
+		}
 	}
 
 	// Try OrganizationalUnit if available
 	if len(cert.Subject.OrganizationalUnit) > 0 {
-			return cert.Subject.OrganizationalUnit[0]
+		return cert.Subject.OrganizationalUnit[0]
 	}
 
 	// Try Subject Alternative Names for organization info
 	for _, name := range cert.Subject.Names {
-			// OID 2.5.4.10 is Organization Name
-			if name.Type.Equal([]int{2, 5, 4, 10}) {
-					if str, ok := name.Value.(string); ok {
-							return str
-					}
+		// OID 2.5.4.10 is Organization Name
+		if name.Type.Equal([]int{2, 5, 4, 10}) {
+			if str, ok := name.Value.(string); ok {
+				return str
 			}
+		}
 	}
 
 	return "Unknown Organization"

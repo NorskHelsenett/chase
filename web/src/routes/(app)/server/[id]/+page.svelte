@@ -31,7 +31,6 @@
     try{
       const response = await fetch(`/api/servers/${id}/report`);
       if (!response.ok) throw new Error('Failed to fetch server data');
-
       searchResults = await response.json();
     }
     finally {
@@ -86,15 +85,17 @@
       .toFixed(decimals)
     );
 
+    const certValidUntil = searchResults?.certificate?.validUntil;
+
     return {
       currentResponse: latestPing?.response_time_ms || 0,
       avgResponse,
       uptimeDay,
       uptimeMonth,
-      certDaysLeft: latestPing ?
-        Math.ceil((new Date(latestPing.cert_expiry_date).getTime() - Date.now()) / (1000 * 60 * 60 * 24)) :
+      certDaysLeft: certValidUntil ?
+        Math.ceil((new Date(certValidUntil).getTime() - Date.now()) / (1000 * 60 * 60 * 24)) :
         0,
-      certExpDate: latestPing?.cert_expiry_date
+      certExpDate: certValidUntil
     };
   }
 </script>

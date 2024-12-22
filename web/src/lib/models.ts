@@ -16,6 +16,41 @@ export interface Server extends BaseModel {
   comment: string;
   ping_results: PingResult[];
   security: SecurityReport;
+  certificate: Certificate;
+}
+
+interface Finding {
+  description: string;
+  risk: RiskLevel;
+  evidence: string;
+  mitigation: string;
+}
+
+interface Cipher {
+  name: string;
+  keyExchange: string;
+  strength: number;
+  forward: boolean;
+  weak: boolean;
+}
+
+type RiskLevel = 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
+
+type Grade = 'A+' | 'A' | 'B' | 'C' | 'D' | 'F';
+
+
+interface Certificate {
+  grade: Grade;
+  validUntil: string;  // ISO 8601 date string
+  issuer: string;
+  organization: string;
+  findings: Finding[];
+  warnings: Finding[];
+  risk: RiskLevel;
+  tlsVersions: string[];
+  supportedCiphers: Cipher[] | null;
+  ctEnabled: boolean;
+  revocationStatus: string;
 }
 
 export interface PingResult extends BaseModel {

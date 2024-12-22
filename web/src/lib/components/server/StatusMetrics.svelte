@@ -7,7 +7,9 @@
   export let certExpDate = '2024-12-23';
 
   $: formattedCertDaysLeft = certExpDate === "0001-01-01T00:00:00Z" ? NaN : certDaysLeft;
-  $: formattedCertExpDate = certExpDate === "0001-01-01T00:00:00Z" ? "N/A" : certExpDate;
+  $: formattedCertExpDate = certExpDate === "0001-01-01T00:00:00Z"
+    ? "N/A"
+    : new Date(certExpDate).toLocaleDateString();
 </script>
 
 <div class="grid grid-cols-5 gap-8 bg-[#202020] rounded-lg p-4">

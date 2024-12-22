@@ -119,9 +119,15 @@ type HeadersAnalysis struct {
 
 type CertificateAnalysis struct {
 	Grade            string    `json:"grade"`
+	ValidFrom        time.Time `json:"validFrom"`
 	ValidUntil       time.Time `json:"validUntil"`
 	Issuer           string    `json:"issuer"`
 	Organization     string    `json:"organization"`
+	SubjectDNS       []string  `json:"subjectDNS"`
+	SerialNumber     string    `json:"serialNumber"`
+	SignatureAlg     string    `json:"signatureAlgorithm"`
+	PublicKeyType    string    `json:"publicKeyType"`
+	PublicKeyBits    int       `json:"publicKeyBits"`
 	Findings         []Finding `json:"findings"`
 	Warnings         []Finding `json:"warnings"`
 	Risk             RiskLevel `json:"risk"`
