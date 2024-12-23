@@ -4,6 +4,7 @@
   import type { Server } from '$lib/models';
   import RadioToggle from '../ui/RadioToggle.svelte';
   import ServerDialog from '../ServerDialog.svelte';
+	import DeleteDialog from '../ui/DeleteDialog.svelte';
 
   const dispatch = createEventDispatcher();
 
@@ -13,6 +14,7 @@
   let showDialog = false;
   let serverActive = server?.active ?? false;
   let dialogData: Partial<Server> | null = null;
+  let showDeleteDialog = false;
 
   function handleActiveChange(active: boolean) {
     serverActive = active;
@@ -20,9 +22,12 @@
   }
 
   function handleDelete() {
-    if (confirm(`Are you sure you want to delete ${server.url}?`)) {
-      dispatch('delete');
-    }
+    showDeleteDialog = true;
+  }
+
+  function handleDeleteConfirm() {
+    dispatch('delete');
+    showDeleteDialog = false;
   }
 
   function handleDialogOpen() {
@@ -85,6 +90,14 @@
     </button>
   </div>
 </div>
+
+<DeleteDialog
+  bind:showDialog={showDeleteDialog}
+  {isLoading}
+  serverData={server}
+  on:submit={handleDeleteConfirm}
+  on:close={() => showDeleteDialog = false}
+/>
 
 <ServerDialog
   bind:showDialog
