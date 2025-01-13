@@ -78,16 +78,18 @@ func DeleteServer(c *gin.Context) {
 		return
 	}
 
-	// Hard delete the server and its related ping results
+	// Soft delete the server and its related ping results
 	// First delete related ping results
-	if err := tx.Unscoped().Where("server_id = ?", serverID).Delete(&PingResult{}).Error; err != nil {
+	// To hard delete to tx.Unscoped()
+	if err := tx.Where("server_id = ?", serverID).Delete(&PingResult{}).Error; err != nil {
 		tx.Rollback()
 		c.JSON(500, gin.H{"error": "Failed to delete server ping results"})
 		return
 	}
 
 	// Then delete the server itself
-	if err := tx.Unscoped().Delete(&server).Error; err != nil {
+	// To hard delete to tx.Unscoped()
+	if err := tx.Delete(&server).Error; err != nil {
 		tx.Rollback()
 		c.JSON(500, gin.H{"error": "Failed to delete server"})
 		return
