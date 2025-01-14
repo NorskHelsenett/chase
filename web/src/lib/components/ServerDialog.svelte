@@ -70,6 +70,7 @@
   }
 
   function handleSubmit() {
+    console.log(formData)
     const serverData = {
       ...formData,
       expected_status: expectedDown ? 0 : formData.expected_status,
@@ -98,6 +99,7 @@
 
   function handleCheckboxChange(field: string, event: CustomEvent) {
     formData[field] = event.detail;
+    console.log(field)
   }
 </script>
 
