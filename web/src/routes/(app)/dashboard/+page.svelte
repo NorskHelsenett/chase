@@ -20,8 +20,12 @@
   $: activeFilter = $page.url.searchParams.get('active');
 
   async function fetchServers() {
+    if(isLoading) {
+      return
+    }
     isLoading = true;
     try {
+
       // Build URL with query parameters
       const url = new URL('/api/servers', window.location.origin);
       if (activeFilter !== null) {
@@ -95,7 +99,7 @@
   onMount(fetchServers);
 </script>
 
-<div class="p-4 min-h-screen w-full">
+<div class="p-4 w-full">
   <MonitorStats {stats} />
   <MonitorControls
     {isLoading}

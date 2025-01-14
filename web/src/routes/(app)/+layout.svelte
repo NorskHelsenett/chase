@@ -25,7 +25,7 @@
 
 	<!-- Main content area -->
 	<main class="flex-grow overflow-auto ml-16 p-4">
-		<div class="min-h-full w-full flex items-center justify-center">
+		<div class="w-full flex items-center justify-center">
 			<slot />
 		</div>
 	</main>
