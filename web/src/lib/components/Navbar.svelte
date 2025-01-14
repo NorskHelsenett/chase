@@ -31,11 +31,11 @@
   const routes = [
     { path: '/', icon: Home, tooltip: 'Home', auth: false },
     {
-      path: '/dashboard',
+      path: '/dashboard?active=true',
       icon: LayoutDashboard,
       auth: true,
       submenu: [
-        { path: '/dashboard', icon: Logs, tooltip: 'Dashboard View' },
+        { path: '/dashboard?active=true', icon: Logs, tooltip: 'Dashboard View' },
         { path: '/grid', icon: Grid, tooltip: 'Grid View' }
       ]
     },
