@@ -6,6 +6,27 @@
   export let server: Server;
 
   $: nextCheckIn = formatDistanceToNow(new Date(server.next_check), { addSuffix: true });
+
+  function getLatestPingResult(server) {
+  if (!server.ping_results?.length) return null;
+
+  return server.ping_results.reduce((latest, current) => {
+    const latestTime = new Date(latest.timestamp).getTime();
+    const currentTime = new Date(current.timestamp).getTime();
+    return currentTime > latestTime ? current : latest;
+  }, server.ping_results[0]);
+}
+
+function getLatestStatusCode(server) {
+  const latestPing = getLatestPingResult(server);
+  return latestPing?.status_code ?? 'No data';
+}
+
+function getStatusColor(server) {
+  const latestPing = getLatestPingResult(server);
+  if (!latestPing) return 'text-gray-400';
+  return latestPing.status_code === server.expected_status ? 'text-green-500' : 'text-red-500';
+}
 </script>
 
 <div class="p-4 bg-[#202020] rounded-lg">
@@ -56,6 +77,19 @@
           {server.follow_redirect ? 'Yes' : 'No'}
         </span>
       </div>
+
+      <div class="flex items-center justify-between p-3 rounded-md bg-[#2b2b2b]">
+        <span class="text-gray-400">First seen</span>
+        <span class="text-white font-medium">{new Date(server.CreatedAt).toISOString().split('T')[0]}</span>
+      </div>
+
+      <div class="flex items-center justify-between p-3 rounded-md bg-[#2b2b2b]">
+        <span class="text-gray-400">Latest Status</span>
+        <span class={`font-medium ${getStatusColor(server)}`}>
+          {getLatestStatusCode(server)}
+        </span>
+      </div>
+
     </div>
   </div>
 </div>
