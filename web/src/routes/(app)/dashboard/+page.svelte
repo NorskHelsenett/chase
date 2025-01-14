@@ -86,8 +86,7 @@
     const query = event.detail.query.toLowerCase();
     filteredServers = servers.filter(server =>
       server.url.toLowerCase().includes(query) ||
-      server.comment?.toLowerCase().includes(query) ||
-      server.ping_results[0]?.ip?.includes(query)
+      server.comment?.toLowerCase().includes(query)
     );
   }
 
