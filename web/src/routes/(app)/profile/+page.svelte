@@ -33,7 +33,7 @@
           <!-- Avatar Section -->
           <div class="flex items-center space-x-6 mb-8 pb-6 border-b border-secondary">
             <div class="w-20 h-20">
-              <Avatar />
+              <Avatar size="large"/>
             </div>
             <div>
               <h2 class="text-xl font-semibold text-gray-100">{$user.name}</h2>
