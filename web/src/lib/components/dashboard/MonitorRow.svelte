@@ -8,7 +8,6 @@
     certScore: 'A+' | 'A' | 'B' | 'C' | 'D' | 'F' | '';
     adminRisk: 'critical' | 'high' | 'medium' | 'low' | '';
     apiRisk: 'critical' | 'high' | 'medium' | 'low' | '';
-    ip: string;
     uptime: Array<-1 | 0 | 1>;
   };
 
@@ -22,7 +21,6 @@
     const sortedPings = [...server.ping_results].sort((a, b) =>
       new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
     );
-    const lastPing = sortedPings[0];
 
     return {
       status: !sortedPings.length || sortedPings[0]?.error || sortedPings[0]?.status_code >= 400 ? 'down' : 'up',
@@ -31,7 +29,6 @@
       certScore: server.security.certRisk,
       adminRisk: server.security.adminRisk,
       apiRisk: server.security.apiRisk,
-      ip: lastPing?.ip || '',
       uptime: server.ping_results
         .slice(0, 10)
         .reverse()
@@ -104,8 +101,6 @@
     {rowData.apiRisk || ''}
   </div>
 </td>
-
-<td class="text-gray-400">{rowData.ip}</td>
 
 <td>
   <div class="flex gap-1">

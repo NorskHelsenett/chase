@@ -4,7 +4,7 @@
   import { goto } from '$app/navigation';
 
   export let sites: Server[] = [];
-  
+
   let sortField: keyof Server | 'status' | 'header' | 'cert' | 'adminRisk' | 'apiRisk' | 'uptime' | null = null;
   let sortDirection: 'asc' | 'desc' = 'asc';
 
@@ -39,11 +39,11 @@
   function getUptimePercentage(server: Server): number {
     const pings = server.ping_results || [];
     if (pings.length === 0) return 0;
-    
-    const successfulPings = pings.filter(ping => 
+
+    const successfulPings = pings.filter(ping =>
       ping.status_code === server.expected_status
     ).length;
-    
+
     return (successfulPings / pings.length) * 100;
   }
 
@@ -119,7 +119,7 @@ function getLatestRisk(server: Server, type: 'adminrisk' | 'apirisk'): string {
   <table class="w-full border-spacing-4">
     <thead>
       <tr class="text-gray-400 font-medium">
-        <th 
+        <th
           class="text-left font-medium cursor-pointer hover:text-gray-200 transition-colors group"
           on:click={() => toggleSort('status')}
         >
@@ -128,7 +128,7 @@ function getLatestRisk(server: Server, type: 'adminrisk' | 'apirisk'): string {
             {sortField === 'status' ? (sortDirection === 'asc' ? '↑' : '↓') : '↕'}
           </span>
         </th>
-        <th 
+        <th
           class="text-left font-medium w-[30%] cursor-pointer hover:text-gray-200 transition-colors group"
           on:click={() => toggleSort('url')}
         >
@@ -137,7 +137,7 @@ function getLatestRisk(server: Server, type: 'adminrisk' | 'apirisk'): string {
             {sortField === 'url' ? (sortDirection === 'asc' ? '↑' : '↓') : '↕'}
           </span>
         </th>
-        <th 
+        <th
           class="text-left font-medium cursor-pointer hover:text-gray-200 transition-colors group"
           on:click={() => toggleSort('header')}
         >
@@ -146,7 +146,7 @@ function getLatestRisk(server: Server, type: 'adminrisk' | 'apirisk'): string {
             {sortField === 'header' ? (sortDirection === 'asc' ? '↑' : '↓') : '↕'}
           </span>
         </th>
-        <th 
+        <th
           class="text-left font-medium cursor-pointer hover:text-gray-200 transition-colors group"
           on:click={() => toggleSort('cert')}
         >
@@ -155,7 +155,7 @@ function getLatestRisk(server: Server, type: 'adminrisk' | 'apirisk'): string {
             {sortField === 'cert' ? (sortDirection === 'asc' ? '↑' : '↓') : '↕'}
           </span>
         </th>
-        <th 
+        <th
           class="text-left font-medium cursor-pointer hover:text-gray-200 transition-colors group"
           on:click={() => toggleSort('adminRisk')}
         >
@@ -164,7 +164,7 @@ function getLatestRisk(server: Server, type: 'adminrisk' | 'apirisk'): string {
             {sortField === 'adminRisk' ? (sortDirection === 'asc' ? '↑' : '↓') : '↕'}
           </span>
         </th>
-        <th 
+        <th
           class="text-left font-medium cursor-pointer hover:text-gray-200 transition-colors group"
           on:click={() => toggleSort('apiRisk')}
         >
@@ -173,16 +173,7 @@ function getLatestRisk(server: Server, type: 'adminrisk' | 'apirisk'): string {
             {sortField === 'apiRisk' ? (sortDirection === 'asc' ? '↑' : '↓') : '↕'}
           </span>
         </th>
-        <th 
-          class="text-left font-medium cursor-pointer hover:text-gray-200 transition-colors group"
-          on:click={() => toggleSort('ip')}
-        >
-          ip
-          <span class="ml-1 opacity-0 group-hover:opacity-100 transition-opacity">
-            {sortField === 'ip' ? (sortDirection === 'asc' ? '↑' : '↓') : '↕'}
-          </span>
-        </th>
-        <th 
+        <th
           class="text-left font-medium cursor-pointer hover:text-gray-200 transition-colors group"
           on:click={() => toggleSort('uptime')}
         >
@@ -198,8 +189,8 @@ function getLatestRisk(server: Server, type: 'adminrisk' | 'apirisk'): string {
         <!-- Loading skeleton unchanged -->
       {:else}
         {#each sites as site}
-          <tr 
-            class="group transition-colors duration-200 ease-in-out hover:bg-[#2b2b2b] cursor-pointer rounded-lg" 
+          <tr
+            class="group transition-colors duration-200 ease-in-out hover:bg-[#2b2b2b] cursor-pointer rounded-lg"
             on:click={() => goto(`/server/${site.ID}`)}
           >
             <MonitorRow server={site} />
