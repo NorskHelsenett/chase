@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { page } from '$app/stores';
   import { onMount } from 'svelte';
   import MonitorStats from "$lib/components/dashboard/MonitorStats.svelte";
   import MonitorControls from "$lib/components/dashboard/MonitorControls.svelte";
@@ -15,10 +16,19 @@
     highRisks: 0
   };
 
+  // Subscribe to page store to get URL parameters
+  $: activeFilter = $page.url.searchParams.get('active');
+
   async function fetchServers() {
     isLoading = true;
     try {
-      const response = await fetch('/api/servers');
+      // Build URL with query parameters
+      const url = new URL('/api/servers', window.location.origin);
+      if (activeFilter !== null) {
+        url.searchParams.set('active', activeFilter);
+      }
+
+      const response = await fetch(url);
       servers = await response.json();
       filteredServers = servers;
       updateStats();
@@ -75,6 +85,11 @@
       server.comment?.toLowerCase().includes(query) ||
       server.ping_results[0]?.ip?.includes(query)
     );
+  }
+
+  // Watch for changes in activeFilter and refetch data
+  $: if (activeFilter !== undefined) {
+    fetchServers();
   }
 
   onMount(fetchServers);

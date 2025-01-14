@@ -254,8 +254,22 @@ func GetServersWithSecurityStatus(c *gin.Context) {
 		Joins("JOIN (SELECT id, ROW_NUMBER() OVER (PARTITION BY server_id ORDER BY created_at DESC) AS rn FROM ping_results) ranked ON ping_results.id = ranked.id").
 		Where("ranked.rn <= 10")
 
-	// Load servers with ping results
-	err := db.Preload("PingResults", func(db *gorm.DB) *gorm.DB {
+	// Initialize the query
+	query := db
+
+	// Get active status from query parameter if present
+	activeStr := c.Query("active")
+	if activeStr != "" {
+		active, err := strconv.ParseBool(activeStr)
+		if err != nil {
+			c.JSON(400, gin.H{"error": "active must be true or false"})
+			return
+		}
+		query = query.Where("active = ?", active)
+	}
+
+	// Load servers with ping results and optional active filter
+	err := query.Preload("PingResults", func(db *gorm.DB) *gorm.DB {
 		return db.Select("*").Table("(?) as ping_results", pingSubQuery)
 	}).Find(&servers).Error
 
