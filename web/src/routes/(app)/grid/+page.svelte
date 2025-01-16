@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { page } from '$app/stores';
   import type { Server } from '$lib/models';
   import ScreenshotGrid from '$lib/components/grid/ScreenshotGrid.svelte';
 
@@ -24,9 +25,16 @@
     return successRate >= 0.9; // 90% success rate threshold
   }
 
+  $: activeFilter = $page.url.searchParams.get('active');
+
   async function fetchServers() {
     try {
-      const response = await fetch('/api/servers');
+      const url = new URL('/api/servers', window.location.origin);
+      if (activeFilter !== null) {
+        url.searchParams.set('active', activeFilter);
+      }
+
+      const response = await fetch(url);
       servers = await response.json();
       
       // Filter for active servers with good ping history

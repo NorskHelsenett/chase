@@ -36,7 +36,7 @@
       auth: true,
       submenu: [
         { path: '/dashboard?active=true', icon: Logs, tooltip: 'Dashboard View' },
-        { path: '/grid', icon: Grid, tooltip: 'Grid View' }
+        { path: '/grid?active=true', icon: Grid, tooltip: 'Grid View' }
       ]
     },
     { path: '/settings', icon: Settings, tooltip: 'Settings', auth: true }
