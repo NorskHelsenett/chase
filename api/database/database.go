@@ -21,7 +21,7 @@ func InitDatabase() error {
 		return fmt.Errorf("failed to connect database: %v", err)
 	}
 
-	optimizeSQLiteForWrites(db)
+	optimizeSQLiteForNFSWrites(db)
 
 	// Auto Migrate the schema
 	if err := db.AutoMigrate(&types.User{}); err != nil {
@@ -35,13 +35,39 @@ func GetDB() *gorm.DB {
 	return db
 }
 
-func optimizeSQLiteForWrites(db *gorm.DB) {
+func optimizeSQLiteForNFSWrites(db *gorm.DB) {
+	// Journal mode - WAL is generally better but requires special consideration on NFS
 	db.Exec("PRAGMA journal_mode=WAL;")
+
+	// Use a higher synchronous setting on NFS to prevent corruption
+	// FULL is safer on unreliable NFS but slower, NORMAL is a compromise
 	db.Exec("PRAGMA synchronous=NORMAL;")
-	db.Exec("PRAGMA page_size=4096;")
-	db.Exec("PRAGMA cache_size=-131072;")
-	db.Exec("PRAGMA mmap_size=268435456;")
+
+	// Increase page size slightly for NFS to reduce number of I/O operations
+	db.Exec("PRAGMA page_size=8192;")
+
+	// Increase cache size to 256MB (-262144 KB) to reduce NFS reads
+	db.Exec("PRAGMA cache_size=-262144;")
+
+	// Memory mapping on NFS can be tricky - increase or disable based on testing
+	db.Exec("PRAGMA mmap_size=536870912;") // 512MB
+
+	// Keep temp operations in memory to avoid NFS writes
 	db.Exec("PRAGMA temp_store=MEMORY;")
-	db.Exec("PRAGMA journal_size_limit=33554432;")
-	db.Exec("PRAGMA busy_timeout=5000;")
+
+	// Larger journal size limit (64MB) for less frequent checkpoints
+	db.Exec("PRAGMA journal_size_limit=67108864;")
+
+	// NFS can have high latency - increase timeout for busy conditions
+	db.Exec("PRAGMA busy_timeout=10000;") // 10 seconds
+
+	// Exclusive locking mode if possible (if single process access)
+	// Comment out if multiple processes need to access the DB
+	db.Exec("PRAGMA locking_mode=EXCLUSIVE;")
+
+	// Less frequent but more thorough checkpoints
+	db.Exec("PRAGMA wal_autocheckpoint=1000;")
+
+	// Set a reasonable WAL checkpoint timeout
+	db.Exec("PRAGMA wal_checkpoint_timeout=30000;")
 }

@@ -120,8 +120,10 @@ func ScreenshotHandler(c *gin.Context) {
 		return
 	}
 
+	cachedOnly := c.Query("cached") == "true"
+
 	// Check if we have a recent screenshot
-	if screenshot, err := getRecentScreenshot(domain); err == nil {
+	if screenshot, err := getRecentScreenshot(domain, cachedOnly); err == nil {
 		// Set cache headers
 		c.Header("Cache-Control", "public, max-age=86400") // 24 hours
 		c.Header("Content-Type", screenshot.MIMEType)
@@ -186,21 +188,21 @@ func LastSecurityScanHandler(c *gin.Context) {
 
 var (
 	maxParallelScreenshots = 2 // Configurable parallel screenshot limit
-	screenshotSemaphore   = make(chan struct{}, maxParallelScreenshots)
+	screenshotSemaphore    = make(chan struct{}, maxParallelScreenshots)
 )
 
 func SetMaxParallelScreenshots(limit int) {
 	if limit < 1 {
-			limit = 1
+		limit = 1
 	}
 	// Create new semaphore with updated capacity
 	newSemaphore := make(chan struct{}, limit)
-	
+
 	// Replace the old semaphore
 	oldSemaphore := screenshotSemaphore
 	screenshotSemaphore = newSemaphore
 	maxParallelScreenshots = limit
-	
+
 	// Close old semaphore after ensuring no operations are using it
 	close(oldSemaphore)
 }
@@ -209,74 +211,74 @@ func captureAndSendScreenshot(c *gin.Context, domain string) error {
 	// Acquire semaphore before starting screenshot operation
 	screenshotSemaphore <- struct{}{} // Block if max parallel operations reached
 	defer func() {
-			<-screenshotSemaphore // Release semaphore when done
+		<-screenshotSemaphore // Release semaphore when done
 	}()
 
 	var err error
 	if domain, err = utils.EnsureHTTPS(domain); err != nil {
-			if c != nil {
-					c.JSON(400, gin.H{"error": "Invalid URL format"})
-			}
-			return err
+		if c != nil {
+			c.JSON(400, gin.H{"error": "Invalid URL format"})
+		}
+		return err
 	}
 
 	// Create request body
 	jsonData, err := json.Marshal(map[string]string{"url": domain})
 	if err != nil {
-			return fmt.Errorf("failed to create request: %v", err)
+		return fmt.Errorf("failed to create request: %v", err)
 	}
 
 	// Make request to screenshot service
 	serviceURL := os.Getenv("SCREENSHOT_SERVICE_URL")
 	if serviceURL == "" {
-			serviceURL = "http://screenshot:8080"
+		serviceURL = "http://screenshot:8080"
 	}
 
 	client := &http.Client{Timeout: 30 * time.Second}
 	resp, err := client.Post(
-			serviceURL+"/screenshot",
-			"application/json",
-			bytes.NewBuffer(jsonData),
+		serviceURL+"/screenshot",
+		"application/json",
+		bytes.NewBuffer(jsonData),
 	)
 	if err != nil {
-			return fmt.Errorf("screenshot service error: %v", err)
+		return fmt.Errorf("screenshot service error: %v", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-			body, _ := io.ReadAll(resp.Body)
-			return fmt.Errorf("service returned status %d: %s", resp.StatusCode, string(body))
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("service returned status %d: %s", resp.StatusCode, string(body))
 	}
 
 	// Parse response
 	var result screenshotResponse
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-			return fmt.Errorf("failed to parse response: %v", err)
+		return fmt.Errorf("failed to parse response: %v", err)
 	}
 
 	if !result.Success {
-			return fmt.Errorf("screenshot failed: %s", result.Error)
+		return fmt.Errorf("screenshot failed: %s", result.Error)
 	}
 
 	// Decode image
 	imgData, err := base64.StdEncoding.DecodeString(result.Image)
 	if err != nil {
-			return fmt.Errorf("failed to decode image: %v", err)
+		return fmt.Errorf("failed to decode image: %v", err)
 	}
 
 	contentType := result.ImageType
 	if contentType == "" {
-			contentType = "image/png"
+		contentType = "image/png"
 	}
 
 	// Store screenshot in database first
 	err = storeScreenshot(domain, imgData, contentType)
 	if err != nil {
-			return fmt.Errorf("failed to store screenshot: %v", err)
+		return fmt.Errorf("failed to store screenshot: %v", err)
 	}
 
 	if c == nil {
-			return nil
+		return nil
 	}
 
 	// Send response to client
@@ -318,16 +320,20 @@ func storeScreenshot(url string, data []byte, mimeType string) error {
 	return db.Create(&screenshot).Error
 }
 
-func getRecentScreenshot(url string) (*Screenshot, error) {
+func getRecentScreenshot(url string, useCache bool) (*Screenshot, error) {
 	db := database.GetDB()
 	var screenshot Screenshot
 
-	cutoff := time.Now().Add(-168 * time.Hour)
+	query := db.Where("server_url = ?", url)
 
-	err := db.Where("server_url = ? AND created_at > ?", url, cutoff).
-		Order("created_at DESC").
-		First(&screenshot).Error
+	// Add time constraint only if not using cache
+	if !useCache {
+		cutoff := time.Now().Add(-168 * time.Hour)
+		query = query.Where("created_at > ?", cutoff)
+	}
 
+	// Get the most recent screenshot
+	err := query.Order("created_at DESC").First(&screenshot).Error
 	if err != nil {
 		return nil, err
 	}

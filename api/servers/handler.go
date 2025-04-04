@@ -238,46 +238,80 @@ func GetServers(c *gin.Context) {
 
 func GetServersWithSecurityStatus(c *gin.Context) {
 	db := database.GetDB()
-	var servers []Server
 
-	// Get latest security reports using SQLite compatible syntax
-	securityReportSubQuery := db.Select("security_report_records.*").
-		Table("security_report_records").
-		Where("security_report_records.id IN (?)",
-			db.Table("security_report_records").
-				Select("MAX(id)").
-				Group("server_url"))
-
-	// Get last 10 ping results
-	pingSubQuery := db.Select("ping_results.*").
-		Table("ping_results").
-		Joins("JOIN (SELECT id, ROW_NUMBER() OVER (PARTITION BY server_id ORDER BY created_at DESC) AS rn FROM ping_results) ranked ON ping_results.id = ranked.id").
-		Where("ranked.rn <= 10")
-
-	// Initialize the query
-	query := db
-
-	// Get active status from query parameter if present
+	// Initialize active filter if present
 	activeStr := c.Query("active")
+	var activeFilter *bool
 	if activeStr != "" {
 		active, err := strconv.ParseBool(activeStr)
 		if err != nil {
 			c.JSON(400, gin.H{"error": "active must be true or false"})
 			return
 		}
-		query = query.Where("active = ?", active)
+		activeFilter = &active
 	}
 
-	// Load servers with ping results and optional active filter
-	err := query.Preload("PingResults", func(db *gorm.DB) *gorm.DB {
-		return db.Select("*").Table("(?) as ping_results", pingSubQuery)
-	}).Find(&servers).Error
+	// 1. Get all servers with a simple query - optimize by loading only what we need
+	var servers []Server
+	query := db
+	if activeFilter != nil {
+		query = query.Where("active = ?", *activeFilter)
+	}
 
-	if err != nil {
+	if err := query.Find(&servers).Error; err != nil {
 		c.JSON(500, gin.H{"error": err.Error()})
 		return
 	}
 
+	// 2. Get all security reports in one simple query without subqueries
+	var securityReports []security.SecurityReportRecord
+	if err := db.Raw(`
+			SELECT * FROM security_report_records WHERE id IN (
+					SELECT MAX(id) FROM security_report_records GROUP BY server_url
+			)
+	`).Find(&securityReports).Error; err != nil {
+		c.JSON(500, gin.H{"error": err.Error()})
+		return
+	}
+
+	// 3. Load ping results separately using server IDs (more efficient than complex joins)
+	var serverIDs []uint
+	for _, server := range servers {
+		serverIDs = append(serverIDs, server.ID)
+	}
+
+	// Create a map to hold ping results by server ID
+	pingResultsMap := make(map[uint][]PingResult)
+
+	// If we have servers to process
+	if len(serverIDs) > 0 {
+		// Get recent ping results for all servers at once with a simple query
+		var allPingResults []PingResult
+		if err := db.Raw(`
+					WITH ranked_pings AS (
+							SELECT *, ROW_NUMBER() OVER (PARTITION BY server_id ORDER BY created_at DESC) AS rn 
+							FROM ping_results 
+							WHERE server_id IN (?)
+					)
+					SELECT * FROM ranked_pings WHERE rn <= 10
+			`, serverIDs).Find(&allPingResults).Error; err != nil {
+			c.JSON(500, gin.H{"error": err.Error()})
+			return
+		}
+
+		// Organize ping results by server ID
+		for _, result := range allPingResults {
+			pingResultsMap[result.ServerID] = append(pingResultsMap[result.ServerID], result)
+		}
+	}
+
+	// 4. Map security reports by server URL for fast lookup
+	reportsMap := make(map[string]security.SecurityReportRecord)
+	for _, report := range securityReports {
+		reportsMap[report.ServerURL] = report
+	}
+
+	// 5. Construct response in memory
 	type SecuritySummary struct {
 		ServerURL  string              `json:"serverUrl"`
 		CreatedAt  *time.Time          `json:"createdAt"`
@@ -290,24 +324,11 @@ func GetServersWithSecurityStatus(c *gin.Context) {
 
 	type ServerResponse struct {
 		Server
-		Security SecuritySummary `json:"security"`
+		Security    SecuritySummary `json:"security"`
+		PingResults []PingResult    `json:"pingResults"`
 	}
 
 	response := make([]ServerResponse, 0, len(servers))
-
-	// Get all security reports in one query
-	var securityReports []security.SecurityReportRecord
-	err = db.Table("(?)", securityReportSubQuery).Find(&securityReports).Error
-	if err != nil {
-		c.JSON(500, gin.H{"error": err.Error()})
-		return
-	}
-
-	// Create a map for quick lookup of security reports by server URL
-	reportsMap := make(map[string]security.SecurityReportRecord)
-	for _, report := range securityReports {
-		reportsMap[report.ServerURL] = report
-	}
 
 	for _, server := range servers {
 		// Initialize response with server data
@@ -316,6 +337,7 @@ func GetServersWithSecurityStatus(c *gin.Context) {
 			Security: SecuritySummary{
 				ServerURL: server.URL,
 			},
+			PingResults: pingResultsMap[server.ID],
 		}
 
 		// Look up security report if it exists
