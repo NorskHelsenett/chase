@@ -325,7 +325,7 @@ func GetServersWithSecurityStatus(c *gin.Context) {
 	type ServerResponse struct {
 		Server
 		Security    SecuritySummary `json:"security"`
-		PingResults []PingResult    `json:"pingResults"`
+		PingResults []PingResult    `json:"ping_results"`
 	}
 
 	response := make([]ServerResponse, 0, len(servers))
