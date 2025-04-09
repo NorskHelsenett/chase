@@ -1,10 +1,17 @@
 <script>
 	import { initializeAuth } from '$lib/auth';
+	import { serverStoreActions } from '$lib/stores/serverStore';
 	import Navbar from '$lib/components/Navbar.svelte';
 	import { onMount } from 'svelte';
 
 	onMount(async() => {
-		await initializeAuth();
+		// Initialize auth and then load visited servers
+		const isAuthenticated = await initializeAuth();
+		
+		// Load visited servers from user profile
+		if (isAuthenticated) {
+			serverStoreActions.loadVisitedServersFromProfile();
+		}
 	})
 </script>
 

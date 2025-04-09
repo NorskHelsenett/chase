@@ -33,3 +33,20 @@ export async function getProtectedData() {
 		throw new Error('Failed to get protected data');
 	}
 }
+
+export async function updateVisitedServers(visitedServers) {
+	const response = await fetch(`${BASE_URL}/profile`, {
+		method: 'PATCH',
+		credentials: 'include',
+		headers: {
+			'Content-Type': 'application/json'
+		},
+		body: JSON.stringify({ visited_servers: visitedServers })
+	});
+	
+	if (response.ok) {
+		return response.json();
+	} else {
+		throw new Error('Failed to update visited servers');
+	}
+}

@@ -56,6 +56,52 @@ func registerToken(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"x-api-token": apiToken})
 }
 
+func updateProfile(c *gin.Context) {
+	user, err := getUserFromCookie(c)
+	if err != nil {
+		c.AbortWithStatus(http.StatusUnauthorized)
+		return
+	}
+
+	// We'll make this more flexible to accept either string or integer server IDs
+	var rawRequestBody map[string]interface{}
+
+	if err := c.ShouldBindJSON(&rawRequestBody); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body"})
+		return
+	}
+
+	// Extract and convert visited_servers to integers
+	var visitedServers types.IntegerList
+	if rawServers, ok := rawRequestBody["visited_servers"]; ok {
+		if serversArray, ok := rawServers.([]interface{}); ok {
+			for _, item := range serversArray {
+				// Handle both string and number types
+				switch v := item.(type) {
+				case float64: // JSON numbers decode as float64 in Go
+					visitedServers = append(visitedServers, int(v))
+				case string:
+					// Parse string to int, ignore errors (skip invalid values)
+					if id, err := utils.ParseStringToInt(v); err == nil {
+						visitedServers = append(visitedServers, id)
+					}
+				}
+			}
+		}
+	}
+
+	// Update only the visited_servers field
+	if err := db.Model(user).Update("visited_servers", visitedServers).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update profile"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"message":         "Profile updated successfully",
+		"visited_servers": visitedServers,
+	})
+}
+
 func getUserFromCookie(c *gin.Context) (*types.User, error) {
 	email, err := handlers.GetEmail(c)
 	if err != nil {

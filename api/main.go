@@ -108,6 +108,7 @@ func setupRoutes(r *gin.Engine) {
 			api.GET("/register", registerToken)
 
 			api.GET("/profile", getProfile)
+			api.PATCH("/profile", updateProfile)
 			api.GET("/api-token", getApiToken)
 		}
 	}

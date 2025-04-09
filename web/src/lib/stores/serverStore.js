@@ -13,6 +13,12 @@ const getVisitedServers = () => {
   return visitedServersStr ? JSON.parse(visitedServersStr) : [];
 };
 
+// Save visited servers to localStorage
+const saveVisitedServers = (serverIds) => {
+  if (!browser) return;
+  localStorage.setItem('visitedServers', JSON.stringify(serverIds));
+};
+
 // Main server data store
 const serverStore = writable({
   servers: initialData,
@@ -402,7 +408,9 @@ export const serverStoreActions = {
     // Add the current server if not already in the list
     if (!visitedServers.some(id => String(id) === serverIdStr)) {
       visitedServers.push(serverId);
-      localStorage.setItem('visitedServers', JSON.stringify(visitedServers));
+      
+      // Save to localStorage
+      saveVisitedServers(visitedServers);
       
       // Update the server's isNew status in the store
       serverStore.update(state => {
@@ -418,6 +426,72 @@ export const serverStoreActions = {
           servers: updatedServers
         };
       });
+      
+      // Sync with the backend if authenticated
+      this.syncVisitedServersWithBackend(visitedServers);
+    }
+  },
+  
+  // Sync visited servers with backend
+  async syncVisitedServersWithBackend(visitedServers) {
+    try {
+      const { updateVisitedServers } = await import('$lib/api');
+      await updateVisitedServers(visitedServers);
+      console.log('Successfully synced visited servers with backend');
+    } catch (error) {
+      // If sync fails, that's ok - we have the data in localStorage as fallback
+      console.warn('Failed to sync visited servers with backend:', error);
+    }
+  },
+
+  // Load visited servers from user profile
+  async loadVisitedServersFromProfile() {
+    if (!browser) return;
+    
+    try {
+      const { getProtectedData } = await import('$lib/api');
+      const userData = await getProtectedData();
+      
+      if (userData && userData.visited_servers && Array.isArray(userData.visited_servers)) {
+        // Get current visited servers from localStorage
+        const localVisitedServers = getVisitedServers();
+        
+        // Merge with servers from backend (keep both)
+        const mergedVisitedServers = [...new Set([
+          ...localVisitedServers,
+          ...userData.visited_servers
+        ])];
+        
+        // Update localStorage
+        saveVisitedServers(mergedVisitedServers);
+        
+        // Update server statuses in the store
+        serverStore.update(state => {
+          const updatedServers = state.servers.map(server => {
+            const serverIdStr = String(server.ID);
+            const isVisited = mergedVisitedServers.some(id => String(id) === serverIdStr);
+            return { 
+              ...server, 
+              isNew: !isVisited 
+            };
+          });
+          
+          return {
+            ...state,
+            servers: updatedServers
+          };
+        });
+        
+        console.log('Successfully loaded visited servers from profile');
+        
+        // If local had servers the backend didn't, sync back
+        if (mergedVisitedServers.length > userData.visited_servers.length) {
+          this.syncVisitedServersWithBackend(mergedVisitedServers);
+        }
+      }
+    } catch (error) {
+      // If loading fails, that's ok - we'll use localStorage as fallback
+      console.warn('Failed to load visited servers from profile:', error);
     }
   },
 
