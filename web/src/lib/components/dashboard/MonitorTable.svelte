@@ -105,13 +105,15 @@
 }
 
 function getLatestGrade(server: Server, type: 'header' | 'cert'): string {
-  // Instead of looking at ping_results, we should look at security
-  return server.security[type === 'header' ? 'headerRisk' : 'certRisk'] || 'F';
+  // Safely access security data if it exists
+  if (!server.security) return '';
+  return server.security[type === 'header' ? 'headerRisk' : 'certRisk'] || '';
 }
 
 function getLatestRisk(server: Server, type: 'adminrisk' | 'apirisk'): string {
-  // Get risk directly from security object
-  return server.security[type === 'adminrisk' ? 'adminRisk' : 'apiRisk'] || 'LOW';
+  // Safely access security data if it exists
+  if (!server.security) return '';
+  return server.security[type === 'adminrisk' ? 'adminRisk' : 'apiRisk'] || '';
 }
 </script>
 

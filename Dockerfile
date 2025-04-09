@@ -2,7 +2,7 @@
 FROM node AS frontend-builder
 WORKDIR /app/frontend
 
-# Copy package.json and bun.lockb (if you're using Bun's lockfile)
+# Copy package.json
 COPY web/package*.json ./
 
 # Install dependencies with clean npm cache and production only
