@@ -88,6 +88,14 @@ export const serverStoreActions = {
       return { ...state, isLoading: true, error: null };
     });
     
+    // Track the original sort order from current state
+    const serverIdOrderMap = {};
+    if (currentState.servers && currentState.servers.length > 0) {
+      currentState.servers.forEach((server, index) => {
+        serverIdOrderMap[server.ID] = index;
+      });
+    }
+    
     // If we have cached data and it's recent (less than 5 minutes old) and not forced refresh
     const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
     if (!force && currentState.lastUpdated && new Date(currentState.lastUpdated) > fiveMinutesAgo) {
@@ -119,9 +127,14 @@ export const serverStoreActions = {
 
         server.ping_results = pingResults;
         server.security = securityReport;
-
-        console.log('Loaded ping results and security report for server:', server.ID);
       }));
+      
+      // Always sort servers by name in reverse alphabetical order (B comes before A)
+      servers.sort((a, b) => {
+        const nameA = a.name || a.url || '';
+        const nameB = b.name || b.url || '';
+        return nameB.localeCompare(nameA);
+      });
       
       serverStore.update(state => ({
         ...state,
