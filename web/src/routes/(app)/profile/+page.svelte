@@ -4,6 +4,7 @@
   import { goto } from '$app/navigation';
   import { User, Mail, Settings, Edit2 } from 'lucide-svelte';
   import Avatar from '$lib/components/Avatar.svelte';
+	import ApiToken from '$lib/components/ApiToken.svelte';
 
   onMount(() => {
     const unsubscribe = isLoggedIn.subscribe(loggedIn => {
@@ -66,13 +67,7 @@
             </div>
           </div>
 
-          <!-- Actions Section -->
-          <div class="mt-8 pt-6 border-t border-secondary">
-            <button class="inline-flex items-center px-4 py-2 bg-gray-700 hover:bg-gray-600 text-gray-100 rounded-lg transition-colors duration-150">
-              <Edit2 class="w-5 h-5 mr-2" />
-              Edit Profile
-            </button>
-          </div>
+          <ApiToken />
         </div>
       {/if}
     </div>

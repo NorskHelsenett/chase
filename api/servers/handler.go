@@ -1,7 +1,6 @@
 package servers
 
 import (
-	"encoding/json"
 	"errors"
 	"net/url"
 	"strconv"
@@ -10,7 +9,6 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/norskhelsenett/chase/database"
-	"github.com/norskhelsenett/chase/security"
 	"github.com/norskhelsenett/chase/types"
 	"github.com/norskhelsenett/chase/utils"
 	"gorm.io/gorm"
@@ -236,107 +234,6 @@ func GetServers(c *gin.Context) {
 	c.JSON(200, servers)
 }
 
-func GetServersWithSecurityStatus(c *gin.Context) {
-	db := database.GetDB()
-	var servers []Server
-
-	// Get latest security reports using SQLite compatible syntax
-	securityReportSubQuery := db.Select("security_report_records.*").
-		Table("security_report_records").
-		Where("security_report_records.id IN (?)",
-			db.Table("security_report_records").
-				Select("MAX(id)").
-				Group("server_url"))
-
-	// Get last 10 ping results
-	pingSubQuery := db.Select("ping_results.*").
-		Table("ping_results").
-		Joins("JOIN (SELECT id, ROW_NUMBER() OVER (PARTITION BY server_id ORDER BY created_at DESC) AS rn FROM ping_results) ranked ON ping_results.id = ranked.id").
-		Where("ranked.rn <= 10")
-
-	// Initialize the query
-	query := db
-
-	// Get active status from query parameter if present
-	activeStr := c.Query("active")
-	if activeStr != "" {
-		active, err := strconv.ParseBool(activeStr)
-		if err != nil {
-			c.JSON(400, gin.H{"error": "active must be true or false"})
-			return
-		}
-		query = query.Where("active = ?", active)
-	}
-
-	// Load servers with ping results and optional active filter
-	err := query.Preload("PingResults", func(db *gorm.DB) *gorm.DB {
-		return db.Select("*").Table("(?) as ping_results", pingSubQuery)
-	}).Find(&servers).Error
-
-	if err != nil {
-		c.JSON(500, gin.H{"error": err.Error()})
-		return
-	}
-
-	type SecuritySummary struct {
-		ServerURL  string              `json:"serverUrl"`
-		CreatedAt  *time.Time          `json:"createdAt"`
-		RiskLevel  *security.RiskLevel `json:"riskLevel"`
-		HeaderRisk string              `json:"headerRisk"`
-		CertRisk   string              `json:"certRisk"`
-		AdminRisk  *security.RiskLevel `json:"adminRisk"`
-		APIRisk    *security.RiskLevel `json:"apiRisk"`
-	}
-
-	type ServerResponse struct {
-		Server
-		Security SecuritySummary `json:"security"`
-	}
-
-	response := make([]ServerResponse, 0, len(servers))
-
-	// Get all security reports in one query
-	var securityReports []security.SecurityReportRecord
-	err = db.Table("(?)", securityReportSubQuery).Find(&securityReports).Error
-	if err != nil {
-		c.JSON(500, gin.H{"error": err.Error()})
-		return
-	}
-
-	// Create a map for quick lookup of security reports by server URL
-	reportsMap := make(map[string]security.SecurityReportRecord)
-	for _, report := range securityReports {
-		reportsMap[report.ServerURL] = report
-	}
-
-	for _, server := range servers {
-		// Initialize response with server data
-		serverResp := ServerResponse{
-			Server: server,
-			Security: SecuritySummary{
-				ServerURL: server.URL,
-			},
-		}
-
-		// Look up security report if it exists
-		if report, exists := reportsMap[server.URL]; exists {
-			var securityReport security.SecurityReport
-			if err := json.Unmarshal(report.ReportData, &securityReport); err == nil {
-				serverResp.Security.CreatedAt = &report.CreatedAt
-				serverResp.Security.RiskLevel = &report.RiskLevel
-				serverResp.Security.HeaderRisk = securityReport.Headers.Score
-				serverResp.Security.CertRisk = securityReport.Certificate.Grade
-				serverResp.Security.AdminRisk = &securityReport.AdminPages.Risk
-				serverResp.Security.APIRisk = &securityReport.Swagger.Risk
-			}
-		}
-
-		response = append(response, serverResp)
-	}
-
-	c.JSON(200, response)
-}
-
 func PatchServer(c *gin.Context) {
 	db := database.GetDB()
 	var server Server
@@ -401,27 +298,4 @@ func UpdateServer(c *gin.Context) {
 
 	db.Save(&server)
 	c.JSON(200, server)
-}
-
-func GetServerResults(c *gin.Context) {
-	db := database.GetDB()
-	var results []PingResult
-
-	// Get query parameters
-	id := c.Param("id")
-	limitStr := c.DefaultQuery("limit", "10")
-
-	// Parse limit parameter
-	limit, err := strconv.Atoi(limitStr)
-	if err != nil || limit < 1 {
-		limit = 10 // default to 10 if invalid input
-	}
-
-	// Retrieve results from database
-	db.Where("server_id = ?", id).
-		Order("created_at desc").
-		Limit(limit).
-		Find(&results)
-
-	c.JSON(200, results)
 }

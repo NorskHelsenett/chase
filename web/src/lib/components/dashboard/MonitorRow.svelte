@@ -18,18 +18,18 @@
   $: rowData = mapServerToRowData(server);
 
   function mapServerToRowData(server: Server): ServerRowData {
-    const sortedPings = [...server.ping_results].sort((a, b) =>
+    const sortedPings = [...(server.ping_results || [])].sort((a, b) =>
       new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
     );
 
     return {
       status: !sortedPings.length || sortedPings[0]?.error || sortedPings[0]?.status_code >= 400 ? 'down' : 'up',
       title: server.url,
-      headerScore: server.security.headerRisk,
-      certScore: server.security.certRisk,
-      adminRisk: server.security.adminRisk,
-      apiRisk: server.security.apiRisk,
-      uptime: server.ping_results
+      headerScore: server.security?.headerRisk || '',
+      certScore: server.security?.certRisk || '',
+      adminRisk: server.security?.adminRisk || '',
+      apiRisk: server.security?.apiRisk || '',
+      uptime: (server.ping_results || [])
         .slice(0, 10)
         .reverse()
         .map(ping => ping.error || ping.status_code >= 400 ? -1 : 1)
