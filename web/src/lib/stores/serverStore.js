@@ -133,7 +133,7 @@ export const serverStoreActions = {
       servers.sort((a, b) => {
         const nameA = a.name || a.url || '';
         const nameB = b.name || b.url || '';
-        return nameB.localeCompare(nameA);
+        return nameA.localeCompare(nameB);
       });
       
       serverStore.update(state => ({
