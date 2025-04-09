@@ -9,6 +9,7 @@
     adminRisk: 'critical' | 'high' | 'medium' | 'low' | '';
     apiRisk: 'critical' | 'high' | 'medium' | 'low' | '';
     uptime: Array<-1 | 0 | 1>;
+    isNew: boolean;
   };
 
   export let server: Server;
@@ -22,6 +23,7 @@
       new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
     );
 
+
     return {
       status: !sortedPings.length || sortedPings[0]?.error || sortedPings[0]?.status_code >= 400 ? 'down' : 'up',
       title: server.url,
@@ -32,7 +34,8 @@
       uptime: (server.ping_results || [])
         .slice(0, 10)
         .reverse()
-        .map(ping => ping.error || ping.status_code >= 400 ? -1 : 1)
+        .map(ping => ping.error || ping.status_code >= 400 ? -1 : 1),
+      isNew: server.isNew || false
     };
   }
 
@@ -83,6 +86,9 @@
 <td class="text-white min-w-[300px]">
   <div class="whitespace-nowrap overflow-hidden text-ellipsis">
     {rowData.title}
+    {#if rowData.isNew}
+      <span class="ml-2 px-2 py-0.5 text-xs font-medium text-white bg-blue-500 rounded-full">new</span>
+    {/if}
   </div>
 </td>
 

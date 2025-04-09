@@ -8,6 +8,7 @@
   import ServerInfoCard from '$lib/components/server/ServerInfoCard.svelte';
   import SecurityScan from '$lib/components/SecurityScan.svelte';
   import ServerControls from '$lib/components/server/ServerControls.svelte';
+  import { serverStoreActions } from '$lib/stores/serverStore';
 
   /** @type {import('./$types').PageData} */
   export let data;
@@ -21,6 +22,10 @@
 
   $: if (data.id) {
     serverID = data.id;
+    // Mark server as visited when the ID is loaded
+    if (serverID) {
+      serverStoreActions.markServerAsVisited(serverID);
+    }
   }
 
   onMount(() => {

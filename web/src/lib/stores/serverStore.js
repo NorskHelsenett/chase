@@ -6,6 +6,13 @@ const initialData = browser && localStorage.getItem('cachedServers')
   ? JSON.parse(localStorage.getItem('cachedServers')) 
   : [];
 
+// Get visited servers from localStorage
+const getVisitedServers = () => {
+  if (!browser) return [];
+  const visitedServersStr = localStorage.getItem('visitedServers');
+  return visitedServersStr ? JSON.parse(visitedServersStr) : [];
+};
+
 // Main server data store
 const serverStore = writable({
   servers: initialData,
@@ -136,6 +143,13 @@ export const serverStoreActions = {
         return nameA.localeCompare(nameB);
       });
       
+      // Mark unvisited servers as new
+      const visitedServers = getVisitedServers();
+      servers.forEach(server => {
+        const serverIdStr = String(server.ID);
+        server.isNew = !visitedServers.some(id => String(id) === serverIdStr);
+      });
+
       serverStore.update(state => ({
         ...state,
         servers,
@@ -332,6 +346,29 @@ export const serverStoreActions = {
       throw error;
     }
   },
+  
+  // Refresh the "new" status of all servers based on visited servers in localStorage
+  refreshNewStatus() {
+    if (!browser) return;
+    
+    const visitedServers = getVisitedServers();
+    
+    serverStore.update(state => {
+      const updatedServers = state.servers.map(server => {
+        // Convert server.ID to string to match localStorage format when comparing
+        const serverIdStr = String(server.ID);
+        return { 
+          ...server, 
+          isNew: !visitedServers.some(id => String(id) === serverIdStr) 
+        };
+      });
+      
+      return {
+        ...state,
+        servers: updatedServers
+      };
+    });
+  },
 
   // Filter servers by search term
   filterServers(searchTerm) {
@@ -341,11 +378,47 @@ export const serverStoreActions = {
     
     const term = searchTerm.toLowerCase();
     return derived(serverStore, $store => 
-      $store.servers.filter(server =>
-        server.url.toLowerCase().includes(term) ||
-        (server.comment && server.comment.toLowerCase().includes(term))
-      )
+      $store.servers.filter(server => {
+        // Special case for "new" keyword to filter unvisited servers
+        if (term === "new") {
+          return server.isNew === true;
+        }
+        return server.url.toLowerCase().includes(term) ||
+          (server.comment && server.comment.toLowerCase().includes(term));
+      })
     );
+  },
+
+  // Mark a server as visited
+  markServerAsVisited(serverId) {
+    if (!browser) return;
+    
+    // Get currently visited servers
+    const visitedServers = getVisitedServers();
+    
+    // Convert serverId to string for consistent comparison
+    const serverIdStr = String(serverId);
+    
+    // Add the current server if not already in the list
+    if (!visitedServers.some(id => String(id) === serverIdStr)) {
+      visitedServers.push(serverId);
+      localStorage.setItem('visitedServers', JSON.stringify(visitedServers));
+      
+      // Update the server's isNew status in the store
+      serverStore.update(state => {
+        const updatedServers = state.servers.map(server => {
+          if (server.ID === serverId) {
+            return { ...server, isNew: false };
+          }
+          return server;
+        });
+        
+        return {
+          ...state,
+          servers: updatedServers
+        };
+      });
+    }
   },
 
   // Get loading state

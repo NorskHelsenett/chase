@@ -7,6 +7,7 @@
   import { servers, isLoading, serverStats, serverStoreActions } from '$lib/stores/serverStore';
   import type { Server } from '$lib/models';
   import { derived } from 'svelte/store';
+  import { browser } from '$app/environment';
 
   let filteredServers: Server[] = [];
   let searchQuery = '';
@@ -19,6 +20,13 @@
     if (!searchQuery) return $servers;
     
     const query = searchQuery.toLowerCase();
+    
+    // Special case for "new" keyword to filter only unvisited servers
+    if (query === "new") {
+      return $servers.filter(server => server.isNew === true);
+    }
+    
+    // Regular filtering by URL or comment
     return $servers.filter(server =>
       server.url.toLowerCase().includes(query) ||
       server.comment?.toLowerCase().includes(query)
@@ -81,9 +89,20 @@
     // Initial fetch from cache or API
     await fetchServers();
     
+    // Refresh the "new" status of servers
+    serverStoreActions.refreshNewStatus();
+    
     // Load detailed data in the background
     loadServerDetails();
   });
+
+  // Add event listener for the navigation events
+  if (browser) {
+    // This will update the "new" tag status whenever user returns to the dashboard page
+    window.addEventListener('focus', () => {
+      serverStoreActions.refreshNewStatus();
+    });
+  }
 </script>
 
 <div class="p-4 w-full">

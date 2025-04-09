@@ -18,7 +18,7 @@
               "DATA_FOLDER": "${workspaceFolder}/.debug/data",
               "OIDC_REDIRECT_URL":"http://localhost:5173/api/callback"
           },
-          "envFile": "${workspaceFolder}/api/.env",
+        //   "envFile": "${workspaceFolder}/api/.env",
         //   "preLaunchTask": "ensure-debug-dir",
           "args": [],
           "showLog": true,
