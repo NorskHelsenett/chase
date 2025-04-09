@@ -110,6 +110,18 @@ export const serverStoreActions = {
       if (!response.ok) throw new Error('Failed to fetch servers');
       
       const servers = await response.json();
+
+      //foreach servers load all ping results and security reports
+      await Promise.all(servers.map(async server => {
+        // Load ping results
+        const pingResults = await this.loadServerPings(server.ID);
+        const securityReport = await this.loadServerSecurityReport(server.ID);
+
+        server.ping_results = pingResults;
+        server.security = securityReport;
+
+        console.log('Loaded ping results and security report for server:', server.ID);
+      }));
       
       serverStore.update(state => ({
         ...state,
@@ -133,7 +145,7 @@ export const serverStoreActions = {
   // Load ping results for a specific server
   async loadServerPings(serverId) {
     try {
-      const response = await fetch(`/api/servers/${serverId}/results`);
+      const response = await fetch(`/api/servers/${serverId}/pings`);
       if (!response.ok) throw new Error(`Failed to fetch ping results for server ${serverId}`);
       
       const pingResults = await response.json();

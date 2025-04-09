@@ -97,7 +97,7 @@ func setupRoutes(r *gin.Engine) {
 			api.GET("/servers/:id", servers.GetServer)
 			api.DELETE("/servers/:id", servers.DeleteServer)
 			api.GET("/servers/:id/report", security.LastSecurityScanHandler)
-			api.GET("/servers/:id/results", servers.GetServerResults)
+			api.GET("/servers/:id/pings", servers.GetServerResults)
 			api.POST("/servers/:id/force-check", servers.ForceCheckServer)
 
 			api.POST("/batch/start", security.StartBatchHandler)
@@ -132,7 +132,7 @@ func main() {
 	}
 
 	db = database.GetDB()
-  servers.AutoMigrate(db)
+	servers.AutoMigrate(db)
 	db.AutoMigrate(&security.BatchJobStore{}, &security.BatchResultStore{})
 	security.InitDatabase()
 	security.SetMaxParallelScreenshots(2)
