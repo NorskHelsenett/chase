@@ -141,7 +141,7 @@ export const serverStoreActions = {
       // Update the specific server with new ping results
       serverStore.update(state => {
         const updatedServers = state.servers.map(server => {
-          if (server.id === serverId) {
+          if (server.ID === serverId) {
             return { ...server, ping_results: pingResults };
           }
           return server;
@@ -157,6 +157,45 @@ export const serverStoreActions = {
     } catch (error) {
       console.error(`Failed to fetch ping results for server ${serverId}:`, error);
       return [];
+    }
+  },
+  
+  // Load security report for a specific server
+  async loadServerSecurityReport(serverId) {
+    try {
+      const response = await fetch(`/api/servers/${serverId}/report`);
+      if (!response.ok) throw new Error(`Failed to fetch security report for server ${serverId}`);
+      
+      const securityReport = await response.json();
+      
+      // Extract only the data needed for the view
+      const securityData = {
+        headerRisk: securityReport.headers?.score || '',
+        certRisk: securityReport.certificate?.grade || '',
+        adminRisk: securityReport.adminPages?.risk || '',
+        apiRisk: securityReport.swagger?.risk || '',
+        scanTimestamp: securityReport.scanTimestamp || ''
+      };
+      
+      // Update the specific server with security data
+      serverStore.update(state => {
+        const updatedServers = state.servers.map(server => {
+          if (server.ID === serverId) {
+            return { ...server, security: securityData };
+          }
+          return server;
+        });
+        
+        return {
+          ...state,
+          servers: updatedServers
+        };
+      });
+      
+      return securityData;
+    } catch (error) {
+      console.error(`Failed to fetch security report for server ${serverId}:`, error);
+      return null;
     }
   },
 
@@ -207,7 +246,7 @@ export const serverStoreActions = {
       // Update the server in the store
       serverStore.update(state => {
         const updatedServers = state.servers.map(server => {
-          if (server.id === serverId) {
+          if (server.ID === serverId) {
             return updatedServer;
           }
           return server;
@@ -239,7 +278,7 @@ export const serverStoreActions = {
       // Remove the server from the store
       serverStore.update(state => ({
         ...state,
-        servers: state.servers.filter(server => server.id !== serverId),
+        servers: state.servers.filter(server => server.ID !== serverId),
         lastUpdated: new Date()
       }));
       

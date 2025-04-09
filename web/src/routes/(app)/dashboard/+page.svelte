@@ -45,10 +45,24 @@
     if ($servers && $servers.length > 0) {
       // Process in batches to avoid overwhelming the server
       const batchSize = 3;
+      
+      // First load ping results for all servers
       for (let i = 0; i < $servers.length; i += batchSize) {
         const batch = $servers.slice(i, i + batchSize);
         await Promise.all(batch.map(server => 
           serverStoreActions.loadServerPings(server.ID)
+        ));
+        // Small delay between batches
+        if (i + batchSize < $servers.length) {
+          await new Promise(r => setTimeout(r, 300));
+        }
+      }
+      
+      // Then load security reports for all servers
+      for (let i = 0; i < $servers.length; i += batchSize) {
+        const batch = $servers.slice(i, i + batchSize);
+        await Promise.all(batch.map(server => 
+          serverStoreActions.loadServerSecurityReport(server.ID)
         ));
         // Small delay between batches
         if (i + batchSize < $servers.length) {
