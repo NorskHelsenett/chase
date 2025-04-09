@@ -19,7 +19,7 @@
 
   function getScreenshotUrl(url: string) {
     const cleanUrl = url.replace(/^(https?:\/\/)/, '').replace(/\/$/, '');
-    return `/api/screenshot/${cleanUrl}`;
+    return `/api/screenshot/${cleanUrl}?cached=true`;
   }
 
   function openModal(index: number) {
