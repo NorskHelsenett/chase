@@ -96,82 +96,42 @@ func GetServersWithSecurityStatus(c *gin.Context) {
 	}
 
 	// For each server, get only the latest 20 ping result
-	// Batch-fetch ping results for all servers
-	serverIDs := make([]uint, len(servers))
-	for i, server := range servers {
-		serverIDs[i] = server.ID
-	}
-
-	var allPingResults []PingResult
-	if err := db.Where("server_id IN ?", serverIDs).
-		Order("timestamp DESC").
-		Limit(20).
-		Find(&allPingResults).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch ping results"})
-		return
-	}
-
-	// Map ping results to servers
-	pingResultsMap := make(map[uint][]PingResult)
-	for _, ping := range allPingResults {
-		pingResultsMap[ping.ServerID] = append(pingResultsMap[ping.ServerID], ping)
-	}
-
 	for i := range servers {
-		servers[i].PingResults = pingResultsMap[servers[i].ID]
-	}
-
-	// Batch-fetch security reports for all servers
-	serverURLs := make([]string, len(servers))
-	for i, server := range servers {
-		serverURLs[i] = strings.TrimPrefix(strings.TrimPrefix(server.URL, "https://"), "http://")
-	}
-
-	var allSecurityReports []struct {
-		ServerURL   string    `json:"server_url"`
-		RiskLevel   string    `json:"risk_level"`
-		Description string    `json:"description"`
-		CreatedAt   time.Time `json:"created_at"`
-		ReportData  []byte    `json:"report_data"`
-	}
-	if err := db.Table("security_report_records").
-		Where("server_url IN ?", serverURLs).
-		Order("created_at DESC").
-		Find(&allSecurityReports).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch security reports"})
-		return
-	}
-
-	// Map security reports to servers
-	securityReportsMap := make(map[string]struct {
-		RiskLevel   string
-		Description string
-		CreatedAt   time.Time
-		ReportData  []byte
-	})
-	for _, report := range allSecurityReports {
-		securityReportsMap[report.ServerURL] = struct {
-			RiskLevel   string
-			Description string
-			CreatedAt   time.Time
-			ReportData  []byte
-		}{
-			RiskLevel:   report.RiskLevel,
-			Description: report.Description,
-			CreatedAt:   report.CreatedAt,
-			ReportData:  report.ReportData,
+		var latestPings []PingResult
+		if err := db.Where("server_id = ?", servers[i].ID).
+			Order("timestamp DESC").
+			Limit(10).
+			Find(&latestPings).Error; err == nil {
+			servers[i].PingResults = latestPings
+		} else {
+			// If no ping results, initialize empty array
+			servers[i].PingResults = []PingResult{}
 		}
 	}
 
+	// add security report status, but only include the score and/or risk
 	for i := range servers {
+		var securityReport struct {
+			ID          uint      `json:"id"`
+			RiskLevel   string    `json:"risk_level"`
+			Description string    `json:"description"`
+			CreatedAt   time.Time `json:"created_at"`
+			ReportData  []byte    `json:"report_data"`
+		}
+
+		// Query the security report record for the server's URL
 		serverURL := strings.TrimPrefix(strings.TrimPrefix(servers[i].URL, "https://"), "http://")
-		if report, exists := securityReportsMap[serverURL]; exists {
-			servers[i].SecurityRiskLevel = report.RiskLevel
-			servers[i].SecurityDescription = report.Description
-			servers[i].SecurityScanTime = report.CreatedAt
+		if err := db.Table("security_report_records").
+			Where("server_url = ?", serverURL).
+			Order("created_at DESC").
+			First(&securityReport).Error; err == nil {
+			// Add security report metadata to server
+			servers[i].SecurityRiskLevel = securityReport.RiskLevel
+			servers[i].SecurityDescription = securityReport.Description
+			servers[i].SecurityScanTime = securityReport.CreatedAt
 
 			// Extract additional security details from report data if available
-			if len(report.ReportData) > 0 {
+			if len(securityReport.ReportData) > 0 {
 				var fullReport struct {
 					Headers struct {
 						Score string `json:"score"`
@@ -189,7 +149,7 @@ func GetServersWithSecurityStatus(c *gin.Context) {
 					} `json:"swagger"`
 				}
 
-				if err := json.Unmarshal(report.ReportData, &fullReport); err == nil {
+				if err := json.Unmarshal(securityReport.ReportData, &fullReport); err == nil {
 					// Populate additional security details
 					servers[i].HeaderScore = fullReport.Headers.Score
 					servers[i].CertScore = fullReport.Certificate.Grade
