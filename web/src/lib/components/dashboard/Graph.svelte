@@ -81,10 +81,10 @@ onMount(async () => {
         font: { size: 14, color: '#ffffff' }
       },
       site: {
-        color: { background: 'rgba(50, 50, 50, 0.8)', border: '#666666' }, // Dark gray matching site theme
+        color: { background: 'rgba(34, 197, 93, 0.6)', border: '#22C55D' }, // Green color from the theme
         shape: 'dot',
         size: 16,
-        font: { size: 14, color: '#e6e6e6' }
+        font: { size: 14, color: '#ffffff' }
       },
       error: {
         color: { background: 'rgba(255, 76, 76, 0.7)', border: '#ff4c4c' }, // Using alert color from CSS
