@@ -4,7 +4,6 @@
   import { goto } from '$app/navigation';
 
   export let sites: Server[] = [];
-  export let visibleServerIds = new Set<string>(); // Bind to parent component
 
   let sortField: keyof Server | 'status' | 'header' | 'cert' | 'adminRisk' | 'apiRisk' | 'uptime' | null = null;
   let sortDirection: 'asc' | 'desc' = 'asc';
