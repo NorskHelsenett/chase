@@ -174,6 +174,10 @@ onMount(async () => {
 
 <div bind:this={container} class="w-full h-[80vh] rounded bg-transparent"></div>
 <style>
+:global(.vis-network:focus) {
+  outline: none;
+  border: none;
+}
 :global(.vis-network) {
   width: 100% !important;
   height: 100% !important;
