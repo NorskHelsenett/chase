@@ -51,50 +51,51 @@ onMount(async () => {
         face: 'Helvetica',
         multi: true,
         bold: {
-          color: '#22C55D',
+          color: '#ff9d4f', // Matches primary orange theme
           size: 14,
           face: 'Helvetica'
-        }
+        },
+        color: '#e6e6e6' // Light text for dark background
       },
       borderWidth: 2,
       color: {
-        border: '#2B7CE9',
-        background: 'rgba(210, 229, 255, 0.2)',
+        border: '#e65c00', // Using the gradient color from CSS
+        background: 'rgba(38, 38, 38, 0.7)', // Darker background matching site theme
         highlight: {
-          border: '#2B7CE9',
-          background: '#D2E5FF'
+          border: '#ff8c38', // Brighter version of primary
+          background: '#404040' // Slightly lighter than background
         },
       }
     },
     groups: {
       domain: {
-        color: { background: 'rgba(151, 194, 252, 0.9)', border: '#2B7CE9' },
+        color: { background: 'rgba(230, 92, 0, 0.8)', border: '#ff7b1f' }, // Orange based on site theme
         shape: 'diamond',
         size: 24,
-        font: { size: 16, color: '#22C55D' }
+        font: { size: 16, color: '#ffffff' }
       },
       subdomain: {
-        color: { background: 'rgba(255, 215, 0, 0.7)', border: '#FFD700' },
+        color: { background: 'rgba(255, 158, 79, 0.7)', border: '#e65c00' }, // Lighter orange
         shape: 'dot',
         size: 18,
-        font: { size: 14, color: '#22C55D' }
+        font: { size: 14, color: '#ffffff' }
       },
       site: {
-        color: { background: 'rgba(210, 229, 255, 0.7)', border: '#2B7CE9' },
+        color: { background: 'rgba(50, 50, 50, 0.8)', border: '#666666' }, // Dark gray matching site theme
         shape: 'dot',
         size: 16,
-        font: { size: 14, color: '#22C55D' }
+        font: { size: 14, color: '#e6e6e6' }
       },
       error: {
-        color: { background: 'rgba(255, 153, 153, 0.7)', border: '#CC3333' },
+        color: { background: 'rgba(255, 76, 76, 0.7)', border: '#ff4c4c' }, // Using alert color from CSS
         shape: 'triangle',
         size: 16,
-        font: { size: 14, color: '#22C55D' }
+        font: { size: 14, color: '#ffffff' }
       }
     },
     edges: {
       width: 1.5,
-      color: { color: 'rgba(120, 120, 120, 0.7)' },
+      color: { color: 'rgba(100, 100, 100, 0.7)' }, // Slightly darker for better contrast
       smooth: {
         type: 'continuous',
         forceDirection: 'none',
@@ -102,11 +103,13 @@ onMount(async () => {
       },
       shadow: {
         enabled: true,
-        color: 'rgba(0,0,0,0.2)',
+        color: 'rgba(230, 92, 0, 0.2)', // Slight orange tint matching primary color
         size: 3,
         x: 1,
         y: 1
-      }
+      },
+      hoverWidth: 2, // Slightly wider on hover
+      selectionWidth: 2.5 // Wider when selected
     },
     physics: {
       enabled: true,
@@ -196,11 +199,11 @@ onMount(async () => {
   white-space: nowrap;
   font-family: 'Helvetica', sans-serif;
   font-size: 14px;
-  color: #333;
-  background-color: rgba(255, 255, 255, 0.9);
+  color: #e6e6e6;
+  background-color: rgba(32, 32, 32, 0.95);
   border-radius: 8px;
-  border: 1px solid rgba(200, 200, 200, 0.8);
-  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+  border: 1px solid rgba(77, 76, 76, 0.5);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
   z-index: 10000;
   pointer-events: none;
   max-width: 300px;
@@ -215,5 +218,6 @@ onMount(async () => {
   margin-bottom: 4px;
   display: block;
   font-weight: bold;
+  color: #ff9d4f; /* Match primary orange theme */
 }
 </style>
