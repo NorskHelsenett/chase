@@ -81,8 +81,8 @@
   </span>
 </td>
 
-<td class="text-white min-w-[300px]">
-  <div class="whitespace-nowrap overflow-hidden text-ellipsis">
+<td class="text-white min-w-[300px] max-w-[300px]">
+  <div class="whitespace-nowrap overflow-hidden text-ellipsis w-full max-w-full">
     {rowData.title}
   </div>
 </td>
