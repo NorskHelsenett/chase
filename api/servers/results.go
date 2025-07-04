@@ -105,6 +105,7 @@ func GetServersWithSecurityStatus(c *gin.Context) {
 	var allPingResults []PingResult
 	if err := db.Where("server_id IN ?", serverIDs).
 		Order("timestamp DESC").
+		Limit(20).
 		Find(&allPingResults).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch ping results"})
 		return
