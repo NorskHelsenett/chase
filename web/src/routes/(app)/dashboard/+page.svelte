@@ -1,6 +1,6 @@
 <script lang="ts">
   import { page } from '$app/stores';
-  import { onMount } from 'svelte';
+  import { onDestroy, onMount } from 'svelte';
   import MonitorStats from "$lib/components/dashboard/MonitorStats.svelte";
   import MonitorControls from "$lib/components/dashboard/MonitorControls.svelte";
   import MonitorTable from "$lib/components/dashboard/MonitorTable.svelte";
@@ -12,6 +12,12 @@
   let searchQuery = '';
   let visibleServerIds = new Set<string>();
   let observer: IntersectionObserver;
+
+  onDestroy(() => {
+    if (observer) {
+      observer.disconnect();
+    }
+  });
 
   // Subscribe to page store to get URL parameters
   $: activeFilter = $page.url.searchParams.get('active');
