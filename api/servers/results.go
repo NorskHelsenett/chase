@@ -95,14 +95,14 @@ func GetServersWithSecurityStatus(c *gin.Context) {
 		return
 	}
 
-	// For each server, get only the latest ping result
+	// For each server, get only the latest 20 ping result
 	for i := range servers {
-		var latestPing PingResult
+		var latestPings []PingResult
 		if err := db.Where("server_id = ?", servers[i].ID).
 			Order("timestamp DESC").
 			Limit(20).
-			First(&latestPing).Error; err == nil {
-			servers[i].PingResults = []PingResult{latestPing}
+			Find(&latestPings).Error; err == nil {
+			servers[i].PingResults = latestPings
 		} else {
 			// If no ping results, initialize empty array
 			servers[i].PingResults = []PingResult{}
