@@ -10,6 +10,8 @@
 
   let filteredServers: Server[] = [];
   let searchQuery = '';
+  let visibleServerIds = new Set<string>();
+  let observer: IntersectionObserver;
   
   // Subscribe to page store to get URL parameters
   $: activeFilter = $page.url.searchParams.get('active');
@@ -28,6 +30,11 @@
   // Subscribe to the filtered store
   $: filteredServers = $filteredStore;
 
+  // Update visible servers when the filtered list changes
+  $: if (filteredServers) {
+    updateVisibleServers();
+  }
+
   async function fetchServers(forceRefresh = false) {
     await serverStoreActions.loadServers(activeFilter, forceRefresh);
   }
@@ -40,36 +47,56 @@
     fetchServers(true); // Force refresh from server
   }
 
-  // Load individual server details in the background
-  async function loadServerDetails() {
-    if ($servers && $servers.length > 0) {
-      // Process in batches to avoid overwhelming the server
-      const batchSize = 3;
-      
-      // First load ping results for all servers
-      for (let i = 0; i < $servers.length; i += batchSize) {
-        const batch = $servers.slice(i, i + batchSize);
-        await Promise.all(batch.map(server => 
-          serverStoreActions.loadServerPings(server.ID)
-        ));
-        // Small delay between batches
-        if (i + batchSize < $servers.length) {
-          await new Promise(r => setTimeout(r, 300));
-        }
-      }
-      
-      // Then load security reports for all servers
-      for (let i = 0; i < $servers.length; i += batchSize) {
-        const batch = $servers.slice(i, i + batchSize);
-        await Promise.all(batch.map(server => 
-          serverStoreActions.loadServerSecurityReport(server.ID)
-        ));
-        // Small delay between batches
-        if (i + batchSize < $servers.length) {
-          await new Promise(r => setTimeout(r, 300));
-        }
-      }
+  // Set up the intersection observer to detect which servers are in view
+  function setupObserver() {
+    if (typeof IntersectionObserver === 'undefined') {
+      // Fallback for browsers that don't support IntersectionObserver
+      console.warn('IntersectionObserver not supported, loading all server details');
+      return;
     }
+
+    observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach(entry => {
+          const id = entry.target.getAttribute('data-server-id');
+          if (id) {
+            if (entry.isIntersecting) {
+              visibleServerIds.add(id);
+              loadServerDetail(id);
+            } else {
+              visibleServerIds.delete(id);
+            }
+          }
+        });
+      },
+      { rootMargin: '100px 0px' }
+    );
+  }
+
+  // Load only security data for visible servers - ping data is already provided by the API
+  async function loadServerDetail(serverId: string) {
+    const server = $servers.find(s => s.ID === serverId);
+    if (!server) return;
+
+    // Only fetch security data if it hasn't been loaded yet
+    if (!server.security) {
+      await serverStoreActions.loadServerSecurityReport(serverId);
+    }
+  }
+
+  // Update which servers are considered "visible" and observed
+  function updateVisibleServers() {
+    if (!observer) return;
+    
+    // Disconnect any previous observations
+    observer.disconnect();
+    
+    // Start observing all server rows
+    setTimeout(() => {
+      document.querySelectorAll('[data-server-id]').forEach(element => {
+        observer.observe(element);
+      });
+    }, 100);
   }
 
   // Watch for changes in activeFilter and refetch data
@@ -78,11 +105,14 @@
   }
 
   onMount(async () => {
-    // Initial fetch from cache or API
+    // Set up the intersection observer
+    setupObserver();
+    
+    // Initial fetch from cache or API (server data with ping_results included)
     await fetchServers();
     
-    // Load detailed data in the background
-    loadServerDetails();
+    // After rendering, start observing which servers are visible
+    updateVisibleServers();
   });
 </script>
 
@@ -99,6 +129,6 @@
       <div class="animate-pulse text-gray-500">Loading server data...</div>
     </div>
   {:else}
-    <MonitorTable sites={filteredServers}/>
+    <MonitorTable sites={filteredServers} bind:visibleServerIds/>
   {/if}
 </div>

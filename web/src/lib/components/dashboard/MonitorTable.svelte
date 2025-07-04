@@ -2,8 +2,12 @@
   import MonitorRow from './MonitorRow.svelte';
   import type { Server } from '$lib/models';
   import { goto } from '$app/navigation';
+  import { createEventDispatcher } from 'svelte';
+
+  const dispatch = createEventDispatcher();
 
   export let sites: Server[] = [];
+  export let visibleServerIds = new Set<string>(); // Bind to parent component
 
   let sortField: keyof Server | 'status' | 'header' | 'cert' | 'adminRisk' | 'apiRisk' | 'uptime' | null = null;
   let sortDirection: 'asc' | 'desc' = 'asc';
@@ -188,10 +192,15 @@ function getLatestRisk(server: Server, type: 'adminrisk' | 'apirisk'): string {
     </thead>
     <tbody>
       {#if sites.length === 0}
-        <!-- Loading skeleton unchanged -->
+        <tr>
+          <td colspan="7" class="text-center py-8 text-gray-500">
+            No servers found
+          </td>
+        </tr>
       {:else}
         {#each sites as site}
           <tr
+            data-server-id={site.ID}
             class="group transition-colors duration-200 ease-in-out hover:bg-[#2b2b2b] cursor-pointer rounded-lg"
             on:click={() => goto(`/server/${site.ID}`)}
           >
