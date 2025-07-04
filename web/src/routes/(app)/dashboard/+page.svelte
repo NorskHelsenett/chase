@@ -1,23 +1,15 @@
 <script lang="ts">
   import { page } from '$app/stores';
-  import { onDestroy, onMount } from 'svelte';
+  import { derived } from 'svelte/store';
+  import { onMount } from 'svelte';
   import MonitorStats from "$lib/components/dashboard/MonitorStats.svelte";
   import MonitorControls from "$lib/components/dashboard/MonitorControls.svelte";
   import MonitorTable from "$lib/components/dashboard/MonitorTable.svelte";
   import { servers, isLoading, serverStats, serverStoreActions } from '$lib/stores/serverStore';
   import type { Server } from '$lib/models';
-  import { derived } from 'svelte/store';
 
   let filteredServers: Server[] = [];
   let searchQuery = '';
-  let visibleServerIds = new Set<string>();
-  let observer: IntersectionObserver;
-
-  onDestroy(() => {
-    if (observer) {
-      observer.disconnect();
-    }
-  });
 
   // Subscribe to page store to get URL parameters
   $: activeFilter = $page.url.searchParams.get('active');
@@ -36,11 +28,6 @@
   // Subscribe to the filtered store
   $: filteredServers = $filteredStore;
 
-  // Update visible servers when the filtered list changes
-  $: if (filteredServers) {
-    updateVisibleServers();
-  }
-
   async function fetchServers(forceRefresh = false) {
     await serverStoreActions.loadServers(activeFilter, forceRefresh);
   }
@@ -53,68 +40,14 @@
     fetchServers(true); // Force refresh from server
   }
 
-  // Set up the intersection observer to detect which servers are in view
-  function setupObserver() {
-    if (typeof IntersectionObserver === 'undefined') {
-      // Fallback for browsers that don't support IntersectionObserver
-      console.warn('IntersectionObserver not supported, loading all server details');
-      return;
-    }
-
-    observer = new IntersectionObserver(
-      (entries) => {
-        entries.forEach(entry => {
-          const id = entry.target.getAttribute('data-server-id');
-          if (id) {
-            if (entry.isIntersecting) {
-              visibleServerIds.add(id);
-              // Security data now comes from server endpoint, no need to load separately
-            } else {
-              visibleServerIds.delete(id);
-            }
-          }
-        });
-      },
-      { rootMargin: '100px 0px' }
-    );
-  }
-
-  // This function is no longer needed as security data comes with the server data
-  async function loadServerDetail(serverId: string) {
-    // No longer need to load security data separately
-    // Security data is now included in the main server response
-    return;
-  }
-
-  // Update which servers are considered "visible" and observed
-  function updateVisibleServers() {
-    if (!observer) return;
-
-    // Disconnect any previous observations
-    observer.disconnect();
-
-    // Start observing all server rows
-    setTimeout(() => {
-      document.querySelectorAll('[data-server-id]').forEach(element => {
-        observer.observe(element);
-      });
-    }, 100);
-  }
-
   // Watch for changes in activeFilter and refetch data
   $: if (activeFilter !== undefined) {
     fetchServers();
   }
 
   onMount(async () => {
-    // Set up the intersection observer
-    setupObserver();
-
     // Initial fetch from cache or API (server data with ping_results included)
     await fetchServers();
-
-    // After rendering, start observing which servers are visible
-    updateVisibleServers();
   });
 </script>
 
@@ -131,6 +64,6 @@
       <div class="animate-pulse text-gray-500">Loading server data...</div>
     </div>
   {:else}
-    <MonitorTable sites={filteredServers} bind:visibleServerIds/>
+    <MonitorTable sites={filteredServers}/>
   {/if}
 </div>
