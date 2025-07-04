@@ -1,8 +1,10 @@
 package servers
 
 import (
+	"encoding/json"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -93,17 +95,107 @@ func GetServersWithSecurityStatus(c *gin.Context) {
 		return
 	}
 
-	// For each server, get only the latest ping result
+	// For each server, get only the latest 20 ping result
+	// Batch-fetch ping results for all servers
+	serverIDs := make([]uint, len(servers))
+	for i, server := range servers {
+		serverIDs[i] = server.ID
+	}
+
+	var allPingResults []PingResult
+	if err := db.Where("server_id IN ?", serverIDs).
+		Order("timestamp DESC").
+		Find(&allPingResults).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch ping results"})
+		return
+	}
+
+	// Map ping results to servers
+	pingResultsMap := make(map[uint][]PingResult)
+	for _, ping := range allPingResults {
+		pingResultsMap[ping.ServerID] = append(pingResultsMap[ping.ServerID], ping)
+	}
+
 	for i := range servers {
-		var latestPing PingResult
-		if err := db.Where("server_id = ?", servers[i].ID).
-			Order("timestamp DESC").
-			Limit(1).
-			First(&latestPing).Error; err == nil {
-			servers[i].PingResults = []PingResult{latestPing}
-		} else {
-			// If no ping results, initialize empty array
-			servers[i].PingResults = []PingResult{}
+		servers[i].PingResults = pingResultsMap[servers[i].ID]
+	}
+
+	// Batch-fetch security reports for all servers
+	serverURLs := make([]string, len(servers))
+	for i, server := range servers {
+		serverURLs[i] = strings.TrimPrefix(strings.TrimPrefix(server.URL, "https://"), "http://")
+	}
+
+	var allSecurityReports []struct {
+		ServerURL   string    `json:"server_url"`
+		RiskLevel   string    `json:"risk_level"`
+		Description string    `json:"description"`
+		CreatedAt   time.Time `json:"created_at"`
+		ReportData  []byte    `json:"report_data"`
+	}
+	if err := db.Table("security_report_records").
+		Where("server_url IN ?", serverURLs).
+		Order("created_at DESC").
+		Find(&allSecurityReports).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch security reports"})
+		return
+	}
+
+	// Map security reports to servers
+	securityReportsMap := make(map[string]struct {
+		RiskLevel   string
+		Description string
+		CreatedAt   time.Time
+		ReportData  []byte
+	})
+	for _, report := range allSecurityReports {
+		securityReportsMap[report.ServerURL] = struct {
+			RiskLevel   string
+			Description string
+			CreatedAt   time.Time
+			ReportData  []byte
+		}{
+			RiskLevel:   report.RiskLevel,
+			Description: report.Description,
+			CreatedAt:   report.CreatedAt,
+			ReportData:  report.ReportData,
+		}
+	}
+
+	for i := range servers {
+		serverURL := strings.TrimPrefix(strings.TrimPrefix(servers[i].URL, "https://"), "http://")
+		if report, exists := securityReportsMap[serverURL]; exists {
+			servers[i].SecurityRiskLevel = report.RiskLevel
+			servers[i].SecurityDescription = report.Description
+			servers[i].SecurityScanTime = report.CreatedAt
+
+			// Extract additional security details from report data if available
+			if len(report.ReportData) > 0 {
+				var fullReport struct {
+					Headers struct {
+						Score string `json:"score"`
+						Risk  string `json:"risk"`
+					} `json:"headers"`
+					Certificate struct {
+						Grade string `json:"grade"`
+						Risk  string `json:"risk"`
+					} `json:"certificate"`
+					AdminPages struct {
+						Risk string `json:"risk"`
+					} `json:"adminPages"`
+					Swagger struct {
+						Risk string `json:"risk"`
+					} `json:"swagger"`
+				}
+
+				if err := json.Unmarshal(report.ReportData, &fullReport); err == nil {
+					// Populate additional security details
+					servers[i].HeaderScore = fullReport.Headers.Score
+					servers[i].CertScore = fullReport.Certificate.Grade
+					servers[i].AdminRisk = string(fullReport.AdminPages.Risk)
+					servers[i].APIRisk = string(fullReport.Swagger.Risk)
+				}
+			}
 		}
 	}
 

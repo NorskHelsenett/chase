@@ -1,30 +1,30 @@
 <script lang="ts">
   import { page } from '$app/stores';
+  import { derived } from 'svelte/store';
   import { onMount } from 'svelte';
   import MonitorStats from "$lib/components/dashboard/MonitorStats.svelte";
   import MonitorControls from "$lib/components/dashboard/MonitorControls.svelte";
   import MonitorTable from "$lib/components/dashboard/MonitorTable.svelte";
   import { servers, isLoading, serverStats, serverStoreActions } from '$lib/stores/serverStore';
   import type { Server } from '$lib/models';
-  import { derived } from 'svelte/store';
 
   let filteredServers: Server[] = [];
   let searchQuery = '';
-  
+
   // Subscribe to page store to get URL parameters
   $: activeFilter = $page.url.searchParams.get('active');
-  
+
   // Create a derived store that filters servers based on search query
   $: filteredStore = derived(servers, $servers => {
     if (!searchQuery) return $servers;
-    
+
     const query = searchQuery.toLowerCase();
     return $servers.filter(server =>
       server.url.toLowerCase().includes(query) ||
       server.comment?.toLowerCase().includes(query)
     );
   });
-  
+
   // Subscribe to the filtered store
   $: filteredServers = $filteredStore;
 
@@ -40,49 +40,14 @@
     fetchServers(true); // Force refresh from server
   }
 
-  // Load individual server details in the background
-  async function loadServerDetails() {
-    if ($servers && $servers.length > 0) {
-      // Process in batches to avoid overwhelming the server
-      const batchSize = 3;
-      
-      // First load ping results for all servers
-      for (let i = 0; i < $servers.length; i += batchSize) {
-        const batch = $servers.slice(i, i + batchSize);
-        await Promise.all(batch.map(server => 
-          serverStoreActions.loadServerPings(server.ID)
-        ));
-        // Small delay between batches
-        if (i + batchSize < $servers.length) {
-          await new Promise(r => setTimeout(r, 300));
-        }
-      }
-      
-      // Then load security reports for all servers
-      for (let i = 0; i < $servers.length; i += batchSize) {
-        const batch = $servers.slice(i, i + batchSize);
-        await Promise.all(batch.map(server => 
-          serverStoreActions.loadServerSecurityReport(server.ID)
-        ));
-        // Small delay between batches
-        if (i + batchSize < $servers.length) {
-          await new Promise(r => setTimeout(r, 300));
-        }
-      }
-    }
-  }
-
   // Watch for changes in activeFilter and refetch data
   $: if (activeFilter !== undefined) {
     fetchServers();
   }
 
   onMount(async () => {
-    // Initial fetch from cache or API
+    // Initial fetch from cache or API (server data with ping_results included)
     await fetchServers();
-    
-    // Load detailed data in the background
-    loadServerDetails();
   });
 </script>
 

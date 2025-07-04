@@ -15,9 +15,17 @@ export interface Server extends BaseModel {
   expected_status: number;
   comment: string;
   ping_results: PingResult[];
-  security: SecurityReport;
+  security?: SecurityReport; // Make optional for backward compatibility
   update_interval: number;
-  certificate: Certificate;
+  certificate?: Certificate;
+  // New fields from server endpoint
+  security_risk_level?: string;
+  security_description?: string;
+  security_scan_time?: string;
+  header_score?: string;
+  cert_score?: string;
+  admin_risk?: string;
+  api_risk?: string;
 }
 
 interface Finding {

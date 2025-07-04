@@ -25,10 +25,11 @@
     return {
       status: !sortedPings.length || sortedPings[0]?.error || sortedPings[0]?.status_code >= 400 ? 'down' : 'up',
       title: server.url,
-      headerScore: server.security?.headerRisk || '',
-      certScore: server.security?.certRisk || '',
-      adminRisk: server.security?.adminRisk || '',
-      apiRisk: server.security?.apiRisk || '',
+      // Prefer new fields from the server endpoint, fall back to security object if not available
+      headerScore: server.header_score || server.security?.headerRisk || '',
+      certScore: server.cert_score || server.security?.certRisk || '',
+      adminRisk: server.admin_risk?.toLowerCase() || server.security?.adminRisk || '',
+      apiRisk: server.api_risk?.toLowerCase() || server.security?.apiRisk || '',
       uptime: (server.ping_results || [])
         .slice(0, 10)
         .reverse()

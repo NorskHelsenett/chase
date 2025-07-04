@@ -16,7 +16,7 @@ func InitDatabase() error {
 	dataFolder := utils.GetEnv("DATA_FOLDER", "/data")
 
 	var err error
-	db, err = gorm.Open(sqlite.Open(filepath.Join(dataFolder, "fit.db?_loc=Local")), &gorm.Config{})
+	db, err = gorm.Open(sqlite.Open(filepath.Join(dataFolder, "chase.db?_loc=Local")), &gorm.Config{})
 	if err != nil {
 		return fmt.Errorf("failed to connect database: %v", err)
 	}

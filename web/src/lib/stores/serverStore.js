@@ -2,8 +2,8 @@ import { writable, derived } from 'svelte/store';
 import { browser } from '$app/environment';
 
 // Initialize store with cached data from localStorage if available
-const initialData = browser && localStorage.getItem('cachedServers') 
-  ? JSON.parse(localStorage.getItem('cachedServers')) 
+const initialData = browser && localStorage.getItem('cachedServers')
+  ? JSON.parse(localStorage.getItem('cachedServers'))
   : [];
 
 // Main server data store
@@ -30,26 +30,36 @@ export const serverStats = derived(serverStore, ($store) => {
       } else {
         acc.down += 1;
       }
-
-      // Safely check for TLS validity if the field exists
-      if (latestPing.tls_valid === false) {
+      
+      // Count security risks based on new fields
+      if (server.security_risk_level === 'CRITICAL') {
         acc.criticalRisks += 1;
+      } else if (server.security_risk_level === 'HIGH') {
+        acc.highRisks += 1;
       }
 
-      // Only check cert_expiry_date if it exists
-      if (latestPing.cert_expiry_date) {
-        try {
-          const certExpiryDate = new Date(latestPing.cert_expiry_date);
-          const daysUntilExpiry = Math.floor(
-            (certExpiryDate.getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24)
-          );
+      // Fallback to old logic if new fields aren't available
+      if (!server.security_risk_level) {
+        // Safely check for TLS validity if the field exists
+        if (latestPing.tls_valid === false) {
+          acc.criticalRisks += 1;
+        }
 
-          if (daysUntilExpiry < 30 && daysUntilExpiry > 0) {
-            acc.highRisks += 1;
+        // Only check cert_expiry_date if it exists
+        if (latestPing.cert_expiry_date) {
+          try {
+            const certExpiryDate = new Date(latestPing.cert_expiry_date);
+            const daysUntilExpiry = Math.floor(
+              (certExpiryDate.getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24)
+            );
+
+            if (daysUntilExpiry < 30 && daysUntilExpiry > 0) {
+              acc.highRisks += 1;
+            }
+          } catch (error) {
+            // Ignore invalid dates
+            console.warn("Invalid cert expiry date:", latestPing.cert_expiry_date, error);
           }
-        } catch (e) {
-          // Ignore invalid dates
-          console.warn("Invalid cert expiry date:", latestPing.cert_expiry_date);
         }
       }
     } else {
@@ -71,8 +81,8 @@ serverStore.subscribe(state => {
     try {
       localStorage.setItem('cachedServers', JSON.stringify(state.servers));
       localStorage.setItem('serversLastUpdated', state.lastUpdated ? state.lastUpdated.toISOString() : new Date().toISOString());
-    } catch (e) {
-      console.warn('Failed to save servers to localStorage:', e);
+    } catch (error) {
+      console.warn('Failed to save servers to localStorage:', error);
     }
   }
 });
@@ -87,15 +97,7 @@ export const serverStoreActions = {
       currentState = state;
       return { ...state, isLoading: true, error: null };
     });
-    
-    // Track the original sort order from current state
-    const serverIdOrderMap = {};
-    if (currentState.servers && currentState.servers.length > 0) {
-      currentState.servers.forEach((server, index) => {
-        serverIdOrderMap[server.ID] = index;
-      });
-    }
-    
+
     // If we have cached data and it's recent (less than 5 minutes old) and not forced refresh
     const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
     if (!force && currentState.lastUpdated && new Date(currentState.lastUpdated) > fiveMinutesAgo) {
@@ -106,7 +108,7 @@ export const serverStoreActions = {
       }));
       return currentState.servers;
     }
-    
+
     try {
       // Build URL with query parameters
       const url = new URL('/api/servers', window.location.origin);
@@ -116,34 +118,51 @@ export const serverStoreActions = {
 
       const response = await fetch(url);
       if (!response.ok) throw new Error('Failed to fetch servers');
-      
+
       const servers = await response.json();
 
-      //foreach servers load all ping results and security reports
-      await Promise.all(servers.map(async server => {
-        // Load ping results
-        const pingResults = await this.loadServerPings(server.ID);
-        const securityReport = await this.loadServerSecurityReport(server.ID);
+      // For backwards compatibility, create security objects from the new fields
+      const mergedServers = servers.map(server => {
+        const existingServer = currentState.servers.find(s => s.ID === server.ID);
+        
+        // Create a security object from the new fields in the server response
+        const securityFromFields = {
+          headerRisk: server.header_score || '',
+          certRisk: server.cert_score || '',
+          adminRisk: server.admin_risk?.toLowerCase() || '',
+          apiRisk: server.api_risk?.toLowerCase() || '',
+          scanTimestamp: server.security_scan_time || ''
+        };
+        
+        if (existingServer) {
+          return {
+            ...server,
+            // Use the security data from the new fields, fall back to existing security data
+            security: securityFromFields
+          };
+        }
+        
+        return {
+          ...server,
+          security: securityFromFields
+        };
+      });
 
-        server.ping_results = pingResults;
-        server.security = securityReport;
-      }));
-      
-      // Always sort servers by name in reverse alphabetical order (B comes before A)
-      servers.sort((a, b) => {
+      // Sort servers
+      mergedServers.sort((a, b) => {
         const nameA = a.name || a.url || '';
         const nameB = b.name || b.url || '';
         return nameA.localeCompare(nameB);
       });
-      
+
       serverStore.update(state => ({
         ...state,
-        servers,
+        servers: mergedServers,
         isLoading: false,
         lastUpdated: new Date()
       }));
-      
-      return servers;
+
+      return mergedServers;
     } catch (error) {
       serverStore.update(state => ({
         ...state,
@@ -155,15 +174,30 @@ export const serverStoreActions = {
     }
   },
 
-  // Load ping results for a specific server
-  async loadServerPings(serverId) {
+  // Load more ping results for a specific server if needed (beyond what's in the initial data)
+  async loadMoreServerPings(serverId) {
     try {
+      let currentState;
+      serverStore.subscribe(state => {
+        currentState = state;
+      })();
+
+      const existingServer = currentState.servers.find(s => s.ID === serverId);
+
+      // If we already have some ping results, check if we need more
+      if (existingServer && existingServer.ping_results && existingServer.ping_results.length > 0) {
+        // If we have 10 or more recent pings, don't fetch more
+        if (existingServer.ping_results.length >= 10) {
+          return existingServer.ping_results;
+        }
+      }
+
       const response = await fetch(`/api/servers/${serverId}/pings`);
       if (!response.ok) throw new Error(`Failed to fetch ping results for server ${serverId}`);
-      
+
       const pingResults = await response.json();
-      
-      // Update the specific server with new ping results
+
+      // Update the specific server with full ping results
       serverStore.update(state => {
         const updatedServers = state.servers.map(server => {
           if (server.ID === serverId) {
@@ -171,55 +205,40 @@ export const serverStoreActions = {
           }
           return server;
         });
-        
+
         return {
           ...state,
           servers: updatedServers
         };
       });
-      
+
       return pingResults;
     } catch (error) {
-      console.error(`Failed to fetch ping results for server ${serverId}:`, error);
+      console.error(`Failed to fetch more ping results for server ${serverId}:`, error);
       return [];
     }
   },
-  
-  // Load security report for a specific server
+
+  // Load security report for a specific server - No longer needed as data comes from main server endpoint
   async loadServerSecurityReport(serverId) {
+    // This is now a no-op since we're getting security data directly from the server endpoint
+    // Keep the function for backwards compatibility
     try {
-      const response = await fetch(`/api/servers/${serverId}/report`);
-      if (!response.ok) throw new Error(`Failed to fetch security report for server ${serverId}`);
+      // Get current security data from the server store
+      let currentState;
+      serverStore.subscribe(state => {
+        currentState = state;
+      })();
+
+      const server = currentState.servers.find(s => s.ID === serverId);
+      if (server) {
+        // Security data is already in the server object from the main endpoint
+        return server.security;
+      }
       
-      const securityReport = await response.json();
-      
-      // Extract only the data needed for the view
-      const securityData = {
-        headerRisk: securityReport.headers?.score || '',
-        certRisk: securityReport.certificate?.grade || '',
-        adminRisk: securityReport.adminPages?.risk || '',
-        apiRisk: securityReport.swagger?.risk || '',
-        scanTimestamp: securityReport.scanTimestamp || ''
-      };
-      
-      // Update the specific server with security data
-      serverStore.update(state => {
-        const updatedServers = state.servers.map(server => {
-          if (server.ID === serverId) {
-            return { ...server, security: securityData };
-          }
-          return server;
-        });
-        
-        return {
-          ...state,
-          servers: updatedServers
-        };
-      });
-      
-      return securityData;
+      return null;
     } catch (error) {
-      console.error(`Failed to fetch security report for server ${serverId}:`, error);
+      console.error(`Error accessing security data for server ${serverId}:`, error);
       return null;
     }
   },
@@ -234,18 +253,18 @@ export const serverStoreActions = {
         },
         body: JSON.stringify(serverData)
       });
-      
+
       if (!response.ok) throw new Error('Failed to add server');
-      
+
       const newServer = await response.json();
-      
+
       // Add the new server to the store
       serverStore.update(state => ({
         ...state,
         servers: [...state.servers, newServer],
         lastUpdated: new Date()
       }));
-      
+
       return newServer;
     } catch (error) {
       console.error('Failed to add server:', error);
@@ -263,11 +282,11 @@ export const serverStoreActions = {
         },
         body: JSON.stringify(serverData)
       });
-      
+
       if (!response.ok) throw new Error(`Failed to update server ${serverId}`);
-      
+
       const updatedServer = await response.json();
-      
+
       // Update the server in the store
       serverStore.update(state => {
         const updatedServers = state.servers.map(server => {
@@ -276,14 +295,14 @@ export const serverStoreActions = {
           }
           return server;
         });
-        
+
         return {
           ...state,
           servers: updatedServers,
           lastUpdated: new Date()
         };
       });
-      
+
       return updatedServer;
     } catch (error) {
       console.error(`Failed to update server ${serverId}:`, error);
@@ -297,16 +316,16 @@ export const serverStoreActions = {
       const response = await fetch(`/api/servers/${serverId}`, {
         method: 'DELETE'
       });
-      
+
       if (!response.ok) throw new Error(`Failed to delete server ${serverId}`);
-      
+
       // Remove the server from the store
       serverStore.update(state => ({
         ...state,
         servers: state.servers.filter(server => server.ID !== serverId),
         lastUpdated: new Date()
       }));
-      
+
       return true;
     } catch (error) {
       console.error(`Failed to delete server ${serverId}:`, error);
@@ -320,12 +339,12 @@ export const serverStoreActions = {
       const response = await fetch(`/api/servers/${serverId}/force-check`, {
         method: 'POST'
       });
-      
+
       if (!response.ok) throw new Error(`Failed to force check server ${serverId}`);
-      
-      // Reload the server's ping results
-      await this.loadServerPings(serverId);
-      
+
+      // Refresh the server data
+      await this.loadServers(null, true);
+
       return true;
     } catch (error) {
       console.error(`Failed to force check server ${serverId}:`, error);
@@ -338,9 +357,9 @@ export const serverStoreActions = {
     if (!searchTerm) {
       return serverStore.subscribe(state => state.servers);
     }
-    
+
     const term = searchTerm.toLowerCase();
-    return derived(serverStore, $store => 
+    return derived(serverStore, $store =>
       $store.servers.filter(server =>
         server.url.toLowerCase().includes(term) ||
         (server.comment && server.comment.toLowerCase().includes(term))
@@ -352,8 +371,8 @@ export const serverStoreActions = {
   isLoading() {
     return derived(serverStore, $store => $store.isLoading);
   },
-  
-  // Get error state  
+
+  // Get error state
   getError() {
     return derived(serverStore, $store => $store.error);
   }
