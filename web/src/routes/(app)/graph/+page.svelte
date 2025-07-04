@@ -40,21 +40,49 @@ function buildGraphData(servers: Server[]): { nodes: GraphNode[]; edges: GraphEd
   const nodes: GraphNode[] = [];
   const edges: GraphEdge[] = [];
   const domainMap = new Map();
+  const addedNodeIds = new Set(); // Track which node IDs have been added
+
+  // Helper function to add a node only if it doesn't exist yet
+  const addUniqueNode = (node: GraphNode) => {
+    if (!addedNodeIds.has(node.id)) {
+      nodes.push(node);
+      addedNodeIds.add(node.id);
+      return true;
+    }
+    return false;
+  };
+
   servers.forEach((server, idx) => {
-    const url = new URL(server.url);
-    const domain = url.hostname.split('.').slice(-2).join('.');
-    const subdomain = url.hostname.replace(`.${domain}`, '');
-    if (!domainMap.has(domain)) {
-      nodes.push({ id: domain, label: domain, group: 'domain' });
-      domainMap.set(domain, { subdomains: new Set() });
+    try {
+      // Ensure the URL has a protocol
+      const serverUrl = server.url.startsWith('http') ? server.url : `https://${server.url}`;
+      const url = new URL(serverUrl);
+      const domain = url.hostname.split('.').slice(-2).join('.');
+      const subdomain = url.hostname.replace(`.${domain}`, '');
+
+      // Add domain node if it doesn't exist
+      if (!domainMap.has(domain)) {
+        addUniqueNode({ id: domain, label: domain, group: 'domain' });
+        domainMap.set(domain, { subdomains: new Set() });
+      }
+
+      // Add subdomain node if it doesn't exist
+      if (subdomain && !domainMap.get(domain).subdomains.has(subdomain)) {
+        addUniqueNode({ id: url.hostname, label: url.hostname, group: 'subdomain' });
+        edges.push({ from: domain, to: url.hostname });
+        domainMap.get(domain).subdomains.add(subdomain);
+      }
+
+      // Add site node with unique ID by using server.ID or index as suffix if needed
+      const siteId = `site-${server.ID || idx}-${server.url}`;
+      addUniqueNode({ id: siteId, label: server.url, group: 'site' });
+      edges.push({ from: url.hostname, to: siteId });
+    } catch (error) {
+      console.error(`Error processing server URL: ${server.url}`, error);
+      // Still add the node even if URL parsing failed, just don't create edges
+      const errorId = `error-${server.ID || idx}-${server.url}`;
+      addUniqueNode({ id: errorId, label: server.url, group: 'error' });
     }
-    if (subdomain && !domainMap.get(domain).subdomains.has(subdomain)) {
-      nodes.push({ id: url.hostname, label: url.hostname, group: 'subdomain' });
-      edges.push({ from: domain, to: url.hostname });
-      domainMap.get(domain).subdomains.add(subdomain);
-    }
-    nodes.push({ id: server.url, label: server.url, group: 'site' });
-    edges.push({ from: url.hostname, to: server.url });
   });
   return { nodes, edges };
 }

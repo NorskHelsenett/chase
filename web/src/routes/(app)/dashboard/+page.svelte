@@ -47,7 +47,7 @@
 
   onMount(async () => {
     // Initial fetch from cache or API (server data with ping_results included)
-    await fetchServers();
+    await fetchServers(true);
   });
 </script>
 
