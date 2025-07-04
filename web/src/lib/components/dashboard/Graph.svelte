@@ -88,7 +88,12 @@ onMount(async () => {
       barnesHut: { gravitationalConstant: -30000, springLength: 120, springConstant: 0.04 },
       stabilization: { iterations: 200 }
     },
-    interaction: { hover: true, tooltipDelay: 200 }
+    interaction: {
+      hover: true,
+      tooltipDelay: 200,
+      multiselect: false,
+      navigationButtons: true
+    }
   };
   network = new vis.Network(container, data, options);
 
@@ -119,5 +124,31 @@ onMount(async () => {
 :global(.vis-network) {
   width: 100% !important;
   height: 100% !important;
+}
+
+:global(.vis-tooltip) {
+  position: absolute;
+  visibility: hidden;
+  padding: 8px;
+  white-space: nowrap;
+  font-family: sans-serif;
+  font-size: 14px;
+  color: #000;
+  background-color: #fff;
+  border-radius: 4px;
+  border: 1px solid #ddd;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  z-index: 10000;
+  pointer-events: none;
+}
+
+:global(.tooltip) {
+  padding: 2px;
+}
+
+:global(.tooltip strong) {
+  margin-bottom: 4px;
+  display: block;
+  font-weight: bold;
 }
 </style>

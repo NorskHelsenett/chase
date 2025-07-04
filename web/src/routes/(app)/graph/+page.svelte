@@ -62,26 +62,79 @@ function buildGraphData(servers: Server[]): { nodes: GraphNode[]; edges: GraphEd
 
       // Add domain node if it doesn't exist
       if (!domainMap.has(domain)) {
-        addUniqueNode({ id: domain, label: domain, group: 'domain' });
+        const domainServers = servers.filter(s => {
+          try {
+            const serverUrl = s.url.startsWith('http') ? s.url : `https://${s.url}`;
+            return new URL(serverUrl).hostname.includes(domain);
+          } catch (e) {
+            return false;
+          }
+        });
+
+        addUniqueNode({
+          id: domain,
+          label: domain,
+          group: 'domain',
+          title: `Domain: ${domain}
+                  Sites: ${domainServers.length}`
+        });
         domainMap.set(domain, { subdomains: new Set() });
       }
 
       // Add subdomain node if it doesn't exist
       if (subdomain && !domainMap.get(domain).subdomains.has(subdomain)) {
-        addUniqueNode({ id: url.hostname, label: url.hostname, group: 'subdomain' });
+        const subdomainServers = servers.filter(s => {
+          try {
+            const serverUrl = s.url.startsWith('http') ? s.url : `https://${s.url}`;
+            return new URL(serverUrl).hostname === url.hostname;
+          } catch (e) {
+            return false;
+          }
+        });
+
+        addUniqueNode({
+          id: url.hostname,
+          label: url.hostname,
+          group: 'subdomain',
+          title: `Subdomain: ${url.hostname}
+                  Sites: ${subdomainServers.length} `
+        });
         edges.push({ from: domain, to: url.hostname });
         domainMap.get(domain).subdomains.add(subdomain);
       }
 
       // Add site node with unique ID by using server.ID or index as suffix if needed
       const siteId = `site-${server.ID || idx}-${server.url}`;
-      addUniqueNode({ id: siteId, label: server.url, group: 'site' });
+
+      // Get status info for tooltip
+      const latestPing = server.ping_results && server.ping_results.length > 0
+        ? server.ping_results.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())[0]
+        : null;
+      const statusText = !latestPing ? 'Unknown' :
+                        latestPing.status_code === server.expected_status ? 'Up' : 'Down';
+
+      addUniqueNode({
+        id: siteId,
+        label: server.url,
+        group: 'site',
+        title: `${server.url}
+                Status: ${statusText}
+                ${latestPing ? `Response: ${latestPing.status_code}` : ''}
+                ${server.comment ? `Note: ${server.comment}` : ''} `
+      });
       edges.push({ from: url.hostname, to: siteId });
     } catch (error) {
       console.error(`Error processing server URL: ${server.url}`, error);
       // Still add the node even if URL parsing failed, just don't create edges
       const errorId = `error-${server.ID || idx}-${server.url}`;
-      addUniqueNode({ id: errorId, label: server.url, group: 'error' });
+      addUniqueNode({
+        id: errorId,
+        label: server.url,
+        group: 'error',
+        title: `${server.url}
+                Invalid URL format
+                Missing protocol (http:// or https://)?`
+      });
     }
   });
   return { nodes, edges };
