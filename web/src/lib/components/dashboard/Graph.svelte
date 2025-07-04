@@ -46,12 +46,12 @@ onMount(async () => {
     nodes: {
       shape: 'dot',
       size: 14,
-      font: { 
+      font: {
         size: 14,
         face: 'Helvetica',
         multi: true,
         bold: {
-          color: '#343434',
+          color: '#22C55D',
           size: 14,
           face: 'Helvetica'
         }
@@ -59,7 +59,7 @@ onMount(async () => {
       borderWidth: 2,
       color: {
         border: '#2B7CE9',
-        background: 'rgba(210, 229, 255, 0.8)',
+        background: 'rgba(210, 229, 255, 0.2)',
         highlight: {
           border: '#2B7CE9',
           background: '#D2E5FF'
@@ -71,25 +71,25 @@ onMount(async () => {
         color: { background: 'rgba(151, 194, 252, 0.9)', border: '#2B7CE9' },
         shape: 'diamond',
         size: 24,
-        font: { size: 16, color: '#000000' }
+        font: { size: 16, color: '#22C55D' }
       },
       subdomain: {
         color: { background: 'rgba(255, 215, 0, 0.7)', border: '#FFD700' },
         shape: 'dot',
         size: 18,
-        font: { size: 14, color: '#333333' }
+        font: { size: 14, color: '#22C55D' }
       },
       site: {
         color: { background: 'rgba(210, 229, 255, 0.7)', border: '#2B7CE9' },
         shape: 'dot',
         size: 16,
-        font: { size: 14, color: '#555555' }
+        font: { size: 14, color: '#22C55D' }
       },
       error: {
         color: { background: 'rgba(255, 153, 153, 0.7)', border: '#CC3333' },
         shape: 'triangle',
         size: 16,
-        font: { size: 14, color: '#333333' }
+        font: { size: 14, color: '#22C55D' }
       }
     },
     edges: {
@@ -113,13 +113,13 @@ onMount(async () => {
       solver: 'forceAtlas2Based',
       forceAtlas2Based: {
         gravitationalConstant: -50,
-        centralGravity: 0.01,
-        springLength: 150,
+        centralGravity: 0.007,
+        springLength: 75,
         springConstant: 0.08,
         damping: 0.4,
-        avoidOverlap: 0.8
+        avoidOverlap: 0.2
       },
-      stabilization: { 
+      stabilization: {
         enabled: true,
         iterations: 1000,
         updateInterval: 25,
@@ -132,7 +132,7 @@ onMount(async () => {
       hover: true,
       tooltipDelay: 200,
       multiselect: false,
-      navigationButtons: true,
+      navigationButtons: false,
       keyboard: {
         enabled: true,
         bindToWindow: false
@@ -172,11 +172,17 @@ onMount(async () => {
 });
 </script>
 
-<div bind:this={container} class="w-full h-[90vh] border rounded bg-transparent"></div>
+<div bind:this={container} class="w-full h-[80vh] rounded bg-transparent"></div>
 <style>
 :global(.vis-network) {
   width: 100% !important;
   height: 100% !important;
+  border:none;
+  background: transparent !important;
+}
+
+:global(.vis-network canvas) {
+  background: transparent !important;
 }
 
 :global(.vis-tooltip) {
