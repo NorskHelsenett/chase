@@ -45,12 +45,21 @@ onMount(async () => {
     layout: { hierarchical: false },
     nodes: {
       shape: 'dot',
-      size: 12,
-      font: { size: 14 },
-      borderWidth: 1,
+      size: 14,
+      font: { 
+        size: 14,
+        face: 'Helvetica',
+        multi: true,
+        bold: {
+          color: '#343434',
+          size: 14,
+          face: 'Helvetica'
+        }
+      },
+      borderWidth: 2,
       color: {
         border: '#2B7CE9',
-        background: '#D2E5FF',
+        background: 'rgba(210, 229, 255, 0.8)',
         highlight: {
           border: '#2B7CE9',
           background: '#D2E5FF'
@@ -59,40 +68,84 @@ onMount(async () => {
     },
     groups: {
       domain: {
-        color: { background: '#97C2FC', border: '#2B7CE9' },
+        color: { background: 'rgba(151, 194, 252, 0.9)', border: '#2B7CE9' },
         shape: 'diamond',
-        size: 16
+        size: 24,
+        font: { size: 16, color: '#000000' }
       },
       subdomain: {
-        color: { background: '#FFFF00', border: '#FFD700' },
+        color: { background: 'rgba(255, 215, 0, 0.7)', border: '#FFD700' },
         shape: 'dot',
-        size: 14
+        size: 18,
+        font: { size: 14, color: '#333333' }
       },
       site: {
-        color: { background: '#D2E5FF', border: '#2B7CE9' },
+        color: { background: 'rgba(210, 229, 255, 0.7)', border: '#2B7CE9' },
         shape: 'dot',
-        size: 12
+        size: 16,
+        font: { size: 14, color: '#555555' }
       },
       error: {
-        color: { background: '#FF9999', border: '#CC3333' },
+        color: { background: 'rgba(255, 153, 153, 0.7)', border: '#CC3333' },
         shape: 'triangle',
-        size: 12
+        size: 16,
+        font: { size: 14, color: '#333333' }
       }
     },
     edges: {
-      width: 1,
-      color: { color: '#aaa' }
+      width: 1.5,
+      color: { color: 'rgba(120, 120, 120, 0.7)' },
+      smooth: {
+        type: 'continuous',
+        forceDirection: 'none',
+        roundness: 0.5
+      },
+      shadow: {
+        enabled: true,
+        color: 'rgba(0,0,0,0.2)',
+        size: 3,
+        x: 1,
+        y: 1
+      }
     },
     physics: {
       enabled: true,
-      barnesHut: { gravitationalConstant: -30000, springLength: 120, springConstant: 0.04 },
-      stabilization: { iterations: 200 }
+      solver: 'forceAtlas2Based',
+      forceAtlas2Based: {
+        gravitationalConstant: -50,
+        centralGravity: 0.01,
+        springLength: 150,
+        springConstant: 0.08,
+        damping: 0.4,
+        avoidOverlap: 0.8
+      },
+      stabilization: { 
+        enabled: true,
+        iterations: 1000,
+        updateInterval: 25,
+        fit: true
+      },
+      maxVelocity: 50,
+      minVelocity: 0.1
     },
     interaction: {
       hover: true,
       tooltipDelay: 200,
       multiselect: false,
-      navigationButtons: true
+      navigationButtons: true,
+      keyboard: {
+        enabled: true,
+        bindToWindow: false
+      },
+      zoomView: true,
+      dragNodes: true,
+      dragView: true,
+      hideEdgesOnDrag: false,
+      hideEdgesOnZoom: false,
+      hoverConnectedEdges: true,
+      selectable: true,
+      selectConnectedEdges: true,
+      tooltipDelay: 300
     }
   };
   network = new vis.Network(container, data, options);
@@ -119,7 +172,7 @@ onMount(async () => {
 });
 </script>
 
-<div bind:this={container} class="w-full h-[90vh] border rounded bg-white"></div>
+<div bind:this={container} class="w-full h-[90vh] border rounded bg-transparent"></div>
 <style>
 :global(.vis-network) {
   width: 100% !important;
@@ -129,17 +182,19 @@ onMount(async () => {
 :global(.vis-tooltip) {
   position: absolute;
   visibility: hidden;
-  padding: 8px;
+  padding: 12px;
   white-space: nowrap;
-  font-family: sans-serif;
+  font-family: 'Helvetica', sans-serif;
   font-size: 14px;
-  color: #000;
-  background-color: #fff;
-  border-radius: 4px;
-  border: 1px solid #ddd;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  color: #333;
+  background-color: rgba(255, 255, 255, 0.9);
+  border-radius: 8px;
+  border: 1px solid rgba(200, 200, 200, 0.8);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
   z-index: 10000;
   pointer-events: none;
+  max-width: 300px;
+  transition: opacity 0.3s ease;
 }
 
 :global(.tooltip) {
