@@ -297,62 +297,6 @@ func (s *Scanner) checkSecurityHeaders(domain string) (*HeadersAnalysis, error) 
 	return analysis, nil
 }
 
-func validateXContentType(value string) (HeaderStatus, []string) {
-	if value == "" {
-		return StatusMissing, []string{
-			"Header is missing - this header prevents MIME type sniffing attacks",
-		}
-	}
-
-	value = strings.TrimSpace(strings.ToLower(value))
-
-	switch value {
-	case "nosniff":
-		return StatusGood, nil
-	case "":
-		return StatusMisconfigured, []string{
-			"Header is present but empty",
-		}
-	default:
-		return StatusMisconfigured, []string{
-			fmt.Sprintf("Invalid value '%s' - only 'nosniff' is valid", value),
-		}
-	}
-}
-
-func formatXContentTypeError(value string, status HeaderStatus, issues []string) string {
-	base := "X-Content-Type-Options"
-
-	switch status {
-	case StatusMissing:
-		return fmt.Sprintf(`%s header is missing.
-
-This header prevents browsers from MIME type sniffing, which could allow malicious files to be
-interpreted as a different content type (e.g., treating a JavaScript file as an image).
-
-Risks of missing this header:
-- MIME type confusion attacks
-- Malicious file execution
-- Content type spoofing
-
-Recommended value: nosniff`, base)
-
-	case StatusMisconfigured:
-		return fmt.Sprintf(`%s header is misconfigured.
-
-Current value: %s
-
-This header only accepts 'nosniff' as a valid value. Any other value, including
-an empty value, will be ignored by browsers, leaving the site vulnerable to
-MIME type sniffing attacks.
-
-Recommended value: nosniff`, base, value)
-
-	default:
-		return ""
-	}
-}
-
 // Helper function to parse header directives into a map
 func parseDirective(value string) map[string]string {
 	directives := make(map[string]string)
