@@ -1,8 +1,10 @@
 package servers
 
 import (
+	"encoding/json"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -88,7 +90,7 @@ func GetServersWithSecurityStatus(c *gin.Context) {
 
 	// Get all servers
 	var servers []Server
-	if err := query.Find(&servers).Error; err != nil {
+	if err := query.Debug().Find(&servers).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch servers"})
 		return
 	}
@@ -98,12 +100,63 @@ func GetServersWithSecurityStatus(c *gin.Context) {
 		var latestPing PingResult
 		if err := db.Where("server_id = ?", servers[i].ID).
 			Order("timestamp DESC").
-			Limit(1).
+			Limit(20).
 			First(&latestPing).Error; err == nil {
 			servers[i].PingResults = []PingResult{latestPing}
 		} else {
 			// If no ping results, initialize empty array
 			servers[i].PingResults = []PingResult{}
+		}
+	}
+
+	// add security report status, but only include the score and/or risk
+	for i := range servers {
+		var securityReport struct {
+			ID          uint      `json:"id"`
+			RiskLevel   string    `json:"risk_level"`
+			Description string    `json:"description"`
+			CreatedAt   time.Time `json:"created_at"`
+			ReportData  []byte    `json:"report_data"`
+		}
+
+		// Query the security report record for the server's URL
+		serverURL := strings.TrimPrefix(strings.TrimPrefix(servers[i].URL, "https://"), "http://")
+		if err := db.Table("security_report_records").
+			Where("server_url = ?", serverURL).
+			Order("created_at DESC").
+			First(&securityReport).Error; err == nil {
+			// Add security report metadata to server
+			servers[i].SecurityRiskLevel = securityReport.RiskLevel
+			servers[i].SecurityDescription = securityReport.Description
+			servers[i].SecurityScanTime = securityReport.CreatedAt
+
+			// Extract additional security details from report data if available
+			if len(securityReport.ReportData) > 0 {
+				var fullReport struct {
+					Headers struct {
+						Score string `json:"score"`
+						Risk  string `json:"risk"`
+					} `json:"headers"`
+					Certificate struct {
+						Grade string `json:"grade"`
+						Risk  string `json:"risk"`
+					} `json:"certificate"`
+					AdminPages struct {
+						Risk string `json:"risk"`
+					} `json:"adminPages"`
+					Swagger struct {
+						Risk string `json:"risk"`
+					} `json:"swagger"`
+				}
+
+				if err := json.Unmarshal(securityReport.ReportData, &fullReport); err == nil {
+					// Populate additional security details
+					servers[i].HeaderScore = fullReport.Headers.Score
+					servers[i].CertScore = fullReport.Certificate.Grade
+					servers[i].AdminRisk = string(fullReport.AdminPages.Risk)
+					servers[i].APIRisk = string(fullReport.Swagger.Risk)
+				}
+			}
 		}
 	}
 

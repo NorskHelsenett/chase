@@ -109,15 +109,22 @@
 }
 
 function getLatestGrade(server: Server, type: 'header' | 'cert'): string {
-  // Safely access security data if it exists
-  if (!server.security) return '';
-  return server.security[type === 'header' ? 'headerRisk' : 'certRisk'] || '';
+  // First try the new fields, fall back to security object if not available
+  if (type === 'header') {
+    return server.header_score || (server.security?.headerRisk || '');
+  } else {
+    return server.cert_score || (server.security?.certRisk || '');
+  }
 }
 
 function getLatestRisk(server: Server, type: 'adminrisk' | 'apirisk'): string {
-  // Safely access security data if it exists
-  if (!server.security) return '';
-  return server.security[type === 'adminrisk' ? 'adminRisk' : 'apiRisk'] || '';
+  // First try the new fields, fall back to security object if not available
+  if (type === 'adminrisk') {
+    // Convert risk levels to lowercase for consistent display
+    return (server.admin_risk?.toLowerCase() || server.security?.adminRisk || '');
+  } else {
+    return (server.api_risk?.toLowerCase() || server.security?.apiRisk || '');
+  }
 }
 </script>
 

@@ -12,21 +12,21 @@
   let searchQuery = '';
   let visibleServerIds = new Set<string>();
   let observer: IntersectionObserver;
-  
+
   // Subscribe to page store to get URL parameters
   $: activeFilter = $page.url.searchParams.get('active');
-  
+
   // Create a derived store that filters servers based on search query
   $: filteredStore = derived(servers, $servers => {
     if (!searchQuery) return $servers;
-    
+
     const query = searchQuery.toLowerCase();
     return $servers.filter(server =>
       server.url.toLowerCase().includes(query) ||
       server.comment?.toLowerCase().includes(query)
     );
   });
-  
+
   // Subscribe to the filtered store
   $: filteredServers = $filteredStore;
 
@@ -62,7 +62,7 @@
           if (id) {
             if (entry.isIntersecting) {
               visibleServerIds.add(id);
-              loadServerDetail(id);
+              // Security data now comes from server endpoint, no need to load separately
             } else {
               visibleServerIds.delete(id);
             }
@@ -73,24 +73,20 @@
     );
   }
 
-  // Load only security data for visible servers - ping data is already provided by the API
+  // This function is no longer needed as security data comes with the server data
   async function loadServerDetail(serverId: string) {
-    const server = $servers.find(s => s.ID === serverId);
-    if (!server) return;
-
-    // Only fetch security data if it hasn't been loaded yet
-    if (!server.security) {
-      await serverStoreActions.loadServerSecurityReport(serverId);
-    }
+    // No longer need to load security data separately
+    // Security data is now included in the main server response
+    return;
   }
 
   // Update which servers are considered "visible" and observed
   function updateVisibleServers() {
     if (!observer) return;
-    
+
     // Disconnect any previous observations
     observer.disconnect();
-    
+
     // Start observing all server rows
     setTimeout(() => {
       document.querySelectorAll('[data-server-id]').forEach(element => {
@@ -107,10 +103,10 @@
   onMount(async () => {
     // Set up the intersection observer
     setupObserver();
-    
+
     // Initial fetch from cache or API (server data with ping_results included)
     await fetchServers();
-    
+
     // After rendering, start observing which servers are visible
     updateVisibleServers();
   });

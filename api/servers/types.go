@@ -17,6 +17,15 @@ type Server struct {
 	Comment            string       `json:"comment"`
 	UpdateInterval     int          `json:"update_interval" gorm:"default:15"` // in minutes
 	PingResults        []PingResult `gorm:"foreignKey:ServerID;references:ID;OnDelete:CASCADE" json:"ping_results"`
+	// Security report metadata (not stored in database)
+	SecurityRiskLevel   string    `json:"security_risk_level,omitempty" gorm:"-"`
+	SecurityDescription string    `json:"security_description,omitempty" gorm:"-"`
+	SecurityScanTime    time.Time `json:"security_scan_time,omitempty" gorm:"-"`
+	// Additional security details
+	HeaderScore string `json:"header_score,omitempty" gorm:"-"`
+	CertScore   string `json:"cert_score,omitempty" gorm:"-"`
+	AdminRisk   string `json:"admin_risk,omitempty" gorm:"-"`
+	APIRisk     string `json:"api_risk,omitempty" gorm:"-"`
 }
 
 type PingResult struct {
