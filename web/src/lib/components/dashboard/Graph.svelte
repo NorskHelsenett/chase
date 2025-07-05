@@ -138,13 +138,13 @@ onMount(async () => {
     physics: {
       enabled: true,
       solver: 'forceAtlas2Based',
-      barnesHut: {
-        gravitationalConstant: -2000,
-        centralGravity: 0.01,
-        springLength: 25,
-        springConstant: 0.04,
-        damping: 0.9,
-        avoidOverlap: 0.8
+      forceAtlas2Based: {
+        gravitationalConstant: -150,
+        centralGravity: 0.007,
+        springLength: 95,
+        springConstant: 0.08,
+        damping: 0.4,
+        avoidOverlap: 0.5
       },
       stabilization: {
         enabled: true,
