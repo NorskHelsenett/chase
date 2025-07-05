@@ -45,6 +45,7 @@ function buildGraphData(servers: Server[]): { nodes: GraphNode[]; edges: GraphEd
   const edges: GraphEdge[] = [];
   const domainMap = new Map();
   const addedNodeIds = new Set(); // Track which node IDs have been added
+  const subdomainSites = new Map(); // Track sites per subdomain
 
   // Helper function to add a node only if it doesn't exist yet
   const addUniqueNode = (node: GraphNode) => {
@@ -56,6 +57,23 @@ function buildGraphData(servers: Server[]): { nodes: GraphNode[]; edges: GraphEd
     return false;
   };
 
+  // First pass: collect all subdomain -> site relationships
+  servers.forEach((server, idx) => {
+    try {
+      const serverUrl = normalizeUrl(server.url);
+      const url = new URL(serverUrl);
+      const hostname = url.hostname;
+      const siteId = `site-${server.ID || idx}-${server.url}`;
+      
+      if (!subdomainSites.has(hostname)) {
+        subdomainSites.set(hostname, []);
+      }
+      subdomainSites.get(hostname).push(siteId);
+    } catch (error) {
+      // Skip invalid URLs in this pass
+    }
+  });
+
   servers.forEach((server, idx) => {
     try {
       // Ensure the URL has a protocol
@@ -63,6 +81,7 @@ function buildGraphData(servers: Server[]): { nodes: GraphNode[]; edges: GraphEd
       const url = new URL(serverUrl);
       const domain = url.hostname.split('.').slice(-2).join('.');
       const subdomain = url.hostname.replace(`.${domain}`, '');
+      const hostname = url.hostname;
 
       // Add domain node if it doesn't exist
       if (!domainMap.has(domain)) {
@@ -85,25 +104,20 @@ function buildGraphData(servers: Server[]): { nodes: GraphNode[]; edges: GraphEd
         domainMap.set(domain, { subdomains: new Set() });
       }
 
-      // Add subdomain node if it doesn't exist
-      if (subdomain && !domainMap.get(domain).subdomains.has(subdomain)) {
-        const subdomainServers = servers.filter(s => {
-          try {
-            const serverUrl = s.url.startsWith('http') ? s.url : `https://${s.url}`;
-            return new URL(serverUrl).hostname === url.hostname;
-          } catch (e) {
-            return false;
-          }
-        });
+      // Check if this subdomain has only one site
+      const sitesCount = subdomainSites.get(hostname)?.length || 0;
+      const skipSubdomain = subdomain && sitesCount === 1;
 
+      // Add subdomain node if it doesn't exist and has more than one site
+      if (subdomain && !skipSubdomain && !domainMap.get(domain).subdomains.has(subdomain)) {
         addUniqueNode({
-          id: url.hostname,
-          label: url.hostname,
+          id: hostname,
+          label: hostname,
           group: 'subdomain',
-          title: `Subdomain: ${url.hostname}
-                  Sites: ${subdomainServers.length} `
+          title: `Subdomain: ${hostname}
+                  Sites: ${sitesCount} `
         });
-        edges.push({ from: domain, to: url.hostname });
+        edges.push({ from: domain, to: hostname });
         domainMap.get(domain).subdomains.add(subdomain);
       }
 
@@ -126,7 +140,13 @@ function buildGraphData(servers: Server[]): { nodes: GraphNode[]; edges: GraphEd
                 ${latestPing ? `Response: ${latestPing.status_code}` : ''}
                 ${server.comment ? `Note: ${server.comment}` : ''} `
       });
-      edges.push({ from: url.hostname, to: siteId });
+      
+      // Connect site directly to domain if subdomain is skipped, otherwise to subdomain
+      if (skipSubdomain) {
+        edges.push({ from: domain, to: siteId });
+      } else {
+        edges.push({ from: hostname, to: siteId });
+      }
     } catch (error) {
       console.error(`Error processing server URL: ${server.url}`, error);
       // Still add the node even if URL parsing failed, just don't create edges
