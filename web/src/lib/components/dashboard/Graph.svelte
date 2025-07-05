@@ -137,14 +137,14 @@ onMount(async () => {
     },
     physics: {
       enabled: true,
-      solver: 'forceAtlas2Based',
-      forceAtlas2Based: {
-        gravitationalConstant: -50,
-        centralGravity: 0.007,
-        springLength: 75,
-        springConstant: 0.08,
-        damping: 0.4,
-        avoidOverlap: 0.2
+      solver: 'barnesHut', // Changed from forceAtlas2Based to barnesHut for better static positioning
+      barnesHut: {
+        gravitationalConstant: -2000,
+        centralGravity: 0.1,
+        springLength: 95,
+        springConstant: 0.04,
+        damping: 0.9,
+        avoidOverlap: 0.5
       },
       stabilization: {
         enabled: true,
@@ -152,8 +152,9 @@ onMount(async () => {
         updateInterval: 25,
         fit: true
       },
-      maxVelocity: 50,
-      minVelocity: 0.1
+      maxVelocity: 10, // Reduced from 50
+      minVelocity: 0.5, // Increased from 0.1 to make it stop sooner
+      timestep: 0.5     // Added timestep to slow down simulation
     },
     interaction: {
       hover: true,
@@ -193,11 +194,29 @@ onMount(async () => {
     }
   });
 
-  // Stop physics once the network is stabilized
+  // Keep physics enabled but make the network static after stabilization
   const stabilizationHandler = function() {
     setTimeout(() => {
-      network.setOptions({ physics: { enabled: false } });
-      console.log('Physics disabled after stabilization');
+      // Keep physics enabled but with minimal movement by adjusting parameters
+      network.setOptions({ 
+        physics: { 
+          enabled: true,
+          barnesHut: {
+            gravitationalConstant: -2000,
+            centralGravity: 0.1,
+            springLength: 95,
+            springConstant: 0.04,
+            damping: 0.9,
+          },
+          minVelocity: 0.75, // Higher value to stop movement sooner
+          maxVelocity: 0.75, // Limit maximum velocity
+          timestep: 0.25,    // Slower updates
+          stabilization: {
+            enabled: false    // Disable further stabilization
+          }
+        } 
+      });
+      console.log('Network stabilized - static positioning enabled');
     }, STABILIZATION_DELAY_MS); // Short delay to allow final node positioning
   };
   network.on('stabilizationIterationsDone', stabilizationHandler);
