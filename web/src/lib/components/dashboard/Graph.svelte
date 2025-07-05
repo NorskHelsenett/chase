@@ -137,7 +137,7 @@ onMount(async () => {
     },
     physics: {
       enabled: true,
-      solver: 'barnesHut', // Changed from forceAtlas2Based to barnesHut for better static positioning
+      solver: 'forceAtlas2Based',
       barnesHut: {
         gravitationalConstant: -2000,
         centralGravity: 0.01,
