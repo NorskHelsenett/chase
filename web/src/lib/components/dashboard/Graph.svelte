@@ -201,13 +201,15 @@ onMount(async () => {
       network.setOptions({
         physics: {
           enabled: true,
-          barnesHut: {
-            gravitationalConstant: -2000,
-            centralGravity: 0.1,
-            springLength: 95,
-            springConstant: 0.04,
-            damping: 0.9,
-          },
+          solver: 'forceAtlas2Based',
+      forceAtlas2Based: {
+        gravitationalConstant: -150,
+        centralGravity: 0.007,
+        springLength: 95,
+        springConstant: 0.08,
+        damping: 0.9,
+        avoidOverlap: 0.5
+      },
           minVelocity: 0.75, // Higher value to stop movement sooner
           maxVelocity: 0.75, // Limit maximum velocity
           timestep: 0.25,    // Slower updates
