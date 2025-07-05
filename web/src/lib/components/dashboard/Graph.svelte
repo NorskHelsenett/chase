@@ -1,5 +1,5 @@
 <script lang="ts">
-import { onMount } from 'svelte';
+import { onDestroy, onMount } from 'svelte';
 import { get } from 'svelte/store';
 import type { Writable } from 'svelte/store';
 
@@ -7,6 +7,7 @@ type GraphNode = {
   id: string | number;
   label?: string;
   group?: string;
+  isDown?: boolean; // Added to track down status
   [key: string]: any; // Additional properties
 };
 
@@ -19,6 +20,8 @@ type GraphEdge = {
 export let graphData: Writable<{ nodes: GraphNode[]; edges: GraphEdge[] }>;
 let container: HTMLDivElement;
 let network: any;
+
+const STABILIZATION_DELAY_MS = 1000; // Delay to allow final node positioning after stabilization
 
 onMount(async () => {
   const vis = await import('vis-network/standalone');
@@ -35,7 +38,15 @@ onMount(async () => {
     nodes.forEach(node => {
       try {
         if (!nodeDataSet.get(node.id)) {
-          nodeDataSet.add(node);
+          // If the node is marked as down, set its group to 'error'
+          if (node.isDown === true) {
+            console.log(`Node ${node.id} is down, rendering as error`);
+            node.group = 'error';
+          }
+          
+          // Add the node to the dataset
+          const { isDown, ...nodeToAdd } = node; // Remove isDown property as vis-network doesn't need it
+          nodeDataSet.add(nodeToAdd);
         } else {
           console.log(`Skipping duplicate node: ${node.id}`);
         }
@@ -181,13 +192,18 @@ onMount(async () => {
       }
     }
   });
-  
+
   // Stop physics once the network is stabilized
-  network.on('stabilizationIterationsDone', function() {
+  const stabilizationHandler = function() {
     setTimeout(() => {
       network.setOptions({ physics: { enabled: false } });
       console.log('Physics disabled after stabilization');
-    }, 1000); // Short delay to allow final node positioning
+    }, STABILIZATION_DELAY_MS); // Short delay to allow final node positioning
+  };
+  network.on('stabilizationIterationsDone', stabilizationHandler);
+
+  onDestroy(() => {
+    network.off('stabilizationIterationsDone', stabilizationHandler);
   });
   } catch (error) {
     console.error("Error initializing graph:", error);

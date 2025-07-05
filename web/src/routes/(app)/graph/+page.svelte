@@ -36,7 +36,7 @@ function getRootDomain(hostname: string): string {
 function getAllDomainLevels(hostname: string): string[] {
   // Returns all levels for grouping: foo.bar.baz.com => [foo.bar.baz.com, bar.baz.com, baz.com]
   const parts = hostname.split('.');
-  const levels = [];
+  const levels: string[] = [];
   for (let i = 0; i < parts.length - 1; i++) {
     levels.push(parts.slice(i).join('.'));
   }
@@ -68,7 +68,7 @@ function buildGraphData(servers) {
 
   const addedNodeIds = new Set();
   const groupHostnames = new Set();
-  const parentMap = new Map();
+  // Removed unused parentMap declaration
 
   // 1. Count all groupings
   const levelCounts = new Map();
@@ -81,9 +81,9 @@ function buildGraphData(servers) {
     } catch {}
   });
 
-  function addNode(id, label, group, title) {
+  function addNode(id, label, group, title, isDown = false) {
     if (!addedNodeIds.has(id)) {
-      nodes.push({ id, label, group, title });
+      nodes.push({ id, label, group, title, isDown });
       addedNodeIds.add(id);
     }
   }
@@ -135,7 +135,12 @@ servers.forEach((server, idx) => {
         parentForInstance = `domain:${rootDomain}`;
       } else {
         const siteNodeId = `site:${hostname}`;
-        addNode(siteNodeId, hostname, 'site', server.url);
+        const latestPing = server.ping_results && server.ping_results.length > 0
+          ? server.ping_results.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())[0]
+          : null;
+        const isDown = !latestPing || latestPing.error || latestPing.status_code !== server.expected_status;
+        
+        addNode(siteNodeId, hostname, 'site', server.url, isDown);
         parentForInstance = siteNodeId;
         // Optionally connect site to root domain node, if it exists
         if (groupHostnames.has(rootDomain)) {
@@ -148,23 +153,27 @@ servers.forEach((server, idx) => {
     const latestPing = server.ping_results && server.ping_results.length > 0
       ? server.ping_results.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())[0]
       : null;
-    const statusText = !latestPing ? 'Unknown' :
-      latestPing.status_code === server.expected_status ? 'Up' : 'Down';
+    const isDown = !latestPing || latestPing.error || latestPing.status_code !== server.expected_status;
+    const statusText = !latestPing ? 'Unknown' : 
+      (isDown ? 'Down' : 'Up');
 
     addNode(
       instanceNodeId,
       server.url,
-      'instance',
-      `${server.url}\nStatus: ${statusText}\n${latestPing ? `Response: ${latestPing.status_code}` : ''}\n${server.comment ? `Note: ${server.comment}` : ''}`
+      'site', // Default to site, but this might get overridden by isDown flag
+      `${server.url}\nStatus: ${statusText}\n${latestPing ? `Response: ${latestPing.status_code}` : ''}\n${server.comment ? `Note: ${server.comment}` : ''}`,
+      isDown
     );
     edges.push({ from: parentForInstance, to: instanceNodeId });
 
     // --- Logging
-    console.log(
-      `Processed: ${hostname}\n` +
-      `  → Parent: ${parentForInstance}\n` +
-      `  → Domain nodes: [${[...groupHostnames].join(', ')}]`
-    );
+    if (import.meta.env.MODE === 'development') {
+      console.log(
+        `Processed: ${hostname}\n` +
+        `  → Parent: ${parentForInstance}\n` +
+        `  → Domain nodes: [${[...groupHostnames].join(', ')}]`
+      );
+    }
     // ---
 
   } catch (error) {
