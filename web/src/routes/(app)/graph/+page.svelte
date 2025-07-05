@@ -138,9 +138,14 @@ servers.forEach((server, idx) => {
         const latestPing = server.ping_results && server.ping_results.length > 0
           ? server.ping_results.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())[0]
           : null;
+        // Calculate isDown for backwards compatibility
         const isDown = !latestPing || latestPing.error || latestPing.status_code !== server.expected_status;
-        
-        addNode(siteNodeId, hostname, 'site', server.url, isDown);
+        // Generate statusText same way as for instances
+        const statusText = !latestPing ? 'Unknown' : (isDown ? 'Down' : 'Up');
+        // Use statusText to determine up/down state
+        const nodeIsDown = statusText.toLowerCase() === 'down';
+
+        addNode(siteNodeId, hostname, nodeIsDown ? 'down' : 'up', server.url, nodeIsDown);
         parentForInstance = siteNodeId;
         // Optionally connect site to root domain node, if it exists
         if (groupHostnames.has(rootDomain)) {
@@ -153,16 +158,19 @@ servers.forEach((server, idx) => {
     const latestPing = server.ping_results && server.ping_results.length > 0
       ? server.ping_results.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())[0]
       : null;
+    // Calculate isDown for backwards compatibility, but we'll use statusText to determine the actual state
     const isDown = !latestPing || latestPing.error || latestPing.status_code !== server.expected_status;
-    const statusText = !latestPing ? 'Unknown' : 
+    const statusText = !latestPing ? 'Unknown' :
       (isDown ? 'Down' : 'Up');
 
+    // Use statusText to determine up/down state instead of ping status
+    const nodeIsDown = statusText.toLowerCase() === 'down';
     addNode(
       instanceNodeId,
       server.url,
-      'site', // Default to site, but this might get overridden by isDown flag
+      nodeIsDown ? 'down' : 'site', // Use statusText to determine the group
       `${server.url}\nStatus: ${statusText}\n${latestPing ? `Response: ${latestPing.status_code}` : ''}\n${server.comment ? `Note: ${server.comment}` : ''}`,
-      isDown
+      nodeIsDown
     );
     edges.push({ from: parentForInstance, to: instanceNodeId });
 
