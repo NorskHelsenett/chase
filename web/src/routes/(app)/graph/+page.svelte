@@ -12,6 +12,7 @@ interface GraphNode {
   id: string;
   label: string;
   group: string;
+  title?: string;
 }
 interface GraphEdge {
   from: string;
@@ -20,6 +21,26 @@ interface GraphEdge {
 
 function normalizeUrl(url: string): string {
   return url.startsWith('http') ? url : `https://${url}`;
+}
+
+function getRootDomain(hostname: string): string {
+  // Handles multi-part TLDs like .co.uk, .nhn.no etc. Could be improved with a public suffix list.
+  const parts = hostname.split('.');
+  if (parts.length >= 3 && parts[parts.length - 2].length <= 3 && parts[parts.length - 1].length <= 3) {
+    // E.g. sikkerhet.nhn.no => nhn.no, grimsgaard.co.uk => co.uk
+    return parts.slice(-3).join('.');
+  }
+  return parts.slice(-2).join('.');
+}
+
+function getAllDomainLevels(hostname: string): string[] {
+  // Returns all levels for grouping: foo.bar.baz.com => [foo.bar.baz.com, bar.baz.com, baz.com]
+  const parts = hostname.split('.');
+  const levels = [];
+  for (let i = 0; i < parts.length - 1; i++) {
+    levels.push(parts.slice(i).join('.'));
+  }
+  return levels;
 }
 
 async function loadServersFromCacheOrFetch() {
@@ -40,129 +61,123 @@ async function loadServersFromCacheOrFetch() {
   return serverList;
 }
 
-function buildGraphData(servers: Server[]): { nodes: GraphNode[]; edges: GraphEdge[] } {
-  const nodes: GraphNode[] = [];
-  const edges: GraphEdge[] = [];
-  const domainMap = new Map();
-  const addedNodeIds = new Set(); // Track which node IDs have been added
-  const subdomainSites = new Map(); // Track sites per subdomain
+// --- Graph util (core logic for buildGraphData) ---
+function buildGraphData(servers) {
+  const nodes = [];
+  const edges = [];
 
-  // Helper function to add a node only if it doesn't exist yet
-  const addUniqueNode = (node: GraphNode) => {
-    if (!addedNodeIds.has(node.id)) {
-      nodes.push(node);
-      addedNodeIds.add(node.id);
-      return true;
-    }
-    return false;
-  };
+  const addedNodeIds = new Set();
+  const groupHostnames = new Set();
+  const parentMap = new Map();
 
-  // First pass: collect all subdomain -> site relationships
-  servers.forEach((server, idx) => {
+  // 1. Count all groupings
+  const levelCounts = new Map();
+  servers.forEach(server => {
     try {
-      const serverUrl = normalizeUrl(server.url);
-      const url = new URL(serverUrl);
-      const hostname = url.hostname;
-      const siteId = `site-${server.ID || idx}-${server.url}`;
-      
-      if (!subdomainSites.has(hostname)) {
-        subdomainSites.set(hostname, []);
-      }
-      subdomainSites.get(hostname).push(siteId);
-    } catch (error) {
-      // Skip invalid URLs in this pass
-    }
+      const hostname = new URL(normalizeUrl(server.url)).hostname;
+      getAllDomainLevels(hostname).forEach(level => {
+        levelCounts.set(level, (levelCounts.get(level) || 0) + 1);
+      });
+    } catch {}
   });
 
+  function addNode(id, label, group, title) {
+    if (!addedNodeIds.has(id)) {
+      nodes.push({ id, label, group, title });
+      addedNodeIds.add(id);
+    }
+  }
+
+  // 2. Add domain/group nodes first and track hostnames
+  for (const [level, count] of levelCounts) {
+    if (count > 1) {
+      const nodeId = `domain:${level}`;
+      addNode(nodeId, level, 'domain', `Domain/group: ${level}`);
+      groupHostnames.add(level);
+    }
+  }
+
+  // 3. Connect domain/group nodes to parent group, if one exists (for hierarchy)
+  //    (Fixes nhn.no disconnect from sikkerhet.nhn.no)
+  for (const [level, count] of levelCounts) {
+    if (count > 1) {
+      const parentLevels = getAllDomainLevels(level).slice(1); // strip self, parent chain
+      for (const parent of parentLevels) {
+        if (groupHostnames.has(parent)) {
+          edges.push({ from: `domain:${parent}`, to: `domain:${level}` });
+          break; // Only connect to the closest parent group
+        }
+      }
+    }
+  }
+
+  // 4. Add site and instance nodes, never adding site nodes that match groupHostnames
   servers.forEach((server, idx) => {
     try {
-      // Ensure the URL has a protocol
       const serverUrl = normalizeUrl(server.url);
       const url = new URL(serverUrl);
-      const domain = url.hostname.split('.').slice(-2).join('.');
-      const subdomain = url.hostname.replace(`.${domain}`, '');
       const hostname = url.hostname;
+      const allLevels = getAllDomainLevels(hostname);
+      const rootDomain = getRootDomain(hostname);
 
-      // Add domain node if it doesn't exist
-      if (!domainMap.has(domain)) {
-        const domainServers = servers.filter(s => {
-          try {
-            const serverUrl = normalizeUrl(s.url);
-            return new URL(serverUrl).hostname.includes(domain);
-          } catch (e) {
-            return false;
+      let parentForInstance;
+      if (groupHostnames.has(hostname)) {
+        parentForInstance = `domain:${hostname}`;
+      } else if (hostname === rootDomain || groupHostnames.has(rootDomain)) {
+        parentForInstance = `domain:${rootDomain}`;
+      } else {
+        const siteNodeId = `site:${hostname}`;
+        addNode(siteNodeId, hostname, 'site', server.url);
+        parentForInstance = siteNodeId;
+        if (groupHostnames.has(rootDomain)) {
+          edges.push({ from: `domain:${rootDomain}`, to: siteNodeId });
+        }
+        for (let i = 1; i < allLevels.length; i++) {
+          if (groupHostnames.has(allLevels[i])) {
+            edges.push({ from: `domain:${allLevels[i]}`, to: siteNodeId });
+            break;
           }
-        });
-
-        addUniqueNode({
-          id: domain,
-          label: domain,
-          group: 'domain',
-          title: `Domain: ${domain}
-                  Sites: ${domainServers.length}`
-        });
-        domainMap.set(domain, { subdomains: new Set() });
+        }
       }
 
-      // Check if this subdomain has only one site
-      const sitesCount = subdomainSites.get(hostname)?.length || 0;
-      const skipSubdomain = subdomain && sitesCount === 1;
-
-      // Add subdomain node if it doesn't exist and has more than one site
-      if (subdomain && !skipSubdomain && !domainMap.get(domain).subdomains.has(subdomain)) {
-        addUniqueNode({
-          id: hostname,
-          label: hostname,
-          group: 'subdomain',
-          title: `Subdomain: ${hostname}
-                  Sites: ${sitesCount} `
-        });
-        edges.push({ from: domain, to: hostname });
-        domainMap.get(domain).subdomains.add(subdomain);
-      }
-
-      // Add site node with unique ID by using server.ID or index as suffix if needed
-      const siteId = `site-${server.ID || idx}-${server.url}`;
-
-      // Get status info for tooltip
+      const instanceNodeId = `instance:${server.ID || idx}:${server.url}`;
       const latestPing = server.ping_results && server.ping_results.length > 0
         ? server.ping_results.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())[0]
         : null;
       const statusText = !latestPing ? 'Unknown' :
-                        latestPing.status_code === server.expected_status ? 'Up' : 'Down';
+        latestPing.status_code === server.expected_status ? 'Up' : 'Down';
 
-      addUniqueNode({
-        id: siteId,
-        label: server.url,
-        group: 'site',
-        title: `${server.url}
-                Status: ${statusText}
-                ${latestPing ? `Response: ${latestPing.status_code}` : ''}
-                ${server.comment ? `Note: ${server.comment}` : ''} `
-      });
-      
-      // Connect site directly to domain if subdomain is skipped, otherwise to subdomain
-      if (skipSubdomain) {
-        edges.push({ from: domain, to: siteId });
-      } else {
-        edges.push({ from: hostname, to: siteId });
-      }
+      addNode(
+        instanceNodeId,
+        server.url,
+        'instance',
+        `${server.url}\nStatus: ${statusText}\n${latestPing ? `Response: ${latestPing.status_code}` : ''}\n${server.comment ? `Note: ${server.comment}` : ''}`
+      );
+      edges.push({ from: parentForInstance, to: instanceNodeId });
+
+      // --- Logging
+      console.log(
+        `Processed: ${hostname}\n` +
+        `  → Parent: ${parentForInstance}\n` +
+        `  → Domain nodes: [${[...groupHostnames].join(', ')}]`
+      );
+      // ---
+
     } catch (error) {
-      console.error(`Error processing server URL: ${server.url}`, error);
-      // Still add the node even if URL parsing failed, just don't create edges
-      const errorId = `error-${server.ID || idx}-${server.url}`;
-      addUniqueNode({
-        id: errorId,
-        label: server.url,
-        group: 'error',
-        title: `${server.url}
-                Invalid URL format
-                Missing protocol (http:// or https://)?`
-      });
+      const errId = `error:${server.ID || idx}:${server.url}`;
+      addNode(
+        errId,
+        server.url,
+        'error',
+        `${server.url}\nInvalid URL format\nMissing protocol (http:// or https://)?`
+      );
     }
   });
+
   return { nodes, edges };
 }
+
+
 
 onMount(async () => {
   isLoading.set(true);
