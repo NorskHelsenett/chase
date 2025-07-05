@@ -43,7 +43,7 @@ onMount(async () => {
             console.log(`Node ${node.id} is down, rendering as error`);
             node.group = 'error';
           }
-          
+
           // Add the node to the dataset
           const { isDown, ...nodeToAdd } = node; // Remove isDown property as vis-network doesn't need it
           nodeDataSet.add(nodeToAdd);
@@ -140,11 +140,11 @@ onMount(async () => {
       solver: 'barnesHut', // Changed from forceAtlas2Based to barnesHut for better static positioning
       barnesHut: {
         gravitationalConstant: -2000,
-        centralGravity: 0.1,
-        springLength: 95,
+        centralGravity: 0.01,
+        springLength: 25,
         springConstant: 0.04,
         damping: 0.9,
-        avoidOverlap: 0.5
+        avoidOverlap: 0.8
       },
       stabilization: {
         enabled: true,
@@ -198,8 +198,8 @@ onMount(async () => {
   const stabilizationHandler = function() {
     setTimeout(() => {
       // Keep physics enabled but with minimal movement by adjusting parameters
-      network.setOptions({ 
-        physics: { 
+      network.setOptions({
+        physics: {
           enabled: true,
           barnesHut: {
             gravitationalConstant: -2000,
@@ -214,7 +214,7 @@ onMount(async () => {
           stabilization: {
             enabled: false    // Disable further stabilization
           }
-        } 
+        }
       });
       console.log('Network stabilized - static positioning enabled');
     }, STABILIZATION_DELAY_MS); // Short delay to allow final node positioning
