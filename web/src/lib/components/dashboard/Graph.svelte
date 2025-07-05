@@ -1,5 +1,5 @@
 <script lang="ts">
-import { onMount } from 'svelte';
+import { onDestroy, onMount } from 'svelte';
 import { get } from 'svelte/store';
 import type { Writable } from 'svelte/store';
 
@@ -7,6 +7,7 @@ type GraphNode = {
   id: string | number;
   label?: string;
   group?: string;
+  isDown?: boolean; // Added to track down status
   [key: string]: any; // Additional properties
 };
 
@@ -19,6 +20,8 @@ type GraphEdge = {
 export let graphData: Writable<{ nodes: GraphNode[]; edges: GraphEdge[] }>;
 let container: HTMLDivElement;
 let network: any;
+
+const STABILIZATION_DELAY_MS = 1000; // Delay to allow final node positioning after stabilization
 
 onMount(async () => {
   const vis = await import('vis-network/standalone');
@@ -35,7 +38,15 @@ onMount(async () => {
     nodes.forEach(node => {
       try {
         if (!nodeDataSet.get(node.id)) {
-          nodeDataSet.add(node);
+          // If the node is marked as down, set its group to 'error'
+          if (node.isDown === true) {
+            console.log(`Node ${node.id} is down, rendering as error`);
+            node.group = 'error';
+          }
+
+          // Add the node to the dataset
+          const { isDown, ...nodeToAdd } = node; // Remove isDown property as vis-network doesn't need it
+          nodeDataSet.add(nodeToAdd);
         } else {
           console.log(`Skipping duplicate node: ${node.id}`);
         }
@@ -128,12 +139,12 @@ onMount(async () => {
       enabled: true,
       solver: 'forceAtlas2Based',
       forceAtlas2Based: {
-        gravitationalConstant: -50,
+        gravitationalConstant: -150,
         centralGravity: 0.007,
-        springLength: 75,
+        springLength: 95,
         springConstant: 0.08,
         damping: 0.4,
-        avoidOverlap: 0.2
+        avoidOverlap: 0.5
       },
       stabilization: {
         enabled: true,
@@ -141,8 +152,9 @@ onMount(async () => {
         updateInterval: 25,
         fit: true
       },
-      maxVelocity: 50,
-      minVelocity: 0.1
+      maxVelocity: 10, // Reduced from 50
+      minVelocity: 0.5, // Increased from 0.1 to make it stop sooner
+      timestep: 0.5     // Added timestep to slow down simulation
     },
     interaction: {
       hover: true,
@@ -180,6 +192,37 @@ onMount(async () => {
         }
       }
     }
+  });
+
+  // Keep physics enabled but make the network static after stabilization
+  const stabilizationHandler = function() {
+    setTimeout(() => {
+      // Keep physics enabled but with minimal movement by adjusting parameters
+      network.setOptions({
+        physics: {
+          enabled: true,
+          barnesHut: {
+            gravitationalConstant: -2000,
+            centralGravity: 0.1,
+            springLength: 95,
+            springConstant: 0.04,
+            damping: 0.9,
+          },
+          minVelocity: 0.75, // Higher value to stop movement sooner
+          maxVelocity: 0.75, // Limit maximum velocity
+          timestep: 0.25,    // Slower updates
+          stabilization: {
+            enabled: false    // Disable further stabilization
+          }
+        }
+      });
+      console.log('Network stabilized - static positioning enabled');
+    }, STABILIZATION_DELAY_MS); // Short delay to allow final node positioning
+  };
+  network.on('stabilizationIterationsDone', stabilizationHandler);
+
+  onDestroy(() => {
+    network.off('stabilizationIterationsDone', stabilizationHandler);
   });
   } catch (error) {
     console.error("Error initializing graph:", error);
