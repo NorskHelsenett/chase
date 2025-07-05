@@ -2,8 +2,8 @@ import { writable, derived } from 'svelte/store';
 import { browser } from '$app/environment';
 
 // Initialize store with cached data from localStorage if available
-const initialData = browser && localStorage.getItem('cachedServers')
-  ? JSON.parse(localStorage.getItem('cachedServers'))
+const initialData = browser && localStorage.getItem('servers')
+  ? JSON.parse(localStorage.getItem('servers'))
   : [];
 
 // Main server data store
@@ -30,7 +30,7 @@ export const serverStats = derived(serverStore, ($store) => {
       } else {
         acc.down += 1;
       }
-      
+
       // Count security risks based on new fields
       if (server.security_risk_level === 'CRITICAL') {
         acc.criticalRisks += 1;
@@ -79,7 +79,7 @@ export const serverStats = derived(serverStore, ($store) => {
 serverStore.subscribe(state => {
   if (browser && state.servers.length > 0) {
     try {
-      localStorage.setItem('cachedServers', JSON.stringify(state.servers));
+      localStorage.setItem('servers', JSON.stringify(state.servers));
       localStorage.setItem('serversLastUpdated', state.lastUpdated ? state.lastUpdated.toISOString() : new Date().toISOString());
     } catch (error) {
       console.warn('Failed to save servers to localStorage:', error);
@@ -124,7 +124,7 @@ export const serverStoreActions = {
       // For backwards compatibility, create security objects from the new fields
       const mergedServers = servers.map(server => {
         const existingServer = currentState.servers.find(s => s.ID === server.ID);
-        
+
         // Create a security object from the new fields in the server response
         const securityFromFields = {
           headerRisk: server.header_score || '',
@@ -133,7 +133,7 @@ export const serverStoreActions = {
           apiRisk: server.api_risk?.toLowerCase() || '',
           scanTimestamp: server.security_scan_time || ''
         };
-        
+
         if (existingServer) {
           return {
             ...server,
@@ -141,7 +141,7 @@ export const serverStoreActions = {
             security: securityFromFields
           };
         }
-        
+
         return {
           ...server,
           security: securityFromFields
@@ -235,7 +235,7 @@ export const serverStoreActions = {
         // Security data is already in the server object from the main endpoint
         return server.security;
       }
-      
+
       return null;
     } catch (error) {
       console.error(`Error accessing security data for server ${serverId}:`, error);
