@@ -181,6 +181,14 @@ onMount(async () => {
       }
     }
   });
+  
+  // Stop physics once the network is stabilized
+  network.on('stabilizationIterationsDone', function() {
+    setTimeout(() => {
+      network.setOptions({ physics: { enabled: false } });
+      console.log('Physics disabled after stabilization');
+    }, 1000); // Short delay to allow final node positioning
+  });
   } catch (error) {
     console.error("Error initializing graph:", error);
   }
