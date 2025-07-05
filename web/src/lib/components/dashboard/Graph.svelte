@@ -3,7 +3,20 @@ import { onMount } from 'svelte';
 import { get } from 'svelte/store';
 import type { Writable } from 'svelte/store';
 
-export let graphData: Writable<{ nodes: any[]; edges: any[] }>;
+type GraphNode = {
+  id: string | number;
+  label?: string;
+  group?: string;
+  [key: string]: any; // Additional properties
+};
+
+type GraphEdge = {
+  from: string | number;
+  to: string | number;
+  [key: string]: any; // Additional properties
+};
+
+export let graphData: Writable<{ nodes: GraphNode[]; edges: GraphEdge[] }>;
 let container: HTMLDivElement;
 let network: any;
 
@@ -148,7 +161,6 @@ onMount(async () => {
       hoverConnectedEdges: true,
       selectable: true,
       selectConnectedEdges: true,
-      tooltipDelay: 300
     }
   };
   network = new vis.Network(container, data, options);

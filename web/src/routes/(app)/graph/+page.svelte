@@ -18,6 +18,10 @@ interface GraphEdge {
   to: string;
 }
 
+function normalizeUrl(url: string): string {
+  return url.startsWith('http') ? url : `https://${url}`;
+}
+
 async function loadServersFromCacheOrFetch() {
   let cached = localStorage.getItem('servers');
   let serverList: Server[] = [];
@@ -55,7 +59,7 @@ function buildGraphData(servers: Server[]): { nodes: GraphNode[]; edges: GraphEd
   servers.forEach((server, idx) => {
     try {
       // Ensure the URL has a protocol
-      const serverUrl = server.url.startsWith('http') ? server.url : `https://${server.url}`;
+      const serverUrl = normalizeUrl(server.url);
       const url = new URL(serverUrl);
       const domain = url.hostname.split('.').slice(-2).join('.');
       const subdomain = url.hostname.replace(`.${domain}`, '');
@@ -64,7 +68,7 @@ function buildGraphData(servers: Server[]): { nodes: GraphNode[]; edges: GraphEd
       if (!domainMap.has(domain)) {
         const domainServers = servers.filter(s => {
           try {
-            const serverUrl = s.url.startsWith('http') ? s.url : `https://${s.url}`;
+            const serverUrl = normalizeUrl(s.url);
             return new URL(serverUrl).hostname.includes(domain);
           } catch (e) {
             return false;
