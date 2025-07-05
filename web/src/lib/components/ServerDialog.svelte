@@ -14,6 +14,7 @@
   export let initialData: Partial<Server> | null = null;
   export let mode: 'add' | 'edit' = 'add';
 
+  // Default values
   const defaultFormData = {
     id: undefined as number | undefined,
     url: '',
@@ -25,42 +26,50 @@
     update_interval: 15
   };
 
+  // Reactive values
   let formData = { ...defaultFormData };
   let expectedDown = false;
   let currentStatus = true;
   let intervalValue = 15;
-  let title = mode === 'add' ? 'Add New Server' : 'Edit Server';
-  let submitLabel = mode === 'add' ? 'Add Server' : 'Save Changes';
-  let loadingLabel = mode === 'add' ? 'Adding...' : 'Saving...';
   let hasInitialized = false;
 
+  // UI text based on mode
+  $: title = mode === 'add' ? 'Add New Server' : 'Edit Server';
+  $: submitLabel = mode === 'add' ? 'Add Server' : 'Save Changes';
+  $: loadingLabel = mode === 'add' ? 'Adding...' : 'Saving...';
+
+  // Reset all form values to defaults
   function resetForm() {
     formData = { ...defaultFormData };
     expectedDown = false;
-    currentStatus = true;
-    intervalValue = 15;
+    currentStatus = defaultFormData.active;
+    intervalValue = defaultFormData.update_interval;
     hasInitialized = false;
   }
 
-  // Watch both showDialog and initialData
-  $: if (showDialog) {
+  // Initialize form when dialog opens
+  $: if (showDialog && !hasInitialized) {
+    hasInitialized = true;
+
     if (mode === 'add') {
       resetForm();
-    } else if (initialData && !hasInitialized) {
-      hasInitialized = true;
+    } else if (initialData) {
+      // Map initialData to form values, using default values as fallbacks
       formData = {
         id: initialData.id,
-        url: initialData.url || '',
-        active: initialData.active ?? true,
-        follow_redirect: initialData.follow_redirect ?? true,
-        allow_insecure: initialData.allow_insecure ?? false,
-        expected_status: initialData.expected_status ?? 200,
-        comment: initialData.comment || '',
-        update_interval: initialData.update_interval ?? 15
+        url: initialData.url || defaultFormData.url,
+        active: initialData.active ?? defaultFormData.active,
+        follow_redirect: initialData.follow_redirect ?? defaultFormData.follow_redirect,
+        allow_insecure: initialData.allow_insecure ?? defaultFormData.allow_insecure,
+        expected_status: initialData.expected_status ?? defaultFormData.expected_status,
+        comment: initialData.comment || defaultFormData.comment,
+        update_interval: initialData.update_interval ?? defaultFormData.update_interval
       };
+
+      // Derive other values from initialData
       expectedDown = initialData.expected_status === 0;
-      currentStatus = initialData.active ?? true;
-      intervalValue = initialData.update_interval ?? 15;
+      currentStatus = initialData.active ?? defaultFormData.active;
+      intervalValue = initialData.update_interval ?? defaultFormData.update_interval;
     }
   }
 
@@ -70,7 +79,6 @@
   }
 
   function handleSubmit() {
-    console.log(formData)
     const serverData = {
       ...formData,
       expected_status: expectedDown ? 0 : formData.expected_status,
@@ -99,7 +107,6 @@
 
   function handleCheckboxChange(field: string, event: CustomEvent) {
     formData[field] = event.detail;
-    console.log(field)
   }
 </script>
 

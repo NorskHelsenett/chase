@@ -39,11 +39,11 @@
 
   <div class="relative">
     <!-- Track background -->
-    <div class="h-1.5 bg-[#2b2b2b] rounded-full">
+    <div class="h-1.5 bg-[#2b2b2b] rounded-full" style="margin-left:1%;width: 98% !important;">
       <!-- Active track -->
       <div
         class="absolute h-1.5 bg-green-600 rounded-full transition-all duration-200"
-        style="width: {(currentStepIndex / (intervals.length - 1)) * 100}%"
+        style="width: {(currentStepIndex / (intervals.length - 1)) * 98}%"
       />
     </div>
 
