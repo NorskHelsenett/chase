@@ -24,7 +24,7 @@ func InitDatabase() error {
 	if utils.GetEnv("GORM_LOG_LEVEL", "error") == "info" {
 		logLevel = logger.Info
 	}
-	
+
 	// Create custom logger config
 	newLogger := logger.New(
 		log.New(os.Stdout, "\r\n", log.LstdFlags), // io writer
@@ -35,7 +35,7 @@ func InitDatabase() error {
 			Colorful:                  false,                   // Disable color
 		},
 	)
-	
+
 	var err error
 	db, err = gorm.Open(sqlite.Open(filepath.Join(dataFolder, "chase.db?_loc=Local")), &gorm.Config{
 		Logger: newLogger,

@@ -6,6 +6,8 @@ chase:
   pullPolicy: Always
   tag: "latest"
   deployment: statefulSet
+  auth:
+    generateSecretKey: true
   mounts:
   - name: data
     mountPath: /data

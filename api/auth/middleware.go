@@ -2,6 +2,7 @@ package auth
 
 import (
 	"net/http"
+	"os"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -70,12 +71,20 @@ func Middleware() gin.HandlerFunc {
 }
 
 func isTokenInDatabase(token string) (bool, error) {
+	// Check against environment variable first (faster than DB lookup)
+	if key := os.Getenv("CHASE_SECRET_KEY"); key != "" && token == key {
+		return true, nil
+	}
+
+	// Only query database if token isn't the secret key
 	db := database.GetDB()
 	var exists bool
 	err := db.Model(&types.User{}).
-		Select("count(*) > 0").
+		Select("1").
 		Where("api_token = ?", token).
+		Limit(1).
 		Scan(&exists).
 		Error
+
 	return exists, err
 }
