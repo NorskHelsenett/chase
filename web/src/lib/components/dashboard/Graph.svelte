@@ -71,7 +71,7 @@ onMount(async () => {
       domain: {
         color: { background: 'rgba(230, 92, 0, 0.8)', border: '#ff7b1f' }, // Orange based on site theme
         shape: 'diamond',
-        size: 24,
+        size: 36,
         font: { size: 16, color: '#ffffff' }
       },
       subdomain: {
