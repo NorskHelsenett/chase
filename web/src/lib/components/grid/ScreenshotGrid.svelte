@@ -29,17 +29,51 @@
   function closeModal() {
     selectedImageIndex = null;
   }
+
+  function handleClick(event: MouseEvent, site: Server, index: number) {
+    // Check if cmd (Mac) or ctrl (Windows/Linux) key is pressed
+    if (event.metaKey || event.ctrlKey) {
+      openSiteUrl(site.url);
+    } else {
+      // Normal click behavior - open the modal
+      openModal(index);
+    }
+  }
+  
+  function handleKeyDown(event: KeyboardEvent, site: Server, index: number) {
+    // Enter key opens modal, Enter+Ctrl/Cmd opens URL
+    if (event.key === 'Enter') {
+      if (event.metaKey || event.ctrlKey) {
+        openSiteUrl(site.url);
+      } else {
+        openModal(index);
+      }
+    }
+  }
+  
+  function openSiteUrl(url: string) {
+    // Ensure the URL has a protocol
+    if (!url.startsWith('http://') && !url.startsWith('https://')) {
+      url = 'https://' + url;
+    }
+    
+    // Open the URL in a new tab
+    window.open(url, '_blank', 'noopener,noreferrer');
+  }
 </script>
 
 <div class="bg-[#202020] rounded-lg p-4">
   <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
     {#each sites as site, index}
-      <!-- svelte-ignore a11y-no-static-element-interactions -->
       {#if site.active}
-        <!-- svelte-ignore a11y-click-events-have-key-events -->
         <div
           class="relative group rounded-lg transition-all duration-200 hover:ring-2 hover:ring-green-500 overflow-hidden cursor-pointer"
-          on:click={() => openModal(index)}
+          on:click={(e) => handleClick(e, site, index)}
+          on:keydown={(e) => handleKeyDown(e, site, index)}
+          title="Click to view, Cmd/Ctrl+Click to open website"
+          tabindex="0"
+          role="button"
+          aria-label="Screenshot of {site.url}. Click to view larger, Cmd or Ctrl click to visit website."
         >
           <div class="relative w-full pb-[56.25%] overflow-hidden">
             {#if !imageStates[site.url]}
@@ -63,7 +97,10 @@
             />
 
             <div class="absolute bottom-0 left-0 right-0 bg-black/75 p-2 transform translate-y-full transition-transform duration-200 group-hover:translate-y-0 rounded-b-lg">
-              <p class="text-white text-sm truncate">{site.url}</p>
+              <p class="text-white text-sm truncate">
+                {site.url}
+                <span class="text-xs text-gray-400 block">Click to view, Cmd/Ctrl+Click to open site</span>
+              </p>
             </div>
           </div>
         </div>
