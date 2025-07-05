@@ -2,12 +2,16 @@ package database
 
 import (
 	"fmt"
+	"log"
+	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/norskhelsenett/chase/types"
 	"github.com/norskhelsenett/chase/utils"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
+	"gorm.io/gorm/logger"
 )
 
 var db *gorm.DB
@@ -15,8 +19,27 @@ var db *gorm.DB
 func InitDatabase() error {
 	dataFolder := utils.GetEnv("DATA_FOLDER", "/data")
 
+	// Configure GORM logger
+	logLevel := logger.Error // Only show error logs
+	if utils.GetEnv("GORM_LOG_LEVEL", "error") == "info" {
+		logLevel = logger.Info
+	}
+	
+	// Create custom logger config
+	newLogger := logger.New(
+		log.New(os.Stdout, "\r\n", log.LstdFlags), // io writer
+		logger.Config{
+			SlowThreshold:             1000 * time.Millisecond, // Slow SQL threshold set to 1s (increased from 200ms)
+			LogLevel:                  logLevel,                // Log level (Error by default to minimize logs)
+			IgnoreRecordNotFoundError: true,                    // Ignore ErrRecordNotFound error
+			Colorful:                  false,                   // Disable color
+		},
+	)
+	
 	var err error
-	db, err = gorm.Open(sqlite.Open(filepath.Join(dataFolder, "chase.db?_loc=Local")), &gorm.Config{})
+	db, err = gorm.Open(sqlite.Open(filepath.Join(dataFolder, "chase.db?_loc=Local")), &gorm.Config{
+		Logger: newLogger,
+	})
 	if err != nil {
 		return fmt.Errorf("failed to connect database: %v", err)
 	}
