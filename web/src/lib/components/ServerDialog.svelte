@@ -22,13 +22,13 @@
     allow_insecure: false,
     expected_status: 200,
     comment: '',
-    update_interval: 5
+    update_interval: 15
   };
 
   let formData = { ...defaultFormData };
   let expectedDown = false;
   let currentStatus = true;
-  let intervalValue = 5;
+  let intervalValue = 15;
   let title = mode === 'add' ? 'Add New Server' : 'Edit Server';
   let submitLabel = mode === 'add' ? 'Add Server' : 'Save Changes';
   let loadingLabel = mode === 'add' ? 'Adding...' : 'Saving...';
@@ -38,7 +38,7 @@
     formData = { ...defaultFormData };
     expectedDown = false;
     currentStatus = true;
-    intervalValue = 5;
+    intervalValue = 15;
     hasInitialized = false;
   }
 
@@ -56,11 +56,11 @@
         allow_insecure: initialData.allow_insecure ?? false,
         expected_status: initialData.expected_status ?? 200,
         comment: initialData.comment || '',
-        update_interval: initialData.update_interval ?? 5
+        update_interval: initialData.update_interval ?? 15
       };
       expectedDown = initialData.expected_status === 0;
       currentStatus = initialData.active ?? true;
-      intervalValue = initialData.update_interval ?? 5;
+      intervalValue = initialData.update_interval ?? 15;
     }
   }
 
@@ -125,6 +125,7 @@
             type="text"
             bind:value={formData.url}
             required
+            autofocus
             class="w-full px-4 py-2 bg-[#2b2b2b] rounded-lg text-gray-200 focus:outline-none focus:ring-2 focus:ring-green-500"
             placeholder="https://example.com"
           />
