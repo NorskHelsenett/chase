@@ -111,68 +111,73 @@ function buildGraphData(servers) {
     }
   }
 
-  // 4. Add site and instance nodes, never adding site nodes that match groupHostnames
-  servers.forEach((server, idx) => {
-    try {
-      const serverUrl = normalizeUrl(server.url);
-      const url = new URL(serverUrl);
-      const hostname = url.hostname;
-      const allLevels = getAllDomainLevels(hostname);
-      const rootDomain = getRootDomain(hostname);
+// 4. Add site and instance nodes, never adding site nodes that match groupHostnames
+servers.forEach((server, idx) => {
+  try {
+    const serverUrl = normalizeUrl(server.url);
+    const url = new URL(serverUrl);
+    const hostname = url.hostname;
+    const allLevels = getAllDomainLevels(hostname);
+    const rootDomain = getRootDomain(hostname);
 
-      let parentForInstance;
-      if (groupHostnames.has(hostname)) {
-        parentForInstance = `domain:${hostname}`;
-      } else if (hostname === rootDomain || groupHostnames.has(rootDomain)) {
+    // Find the closest parent domain/group node (deepest level first)
+    let parentForInstance = null;
+    for (let i = 0; i < allLevels.length; i++) {
+      if (groupHostnames.has(allLevels[i])) {
+        parentForInstance = `domain:${allLevels[i]}`;
+        break;
+      }
+    }
+
+    if (!parentForInstance) {
+      // fallback to rootDomain, or create site node
+      if (groupHostnames.has(rootDomain)) {
         parentForInstance = `domain:${rootDomain}`;
       } else {
         const siteNodeId = `site:${hostname}`;
         addNode(siteNodeId, hostname, 'site', server.url);
         parentForInstance = siteNodeId;
+        // Optionally connect site to root domain node, if it exists
         if (groupHostnames.has(rootDomain)) {
           edges.push({ from: `domain:${rootDomain}`, to: siteNodeId });
         }
-        for (let i = 1; i < allLevels.length; i++) {
-          if (groupHostnames.has(allLevels[i])) {
-            edges.push({ from: `domain:${allLevels[i]}`, to: siteNodeId });
-            break;
-          }
-        }
       }
-
-      const instanceNodeId = `instance:${server.ID || idx}:${server.url}`;
-      const latestPing = server.ping_results && server.ping_results.length > 0
-        ? server.ping_results.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())[0]
-        : null;
-      const statusText = !latestPing ? 'Unknown' :
-        latestPing.status_code === server.expected_status ? 'Up' : 'Down';
-
-      addNode(
-        instanceNodeId,
-        server.url,
-        'instance',
-        `${server.url}\nStatus: ${statusText}\n${latestPing ? `Response: ${latestPing.status_code}` : ''}\n${server.comment ? `Note: ${server.comment}` : ''}`
-      );
-      edges.push({ from: parentForInstance, to: instanceNodeId });
-
-      // --- Logging
-      console.log(
-        `Processed: ${hostname}\n` +
-        `  → Parent: ${parentForInstance}\n` +
-        `  → Domain nodes: [${[...groupHostnames].join(', ')}]`
-      );
-      // ---
-
-    } catch (error) {
-      const errId = `error:${server.ID || idx}:${server.url}`;
-      addNode(
-        errId,
-        server.url,
-        'error',
-        `${server.url}\nInvalid URL format\nMissing protocol (http:// or https://)?`
-      );
     }
-  });
+
+    const instanceNodeId = `instance:${server.ID || idx}:${server.url}`;
+    const latestPing = server.ping_results && server.ping_results.length > 0
+      ? server.ping_results.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())[0]
+      : null;
+    const statusText = !latestPing ? 'Unknown' :
+      latestPing.status_code === server.expected_status ? 'Up' : 'Down';
+
+    addNode(
+      instanceNodeId,
+      server.url,
+      'instance',
+      `${server.url}\nStatus: ${statusText}\n${latestPing ? `Response: ${latestPing.status_code}` : ''}\n${server.comment ? `Note: ${server.comment}` : ''}`
+    );
+    edges.push({ from: parentForInstance, to: instanceNodeId });
+
+    // --- Logging
+    console.log(
+      `Processed: ${hostname}\n` +
+      `  → Parent: ${parentForInstance}\n` +
+      `  → Domain nodes: [${[...groupHostnames].join(', ')}]`
+    );
+    // ---
+
+  } catch (error) {
+    const errId = `error:${server.ID || idx}:${server.url}`;
+    addNode(
+      errId,
+      server.url,
+      'error',
+      `${server.url}\nInvalid URL format\nMissing protocol (http:// or https://)?`
+    );
+  }
+});
+
 
   return { nodes, edges };
 }
