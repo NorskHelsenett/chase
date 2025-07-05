@@ -92,7 +92,7 @@ function buildGraphData(servers) {
   for (const [level, count] of levelCounts) {
     if (count > 1) {
       const nodeId = `domain:${level}`;
-      addNode(nodeId, level, 'domain', `Domain/group: ${level}`);
+      addNode(nodeId, level, 'domain', `Domain/group: ${level}\nCount: ${count}`);
       groupHostnames.add(level);
     }
   }
