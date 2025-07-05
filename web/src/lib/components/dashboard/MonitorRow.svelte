@@ -12,6 +12,7 @@
   };
 
   export let server: Server;
+  export let hover = false;
 
   let rowData: ServerRowData;
 
@@ -75,7 +76,7 @@
   };
 </script>
 
-<td class="py-2">
+<td class={`py-2 px-2 ${hover ? 'group-hover:rounded-l-lg' : ''}`}>
   <span class={`px-2 py-0.5 text-xs w-[7em] text-center font-medium rounded-full ${getStatusClasses(rowData.status)}`}>
     {rowData.status.toUpperCase()}
   </span>
@@ -103,7 +104,7 @@
   </div>
 </td>
 
-<td>
+<td class={hover ? 'group-hover:rounded-r-lg' : ''}>
   <div class="flex gap-1">
     {#each Array(10) as _, i}
       {#if i < (10 - rowData.uptime.length)}

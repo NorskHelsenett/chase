@@ -129,7 +129,7 @@ function getLatestRisk(server: Server, type: 'adminrisk' | 'apirisk'): string {
     <thead>
       <tr class="text-gray-400 font-medium">
         <th
-          class="text-left font-medium cursor-pointer hover:text-gray-200 transition-colors group"
+          class="text-left px-2 font-medium cursor-pointer hover:text-gray-200 transition-colors group"
           on:click={() => toggleSort('status')}
         >
           Status
@@ -204,10 +204,10 @@ function getLatestRisk(server: Server, type: 'adminrisk' | 'apirisk'): string {
         {#each sites as site}
           <tr
             data-server-id={site.ID}
-            class="group transition-colors duration-200 ease-in-out hover:bg-[#2b2b2b] cursor-pointer rounded-lg"
+            class="group transition-colors duration-200 ease-in-out hover:bg-[#2b2b2b] cursor-pointer"
             on:click={() => goto(`/server/${site.ID}`)}
           >
-            <MonitorRow server={site} />
+            <MonitorRow server={site} hover={true} />
           </tr>
         {/each}
       {/if}
