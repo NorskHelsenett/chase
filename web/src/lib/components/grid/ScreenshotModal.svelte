@@ -30,14 +30,14 @@
   let originalOverflow: string;
 
   // Reactive values derived from ping data
-  $: pingStatusCode = latestPing?.status_code !== undefined 
-      ? latestPing.status_code === 0 ? 'down' : latestPing.status_code?.toString() 
+  $: pingStatusCode = latestPing?.status_code !== undefined
+      ? latestPing.status_code === 0 ? 'down' : latestPing.status_code?.toString()
       : 'N/A';
-  
-  $: pingResponseTime = latestPing?.response_time_ms 
-      ? `${latestPing.response_time_ms.toFixed(2)}ms` 
+
+  $: pingResponseTime = latestPing?.response_time_ms
+      ? `${latestPing.response_time_ms.toFixed(2)}ms`
       : 'N/A';
-  
+
   $: pingTimestamp = (() => {
     if (!latestPing?.timestamp) return 'N/A';
     try {
@@ -56,14 +56,14 @@
     loading = true;
     error = null;
     pingError = null;
-    
+
     try {
       // Parallel requests for better performance
       const [reportPromise, pingPromise] = await Promise.allSettled([
         fetch(`/api/servers/${serverId}/report`),
         fetchPingData(serverId)
       ]);
-      
+
       // Handle report response
       if (reportPromise.status === 'fulfilled') {
         const res = reportPromise.value;
@@ -72,7 +72,7 @@
       } else {
         error = reportPromise.reason?.message || 'Failed to fetch report';
       }
-      
+
       // Ping data is handled by the fetchPingData function
     } catch (e) {
       error = e.message;
@@ -216,7 +216,7 @@
     const statusCode = getStatusCode();
     // Handle the "down" status specifically
     if (statusCode === 'down') return "text-red-500";
-    
+
     const code = parseInt(statusCode);
     if (isNaN(code)) return "text-gray-500";
 
@@ -462,21 +462,6 @@
                           </span>
                         </div>
 
-                        <div class="flex items-center gap-2 p-3 bg-[#1a1a1a]">
-                          <Zap size={18} class="text-green-400" />
-                          <span class="text-sm font-medium">Response Time</span>
-                        </div>
-                        <div class="p-3 bg-[#1a1a1a] flex justify-end items-center">
-                          <span class="font-mono text-sm text-gray-300">{pingResponseTime}</span>
-                        </div>
-
-                        <div class="flex items-center gap-2 p-3 bg-[#1a1a1a]">
-                          <Zap size={18} class="text-green-400" />
-                          <span class="text-sm font-medium">Last Checked</span>
-                        </div>
-                        <div class="p-3 bg-[#1a1a1a] flex justify-end items-center">
-                          <span class="font-mono text-sm text-gray-300">{pingTimestamp}</span>
-                        </div>
 
                         <div class="flex items-center gap-2 p-3 bg-[#1a1a1a]">
                           <FileText size={18} class="text-green-400" />
