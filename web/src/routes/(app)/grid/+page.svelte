@@ -3,9 +3,13 @@
   import { page } from '$app/stores';
   import type { Server } from '$lib/models';
   import ScreenshotGrid from '$lib/components/grid/ScreenshotGrid.svelte';
+  import { Search, Grid, Server as ServerIcon, Filter } from 'lucide-svelte';
 
   let servers: Server[] = [];
   let filteredServers: Server[] = [];
+  let loading = true;
+  let searchTerm = '';
+  let filterStatus = 'all'; // 'all', 'online', 'issues', 'new'
 
   function isSuccessfulStatus(status: number): boolean {
     return status >= 200 && status < 400;
@@ -27,7 +31,42 @@
 
   $: activeFilter = $page.url.searchParams.get('active');
 
+  $: {
+    if (servers && servers.length > 0) {
+      // First filter by active status
+      let result = servers.filter((server: Server) => server.active);
+      
+      // Then filter by search term if it exists
+      if (searchTerm) {
+        const term = searchTerm.toLowerCase();
+        result = result.filter((server: Server) => 
+          server.url.toLowerCase().includes(term) ||
+          server.name?.toLowerCase().includes(term) ||
+          server.description?.toLowerCase().includes(term)
+        );
+      }
+      
+      // Then apply status filter
+      if (filterStatus !== 'all') {
+        if (filterStatus === 'online') {
+          result = result.filter((server: Server) => 
+            server.ping_results.length > 0 && hasGoodPingHistory(server)
+          );
+        } else if (filterStatus === 'issues') {
+          result = result.filter((server: Server) => 
+            server.ping_results.length > 0 && !hasGoodPingHistory(server)
+          );
+        } else if (filterStatus === 'new') {
+          result = result.filter((server: Server) => server.ping_results.length === 0);
+        }
+      }
+      
+      filteredServers = result;
+    }
+  }
+
   async function fetchServers() {
+    loading = true;
     try {
       const url = new URL('/api/servers', window.location.origin);
       if (activeFilter !== null) {
@@ -37,12 +76,11 @@
       const response = await fetch(url);
       servers = await response.json();
       
-      // Filter for active servers with good ping history
-      filteredServers = servers.filter(server => 
-        server.active && hasGoodPingHistory(server)
-      );
+      // Initial filtering happens in the reactive statement above
     } catch (error) {
       console.error('Failed to fetch server data:', error);
+    } finally {
+      loading = false;
     }
   }
 
@@ -50,5 +88,55 @@
 </script>
 
 <div class="p-4 min-h-screen w-full">
-  <ScreenshotGrid sites={filteredServers} />
+  <!-- Header and filters -->
+  <div class="mb-6 flex flex-col gap-4">
+    <div class="flex flex-wrap justify-between items-center gap-4">
+      <h1 class="text-2xl font-medium flex items-center gap-2">
+        <Grid size={24} class="text-blue-500"/>
+        Server Grid View
+        <span class="text-sm font-normal bg-blue-500/20 text-blue-300 px-2 py-1 rounded-full ml-2">
+          {filteredServers.length} {filteredServers.length === 1 ? 'server' : 'servers'}
+        </span>
+      </h1>
+      
+      <div class="flex items-center gap-3">
+        <div class="relative">
+          <Search size={18} class="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500" />
+          <input 
+            type="text" 
+            bind:value={searchTerm}
+            placeholder="Search servers..." 
+            class="pl-10 pr-4 py-2 bg-black/30 border border-gray-800 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          />
+        </div>
+        
+        <div class="relative flex items-center">
+          <Filter size={18} class="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500" />
+          <select 
+            bind:value={filterStatus}
+            class="appearance-none pl-10 pr-8 py-2 bg-black/30 border border-gray-800 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          >
+            <option value="all">All servers</option>
+            <option value="online">Online</option>
+            <option value="issues">With issues</option>
+            <option value="new">New</option>
+          </select>
+          <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-500">
+            <svg class="fill-current h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20">
+              <path d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" />
+            </svg>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  {#if loading}
+    <div class="flex flex-col items-center justify-center py-16">
+      <div class="w-12 h-12 border-4 border-t-blue-500 rounded-full animate-spin"></div>
+      <p class="mt-4 text-gray-400">Loading servers...</p>
+    </div>
+  {:else}
+    <ScreenshotGrid sites={filteredServers} />
+  {/if}
 </div>
