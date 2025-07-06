@@ -41,7 +41,7 @@
 </script>
 
 <div
-  class="custom-select relative w-[220px]"
+  class="custom-select relative w-[170px]"
   use:clickOutside={{ enabled: isOpen, cb: handleClickOutside }}
   bind:this={selectContainer}
 >

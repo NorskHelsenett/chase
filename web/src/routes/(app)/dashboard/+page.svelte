@@ -9,20 +9,61 @@
   import type { Server } from '$lib/models';
 
   let filteredServers: Server[] = [];
+  
+  function isSuccessfulStatus(status: number): boolean {
+    return status >= 200 && status < 400;
+  }
+
+  function hasGoodPingHistory(server: Server): boolean {
+    if (!server.ping_results || server.ping_results.length === 0) {
+      return true; // New server with no pings
+    }
+
+    // Calculate success rate of all pings
+    const successfulPings = server.ping_results.filter(ping =>
+      isSuccessfulStatus(ping.status_code)
+    ).length;
+
+    const successRate = successfulPings / server.ping_results.length;
+    return successRate >= 0.9; // 90% success rate threshold
+  }
   let searchQuery = '';
+  let statusFilter = 'all';
 
   // Subscribe to page store to get URL parameters
   $: activeFilter = $page.url.searchParams.get('active');
 
-  // Create a derived store that filters servers based on search query
+  // Create a derived store that filters servers based on search query and status
   $: filteredStore = derived(servers, $servers => {
-    if (!searchQuery) return $servers;
+    let result = $servers;
 
-    const query = searchQuery.toLowerCase();
-    return $servers.filter(server =>
-      server.url.toLowerCase().includes(query) ||
-      server.comment?.toLowerCase().includes(query)
-    );
+    // Apply search query filter
+    if (searchQuery) {
+      const query = searchQuery.toLowerCase();
+      result = result.filter(server =>
+        server.url.toLowerCase().includes(query) ||
+        server.comment?.toLowerCase().includes(query)
+      );
+    }
+
+    // Apply status filter
+    if (statusFilter !== 'all') {
+      if (statusFilter === 'online') {
+        result = result.filter(server => 
+          hasGoodPingHistory(server)
+        );
+      } else if (statusFilter === 'issues') {
+        result = result.filter(server => 
+          !hasGoodPingHistory(server)
+        );
+      } else if (statusFilter === 'new') {
+        const thirtyDaysAgo = new Date();
+        thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+        result = result.filter(server => new Date(server.CreatedAt) >= thirtyDaysAgo);
+      }
+    }
+
+    return result;
   });
 
   // Subscribe to the filtered store
@@ -38,6 +79,10 @@
 
   function handleRefresh() {
     fetchServers(true); // Force refresh from server
+  }
+  
+  function handleFilter(event: CustomEvent) {
+    statusFilter = event.detail.status;
   }
 
   // Watch for changes in activeFilter and refetch data
@@ -57,6 +102,7 @@
     isLoading={$isLoading}
     on:search={handleSearch}
     on:refresh={handleRefresh}
+    on:filter={handleFilter}
     on:serverAdded={() => fetchServers(true)}
   />
   {#if $isLoading && filteredServers.length === 0}

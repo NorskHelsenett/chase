@@ -2,6 +2,8 @@
 <script lang="ts">
   import { createEventDispatcher } from 'svelte';
   import ServerDialog from '../ServerDialog.svelte';
+  import CustomSelect from '../ui/CustomSelect.svelte';
+  import { Filter } from 'lucide-svelte';
 
   const dispatch = createEventDispatcher();
 
@@ -9,6 +11,7 @@
 
   let showDialog = false;
   let searchQuery = '';
+  let filterStatus = 'all';
 
   // Handle dialog submission
   async function handleDialogSubmit(event: CustomEvent) {
@@ -45,6 +48,11 @@
     dispatch('refresh');
   }
 
+  // Handle filter change
+  function handleFilterChange(event) {
+    dispatch('filter', { status: event.detail.value });
+  }
+
   function onClose() {
     showDialog = false;
   }
@@ -60,6 +68,37 @@
         on:input={handleSearch}
         placeholder="Search domains..."
         class="w-full px-4 py-2 bg-[#2b2b2b] rounded-lg text-gray-200 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-green-500"
+      />
+    </div>
+
+    <!-- Filter dropdown -->
+    <div class="relative flex items-center z-10">
+      <CustomSelect
+        bind:value={filterStatus}
+        icon={Filter}
+        options={[
+          {
+            value: 'all',
+            label: 'All servers',
+            icon: '<div class="flex items-center"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect><line x1="8" y1="21" x2="16" y2="21"></line><line x1="12" y1="17" x2="12" y2="21"></line></svg><span class="text-gray-100 ml-2"> Show all</span></div>'
+          },
+          {
+            value: 'online',
+            label: 'Online',
+            icon: '<div class="flex items-center"><span class="w-2 h-2 bg-green-400 rounded-full mr-2 animate-pulse"></span><span class="text-green-400">Online</span></div>'
+          },
+          {
+            value: 'issues',
+            label: 'With issues',
+            icon: '<div class="flex items-center"><span class="w-2 h-2 bg-red-400 rounded-full mr-2"></span><span class="text-red-400">Issues</span></div>'
+          },
+          {
+            value: 'new',
+            label: 'New',
+            icon: '<div class="flex items-center"><span class="w-2 h-2 bg-gray-400 rounded-full mr-2"></span><span class="text-gray-300">New</span></div>'
+          }
+        ]}
+        on:change={handleFilterChange}
       />
     </div>
 
