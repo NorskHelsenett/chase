@@ -255,7 +255,7 @@
               <img
                 src={`/api/screenshot/${currentSite.url.replace(/^(https?:\/\/)/, '')}?cache=true`}
                 alt={`Screenshot of ${currentSite.url}`}
-                class="w-full h-full object-contain drop-shadow-2xl"
+                class="w-full h-full object-contain drop-shadow-2xl rounded-lg"
                 loading="lazy"
                 on:load={() => imageLoaded = true}
                 on:error={handleImageError}
