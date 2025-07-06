@@ -18,7 +18,7 @@
   let imageLoaded = false;
   let imageLoadError = false;
   let latestPing: any = null;
-  let pingLoading = false;
+  let pingError: string | null = null;
   let pingQueryParams = {
     limit: 1,
     sort: 'desc',
@@ -29,13 +29,51 @@
   // Store original overflow style
   let originalOverflow: string;
 
-  async function fetchServerReport(serverId: string) {
+  // Reactive values derived from ping data
+  $: pingStatusCode = latestPing?.status_code !== undefined 
+      ? latestPing.status_code === 0 ? 'down' : latestPing.status_code?.toString() 
+      : 'N/A';
+  
+  $: pingResponseTime = latestPing?.response_time_ms 
+      ? `${latestPing.response_time_ms.toFixed(2)}ms` 
+      : 'N/A';
+  
+  $: pingTimestamp = (() => {
+    if (!latestPing?.timestamp) return 'N/A';
+    try {
+      const date = new Date(latestPing.timestamp);
+      return date.toLocaleString();
+    } catch (e) {
+      return 'N/A';
+    }
+  })();
+
+  $: pingDetails = latestPing?.detail || null;
+  $: pingErrorMessage = latestPing?.error || '';
+
+  // Combined function to fetch both server report and ping data
+  async function fetchServerData(serverId: string) {
     loading = true;
     error = null;
+    pingError = null;
+    
     try {
-      const res = await fetch(`/api/servers/${serverId}/report`);
-      if (!res.ok) throw new Error('Failed to fetch report');
-      currentReport = await res.json();
+      // Parallel requests for better performance
+      const [reportPromise, pingPromise] = await Promise.allSettled([
+        fetch(`/api/servers/${serverId}/report`),
+        fetchPingData(serverId)
+      ]);
+      
+      // Handle report response
+      if (reportPromise.status === 'fulfilled') {
+        const res = reportPromise.value;
+        if (!res.ok) throw new Error('Failed to fetch report');
+        currentReport = await res.json();
+      } else {
+        error = reportPromise.reason?.message || 'Failed to fetch report';
+      }
+      
+      // Ping data is handled by the fetchPingData function
     } catch (e) {
       error = e.message;
     } finally {
@@ -43,10 +81,9 @@
     }
   }
 
-  async function fetchLatestPing(serverId: string) {
-    pingLoading = true;
+  // Separate function to fetch ping data that can be called independently if needed
+  async function fetchPingData(serverId: string) {
     try {
-      // Build query string with parameters
       const queryParams = new URLSearchParams();
       Object.entries(pingQueryParams).forEach(([key, value]) => {
         if (value !== undefined && value !== null) {
@@ -58,18 +95,19 @@
       if (!res.ok) throw new Error('Failed to fetch ping data');
       const pings = await res.json();
       latestPing = pings.length > 0 ? pings[0] : null;
+      return res;
     } catch (e) {
       console.error('Error fetching ping data:', e);
+      pingError = e.message;
       latestPing = null;
-    } finally {
-      pingLoading = false;
+      throw e;
     }
   }
 
   function updatePingQuery(params: Partial<typeof pingQueryParams>) {
     pingQueryParams = { ...pingQueryParams, ...params };
     if (sites.length > 0) {
-      fetchLatestPing(sites[currentIndex].ID);
+      fetchPingData(sites[currentIndex].ID);
     }
   }
 
@@ -98,8 +136,7 @@
     if (newIndex >= 0 && newIndex < sites.length) {
       currentIndex = newIndex;
       resetImageState();
-      fetchServerReport(sites[currentIndex].ID);
-      fetchLatestPing(sites[currentIndex].ID);
+      fetchServerData(sites[currentIndex].ID);
     }
   }
 
@@ -136,8 +173,7 @@
     modalOpen = true;
     originalOverflow = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
-    fetchServerReport(sites[currentIndex].ID);
-    fetchLatestPing(sites[currentIndex].ID);
+    fetchServerData(sites[currentIndex].ID);
     window.addEventListener('keydown', handleKeydown);
     focusTrap?.focus();
   });
@@ -170,50 +206,26 @@
   }
 
   function getStatusCode(): string {
-    if (pingLoading) return 'Loading...';
+    if (loading) return 'Loading...';
     if (!latestPing) return 'N/A';
-    return latestPing.status_code?.toString() || 'N/A';
+    // Return "down" if the status code is 0, otherwise return the actual status code
+    return latestPing.status_code === 0 ? 'down' : latestPing.status_code?.toString() || 'N/A';
   }
 
   function getStatusColor(): string {
-    const code = parseInt(getStatusCode());
+    const statusCode = getStatusCode();
+    // Handle the "down" status specifically
+    if (statusCode === 'down') return "text-red-500";
+    
+    const code = parseInt(statusCode);
     if (isNaN(code)) return "text-gray-500";
 
-    if (code === 0) return "text-red-500"; // Display status code 0 in red
+    if (code === 0) return "text-red-500"; // Display status code 0 in red (fallback)
     if (code >= 200 && code < 300) return "text-green-500";
     if (code >= 300 && code < 400) return "text-blue-500";
     if (code >= 400 && code < 500) return "text-orange-500";
     if (code >= 500) return "text-red-500";
     return "text-gray-500";
-  }
-
-  function getResponseTime(): string {
-    if (pingLoading) return 'Loading...';
-    if (!latestPing) return 'N/A';
-    return latestPing.response_time_ms ? `${latestPing.response_time_ms.toFixed(2)}ms` : 'N/A';
-  }
-
-  function getPingTimestamp(): string {
-    if (pingLoading) return 'Loading...';
-    if (!latestPing || !latestPing.timestamp) return 'N/A';
-
-    try {
-      const date = new Date(latestPing.timestamp);
-      return date.toLocaleString();
-    } catch (e) {
-      return 'N/A';
-    }
-  }
-
-  function getPingDetails(): any {
-    if (!latestPing || !latestPing.detail) return null;
-    return latestPing.detail;
-  }
-
-  function getPingError(): string {
-    if (pingLoading) return '';
-    if (!latestPing) return '';
-    return latestPing.error || '';
   }
 
   function openSiteUrl(url: string) {
@@ -455,7 +467,7 @@
                           <span class="text-sm font-medium">Response Time</span>
                         </div>
                         <div class="p-3 bg-[#1a1a1a] flex justify-end items-center">
-                          <span class="font-mono text-sm text-gray-300">{getResponseTime()}</span>
+                          <span class="font-mono text-sm text-gray-300">{pingResponseTime}</span>
                         </div>
 
                         <div class="flex items-center gap-2 p-3 bg-[#1a1a1a]">
@@ -463,7 +475,7 @@
                           <span class="text-sm font-medium">Last Checked</span>
                         </div>
                         <div class="p-3 bg-[#1a1a1a] flex justify-end items-center">
-                          <span class="font-mono text-sm text-gray-300">{getPingTimestamp()}</span>
+                          <span class="font-mono text-sm text-gray-300">{pingTimestamp}</span>
                         </div>
 
                         <div class="flex items-center gap-2 p-3 bg-[#1a1a1a]">
@@ -500,60 +512,60 @@
                       </div>
                     </div>
 
-                    {#if pingLoading}
+                    {#if loading}
                       <div class="p-4 bg-black/30 rounded-lg flex justify-center items-center">
                         <div class="relative">
                           <div class="w-8 h-8 border-3 border-t-green-500 border-r-green-400/40 border-b-green-400/20 border-l-green-400/60 rounded-full animate-spin"></div>
                         </div>
                         <span class="ml-3 text-sm text-green-400">Loading ping data...</span>
                       </div>
-                    {:else if getPingError()}
+                    {:else if pingErrorMessage}
                       <div class="flex items-center gap-2 p-3 bg-red-900/20 rounded-lg border border-red-800/50">
                         <AlertTriangle size={18} class="text-red-400" />
                         <span class="text-sm font-medium">Error: </span>
-                        <span class="text-red-400 text-sm">{getPingError()}</span>
+                        <span class="text-red-400 text-sm">{pingErrorMessage}</span>
                       </div>
                     {/if}
 
-                    {#if getPingDetails() && !pingLoading}
+                    {#if pingDetails && !loading}
                       <div class="p-3 bg-black/30 rounded-md">
                         <h4 class="text-sm font-medium mb-2 text-green-400">Connection Details</h4>
                         <div class="grid grid-cols-2 gap-2 text-xs">
-                          {#if getPingDetails().ip}
+                          {#if pingDetails.ip}
                           <div class="text-gray-400">IP Address:</div>
-                          <div class="text-gray-300 font-mono">{getPingDetails().ip}</div>
+                          <div class="text-gray-300 font-mono">{pingDetails.ip}</div>
                           {/if}
 
-                          {#if getPingDetails().cert_issuer}
+                          {#if pingDetails.cert_issuer}
                           <div class="text-gray-400">Certificate Issuer:</div>
-                          <div class="text-gray-300">{getPingDetails().cert_issuer}</div>
+                          <div class="text-gray-300">{pingDetails.cert_issuer}</div>
                           {/if}
 
-                          {#if getPingDetails().cert_common_name}
+                          {#if pingDetails.cert_common_name}
                           <div class="text-gray-400">Certificate CN:</div>
-                          <div class="text-gray-300">{getPingDetails().cert_common_name}</div>
+                          <div class="text-gray-300">{pingDetails.cert_common_name}</div>
                           {/if}
 
-                          {#if getPingDetails().cert_expiry_date}
+                          {#if pingDetails.cert_expiry_date}
                           <div class="text-gray-400">Certificate Expiry:</div>
-                          <div class="text-gray-300">{new Date(getPingDetails().cert_expiry_date).toLocaleDateString()}</div>
+                          <div class="text-gray-300">{new Date(pingDetails.cert_expiry_date).toLocaleDateString()}</div>
                           {/if}
 
-                          {#if getPingDetails().redirect_count !== undefined}
+                          {#if pingDetails.redirect_count !== undefined}
                           <div class="text-gray-400">Redirects:</div>
-                          <div class="text-gray-300">{getPingDetails().redirect_count}</div>
+                          <div class="text-gray-300">{pingDetails.redirect_count}</div>
                           {/if}
 
-                          {#if getPingDetails().tls_valid !== undefined}
+                          {#if pingDetails.tls_valid !== undefined}
                           <div class="text-gray-400">TLS Valid:</div>
-                          <div class="{getPingDetails().tls_valid ? 'text-green-400' : 'text-red-400'}">
-                            {getPingDetails().tls_valid ? 'Yes' : 'No'}
+                          <div class="{pingDetails.tls_valid ? 'text-green-400' : 'text-red-400'}">
+                            {pingDetails.tls_valid ? 'Yes' : 'No'}
                           </div>
                           {/if}
 
-                          {#if getPingDetails().organization_name}
+                          {#if pingDetails.organization_name}
                           <div class="text-gray-400">Organization:</div>
-                          <div class="text-gray-300">{getPingDetails().organization_name}</div>
+                          <div class="text-gray-300">{pingDetails.organization_name}</div>
                           {/if}
                         </div>
                       </div>
