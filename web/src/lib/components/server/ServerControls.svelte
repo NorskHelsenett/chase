@@ -2,7 +2,7 @@
 <script lang="ts">
   import { createEventDispatcher } from 'svelte';
   import type { Server } from '$lib/models';
-  import RadioToggle from '../ui/RadioToggle.svelte';
+  import ToggleButton from '../ui/ToggleButton.svelte';
   import ServerDialog from '../ServerDialog.svelte';
 	import DeleteDialog from '../ui/DeleteDialog.svelte';
 
@@ -16,7 +16,8 @@
   let dialogData: Partial<Server> | null = null;
   let showDeleteDialog = false;
 
-  function handleActiveChange(active: boolean) {
+  function handleActiveChange(event: CustomEvent) {
+    const active = event.detail;
     serverActive = active;
     dispatch('toggleActive', { active });
   }
@@ -59,10 +60,11 @@
 
 <div class="bg-[#202020] rounded-lg p-4 flex items-center justify-between gap-4">
   <div class="flex items-center gap-6">
-    <RadioToggle
+    <ToggleButton
       bind:value={serverActive}
-      on:change={({ detail }) => handleActiveChange(detail)}
-      label="Status"
+      onLabel="Active"
+      offLabel="Inactive"
+      on:change={handleActiveChange}
     />
   </div>
 

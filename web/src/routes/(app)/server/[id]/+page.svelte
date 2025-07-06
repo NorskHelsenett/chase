@@ -72,9 +72,14 @@
 
       if (!response.ok) throw new Error('Failed to update server');
 
-      await fetchServerData(serverID);
+      // Update server state locally instead of reloading
+      if (server) {
+        Object.assign(server, updatedServer);
+      }
     } catch (e) {
       error = e instanceof Error ? e.message : 'Failed to update server';
+    } finally {
+      isLoading = false;
     }
   }
 
@@ -93,9 +98,14 @@
 
       if (!response.ok) throw new Error('Failed to update server status');
 
-      await fetchServerData(serverID);
+      // Update server state locally instead of reloading
+      if (server) {
+        server.active = active;
+      }
     } catch (e) {
       error = e instanceof Error ? e.message : 'Failed to update server status';
+    } finally {
+      isLoading = false;
     }
   }
 
