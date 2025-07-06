@@ -1,7 +1,7 @@
 <script lang="ts">
-    import { onMount, onDestroy } from 'svelte';
-  import { fade, fly } from 'svelte/transition';
-  import { Scale, Globe, FileText, FileSearch, Shield, Server as ServerIcon, AlertTriangle, X, Zap, ArrowLeft, ArrowRight, ExternalLink } from 'lucide-svelte';
+  import { onMount, onDestroy } from 'svelte';
+  import { fade, fly, scale } from 'svelte/transition';
+  import { Scale, Globe, FileText, FileSearch, Shield, Server as ServerIcon, AlertTriangle, X, Zap, ArrowLeft, ArrowRight, ExternalLink, Maximize2, Minimize2 } from 'lucide-svelte';
   import type { Server } from '$lib/models';
 
   export let sites: Server[] = [];
@@ -14,6 +14,7 @@
   let error: string | null = null;
   let focusTrap: HTMLInputElement;
   let showingFullscreenImage = false;
+  let imageLoaded = false;
 
   // Store original overflow style
   let originalOverflow: string;
@@ -165,7 +166,7 @@
   <!-- Modal -->
   <div
     transition:fly={{ y: 20, duration: 300 }}
-    class="relative z-10 bg-[#1a1a1a] text-white rounded-xl shadow-2xl w-full max-w-7xl max-h-[90vh] m-4 overflow-hidden border border-gray-800"
+    class="relative z-10 bg-[#202020] text-white rounded-lg shadow-2xl w-full max-w-7xl max-h-[90vh] m-4 overflow-hidden border border-green-900/30"
     role="dialog"
     aria-modal="true"
   >
@@ -180,22 +181,22 @@
 
     <div class="flex flex-col h-full">
       <!-- Header -->
-      <div class="flex justify-between items-center p-4 border-b border-gray-800">
+      <div class="flex justify-between items-center p-4 border-b border-green-900/30">
         <h2 class="text-xl font-medium flex items-center gap-2">
-          <Globe size={18} class="text-blue-400" />
+          <Globe size={18} class="text-green-400" />
           {getHostname(currentSite.url)}
         </h2>
         <div class="flex items-center gap-2">
           <button
             on:click={() => openSiteUrl(currentSite.url)}
-            class="p-2 hover:bg-gray-800 rounded-lg transition-colors text-blue-400 hover:text-blue-300"
+            class="p-2 hover:bg-green-900/30 rounded-lg transition-colors text-green-400 hover:text-green-300"
             title="Open site in new tab"
           >
             <ExternalLink size={20} />
           </button>
           <button
             on:click={closeModal}
-            class="p-2 hover:bg-gray-800 rounded-lg transition-colors"
+            class="p-2 hover:bg-green-900/30 rounded-lg transition-colors"
             title="Close"
           >
             <X size={20} />
@@ -222,24 +223,37 @@
           <!-- Screenshot -->
           <div class="flex-1 p-4 bg-black/30 overflow-hidden">
             <div
-              class="w-full h-full flex items-center justify-center cursor-zoom-in"
+              class="w-full h-full flex items-center justify-center cursor-zoom-in relative"
               on:click={toggleFullscreen}
               title="Click to enlarge"
             >
+              <!-- Loading indicator for image -->
+              <div class="absolute inset-0 flex items-center justify-center bg-black/30 rounded-lg" class:hidden={imageLoaded}>
+                <div class="relative">
+                  <div class="w-12 h-12 border-4 border-t-green-500 border-r-green-400/40 border-b-green-400/20 border-l-green-400/60 rounded-full animate-spin"></div>
+                  <div class="absolute inset-0 w-12 h-12 border-4 border-green-500/10 rounded-full animate-pulse"></div>
+                </div>
+              </div>
+              
               <img
                 src={`/api/screenshot/${currentSite.url.replace(/^(https?:\/\/)/, '')}`}
                 alt={`Screenshot of ${currentSite.url}`}
                 class="w-full h-full object-contain rounded-lg shadow-lg"
+                on:load={() => imageLoaded = true}
+                style={!imageLoaded ? 'visibility: hidden' : ''}
               />
             </div>
           </div>
 
           <!-- Server Info Sidebar -->
-          <div class="w-96 bg-[#1a1a1a] p-4 overflow-y-auto border-l border-gray-800">
+          <div class="w-96 bg-[#1a1a1a] p-4 overflow-y-auto border-l border-green-900/30">
             {#if loading}
               <div class="flex flex-col items-center justify-center h-full space-y-4 py-8">
-                <div class="w-8 h-8 border-4 border-t-blue-500 rounded-full animate-spin"></div>
-                <p class="text-gray-400">Loading report data...</p>
+                <div class="relative">
+                  <div class="w-12 h-12 border-4 border-t-green-500 border-r-green-400/40 border-b-green-400/20 border-l-green-400/60 rounded-full animate-spin"></div>
+                  <div class="absolute inset-0 w-12 h-12 border-4 border-green-500/10 rounded-full animate-pulse"></div>
+                </div>
+                <p class="text-green-400">Loading report data...</p>
               </div>
             {:else if error}
               <div class="p-4 bg-red-900/20 rounded-lg border border-red-800/50 text-red-400 flex items-start gap-3">
@@ -252,12 +266,12 @@
             {:else if currentReport}
               <div class="space-y-5">
                 <!-- URL -->
-                <div class="bg-gradient-to-r from-gray-800/50 to-gray-900/50 p-4 rounded-lg border border-gray-800">
+                <div class="bg-gradient-to-r from-gray-800/50 to-gray-900/50 p-4 rounded-lg border border-green-900/30">
                   <a
                     href={`/server/${currentSite.ID}`}
                     target="_blank"
                     rel="noopener noreferrer"
-                    class="flex items-center gap-2 text-blue-400 hover:text-blue-300 transition-colors font-medium"
+                    class="flex items-center gap-2 text-green-400 hover:text-green-300 transition-colors font-medium"
                   >
                     <ServerIcon size={18} />
                     View Full Server Details
@@ -286,10 +300,10 @@
                   {:else}
                     <h3 class="text-lg font-medium text-gray-300">Security Report</h3>
 
-                    <div class="bg-gray-800/30 rounded-lg border border-gray-800">
+                    <div class="bg-gray-800/30 rounded-lg border border-green-900/30">
                       <div class="grid grid-cols-2 gap-px bg-gray-700">
                         <div class="flex items-center gap-2 p-3 bg-[#1a1a1a]">
-                          <Shield size={18} class="text-blue-400" />
+                          <Shield size={18} class="text-green-400" />
                           <span class="text-sm">Header Score</span>
                         </div>
                         <div class="p-3 bg-[#1a1a1a] flex justify-end items-center">
@@ -297,7 +311,7 @@
                         </div>
 
                         <div class="flex items-center gap-2 p-3 bg-[#1a1a1a]">
-                          <Scale size={18} class="text-blue-400" />
+                          <Scale size={18} class="text-green-400" />
                           <span class="text-sm">Certificate</span>
                         </div>
                         <div class="p-3 bg-[#1a1a1a] flex justify-end items-center">
@@ -305,7 +319,7 @@
                         </div>
 
                         <div class="flex items-center gap-2 p-3 bg-[#1a1a1a]">
-                          <ServerIcon size={18} class="text-blue-400" />
+                          <ServerIcon size={18} class="text-green-400" />
                           <span class="text-sm">Infrastructure</span>
                         </div>
                         <div class="p-3 bg-[#1a1a1a] flex justify-end items-center">
@@ -313,7 +327,7 @@
                         </div>
 
                         <div class="flex items-center gap-2 p-3 bg-[#1a1a1a]">
-                          <Zap size={18} class="text-blue-400" />
+                          <Zap size={18} class="text-green-400" />
                           <span class="text-sm">Status</span>
                         </div>
                         <div class="p-3 bg-[#1a1a1a] flex justify-end items-center">
@@ -323,7 +337,7 @@
                         </div>
 
                         <div class="flex items-center gap-2 p-3 bg-[#1a1a1a]">
-                          <FileText size={18} class="text-blue-400" />
+                          <FileText size={18} class="text-green-400" />
                           <span class="text-sm">robots.txt</span>
                         </div>
                         <div class="p-3 bg-[#1a1a1a] flex justify-end items-center">
@@ -339,7 +353,7 @@
                         </div>
 
                         <div class="flex items-center gap-2 p-3 bg-[#1a1a1a]">
-                          <FileSearch size={18} class="text-blue-400" />
+                          <FileSearch size={18} class="text-green-400" />
                           <span class="text-sm">security.txt</span>
                         </div>
                         <div class="p-3 bg-[#1a1a1a] flex justify-end items-center">
@@ -364,9 +378,9 @@
       </div>
 
       <!-- Navigation Footer -->
-      <div class="flex justify-between items-center p-4 border-t border-gray-800">
+      <div class="flex justify-between items-center p-4 border-t border-green-900/30">
         <button
-          class="flex items-center gap-2 px-4 py-2 bg-gray-800 hover:bg-gray-700 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          class="flex items-center gap-2 px-4 py-2 bg-green-900/30 hover:bg-green-800/40 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           disabled={currentIndex === 0}
           on:click={() => navigateImage(-1)}
         >
@@ -375,7 +389,7 @@
         </button>
         <span class="font-medium">{currentIndex + 1} of {sites.length}</span>
         <button
-          class="flex items-center gap-2 px-4 py-2 bg-gray-800 hover:bg-gray-700 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          class="flex items-center gap-2 px-4 py-2 bg-green-900/30 hover:bg-green-800/40 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           disabled={currentIndex === sites.length - 1}
           on:click={() => navigateImage(1)}
         >

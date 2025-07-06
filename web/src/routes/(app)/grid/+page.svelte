@@ -92,9 +92,9 @@
   <div class="mb-6 flex flex-col gap-4">
     <div class="flex flex-wrap justify-between items-center gap-4">
       <h1 class="text-2xl font-medium flex items-center gap-2">
-        <Grid size={24} class="text-blue-500"/>
+        <Grid size={24} class="text-green-500"/>
         Server Grid View
-        <span class="text-sm font-normal bg-blue-500/20 text-blue-300 px-2 py-1 rounded-full ml-2">
+        <span class="text-sm font-normal bg-green-500/20 text-green-300 px-2 py-1 rounded-full ml-2">
           {filteredServers.length} {filteredServers.length === 1 ? 'server' : 'servers'}
         </span>
       </h1>
@@ -106,7 +106,7 @@
             type="text" 
             bind:value={searchTerm}
             placeholder="Search servers..." 
-            class="pl-10 pr-4 py-2 bg-black/30 border border-gray-800 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            class="pl-10 pr-4 py-2 bg-black/30 border border-green-900/30 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
           />
         </div>
         
@@ -114,7 +114,7 @@
           <Filter size={18} class="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500" />
           <select 
             bind:value={filterStatus}
-            class="appearance-none pl-10 pr-8 py-2 bg-black/30 border border-gray-800 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            class="appearance-none pl-10 pr-8 py-2 bg-black/30 border border-green-900/30 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
           >
             <option value="all">All servers</option>
             <option value="online">Online</option>
@@ -133,8 +133,11 @@
 
   {#if loading}
     <div class="flex flex-col items-center justify-center py-16">
-      <div class="w-12 h-12 border-4 border-t-blue-500 rounded-full animate-spin"></div>
-      <p class="mt-4 text-gray-400">Loading servers...</p>
+      <div class="relative">
+        <div class="w-12 h-12 border-4 border-t-green-500 border-r-green-400/40 border-b-green-400/20 border-l-green-400/60 rounded-full animate-spin"></div>
+        <div class="absolute inset-0 w-12 h-12 border-4 border-green-500/10 rounded-full animate-pulse"></div>
+      </div>
+      <p class="mt-4 text-green-400">Loading servers...</p>
     </div>
   {:else}
     <ScreenshotGrid sites={filteredServers} />
