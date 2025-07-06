@@ -2,6 +2,7 @@
   import MonitorRow from './MonitorRow.svelte';
   import type { Server } from '$lib/models';
   import { goto } from '$app/navigation';
+	import { fade, scale } from 'svelte/transition';
 
   export let sites: Server[] = [];
 
@@ -125,6 +126,19 @@ function getLatestRisk(server: Server, type: 'adminrisk' | 'apirisk'): string {
 </script>
 
 <div class="bg-[#202020] rounded-lg p-4">
+  {#if sites.length === 0}
+  <div class="col-span-full py-16 text-center">
+    <div in:scale={{ duration: 400 }} class="mx-auto mb-5 w-16 h-16 rounded-full bg-green-500/10 flex items-center justify-center">
+      <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="text-green-500/70">
+        <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
+        <line x1="8" y1="21" x2="16" y2="21"></line>
+        <line x1="12" y1="17" x2="12" y2="21"></line>
+      </svg>
+    </div>
+    <p in:fade={{ duration: 300, delay: 100 }} class="text-lg font-medium text-green-400 mb-2">No servers found</p>
+    <p in:fade={{ duration: 300, delay: 200 }} class="text-sm text-gray-400 max-w-md mx-auto">Try adjusting your search filters or add a new server to monitor</p>
+  </div>
+  {:else}
   <table class="w-full border-spacing-4">
     <thead>
       <tr class="text-gray-400 font-medium">
@@ -194,13 +208,7 @@ function getLatestRisk(server: Server, type: 'adminrisk' | 'apirisk'): string {
       </tr>
     </thead>
     <tbody>
-      {#if sites.length === 0}
-        <tr>
-          <td colspan="7" class="text-center py-8 text-gray-500">
-            No servers found
-          </td>
-        </tr>
-      {:else}
+
         {#each sites as site}
           <tr
             data-server-id={site.ID}
@@ -210,7 +218,7 @@ function getLatestRisk(server: Server, type: 'adminrisk' | 'apirisk'): string {
             <MonitorRow server={site} hover={true} />
           </tr>
         {/each}
-      {/if}
-    </tbody>
-  </table>
+      </tbody>
+    </table>
+    {/if}
 </div>
