@@ -8,13 +8,11 @@
 	}
 
 	:root {
-
 		/* CSS: .bg-gradient { background: var(--gradient) } */
 		--gradient: #e65c00;
 
 		/* --background: 25 65% 3.6%; */
-		--background: 0, 0%, 10.2%
-		--foreground: 25 10% 97.25%;
+		--background: 0, 0%, 10.2% --foreground: 25 10% 97.25%;
 
 		--muted: 25 50% 13.5%;
 		--muted-foreground: 25 10% 54.5%;
@@ -47,14 +45,14 @@
 }
 
 .bg-card {
-  @apply bg-[#202020] rounded-lg p-6 border-none;
+	@apply bg-[#202020] rounded-lg p-6 border-none;
 }
 
 .text-muted-foreground {
-  @apply text-gray-400;
+	@apply text-gray-400;
 }
 
-.bg-secondary{
+.bg-secondary {
 	background-color: var(--bg-secondary);
 }
 
@@ -62,17 +60,17 @@
 	border-color: rgb(50, 49, 49);
 }
 
-.alert{
+.alert {
 	color: #ff4c4c;
 }
 
 main {
 	background: #171717;
-  margin-top: 8px;
-  margin-right: 8px;
-  margin-bottom: 8px;
-  border-radius: 8px;
-  border: 1px solid #4d4c4c82;
+	margin-top: 8px;
+	margin-right: 8px;
+	margin-bottom: 8px;
+	border-radius: 8px;
+	border: 1px solid #4d4c4c82;
 }
 
 .placeholder {

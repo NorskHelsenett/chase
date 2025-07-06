@@ -1,6 +1,6 @@
 <script>
-import BatchComponent from '$lib/components/batch/BatchComponent.svelte';
-import MassImport from '$lib/components/batch/MassImport.svelte';
+	import BatchComponent from '$lib/components/batch/BatchComponent.svelte';
+	import MassImport from '$lib/components/batch/MassImport.svelte';
 </script>
 
 <div class="max-w-2xl mx-auto mt-8">

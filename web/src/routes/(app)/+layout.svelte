@@ -3,15 +3,14 @@
 	import Navbar from '$lib/components/Navbar.svelte';
 	import { onMount } from 'svelte';
 
-	onMount(async() => {
+	onMount(async () => {
 		await initializeAuth();
-	})
+	});
 </script>
 
 <!-- Mobile view -->
 <div class="min-h-screen flex flex-col sm:hidden bg-background text-foreground overflow-auto">
-	<div class="flex-grow flex items-center justify-center p-4">
-	</div>
+	<div class="flex-grow flex items-center justify-center p-4"></div>
 </div>
 
 <!-- Desktop view -->

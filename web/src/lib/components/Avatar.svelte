@@ -23,9 +23,5 @@
 </script>
 
 {#if $user}
-	<img
-		src={getGravatarUrl($user.email)}
-		alt="User avatar"
-		class="{sizeMap[size]} rounded-full"
-	/>
+	<img src={getGravatarUrl($user.email)} alt="User avatar" class="{sizeMap[size]} rounded-full" />
 {/if}

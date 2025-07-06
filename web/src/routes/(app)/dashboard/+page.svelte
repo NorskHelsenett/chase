@@ -1,129 +1,125 @@
 <script lang="ts">
-  import { page } from '$app/stores';
-  import { derived } from 'svelte/store';
-  import { onMount } from 'svelte';
-  import MonitorStats from "$lib/components/dashboard/MonitorStats.svelte";
-  import MonitorControls from "$lib/components/dashboard/MonitorControls.svelte";
-  import MonitorTable from "$lib/components/dashboard/MonitorTable.svelte";
-  import { servers, isLoading, serverStats, serverStoreActions } from '$lib/stores/serverStore';
-  import type { Server } from '$lib/models';
-  import { exportServersToCSV } from '$lib/utils/csv.js';
+	import { page } from '$app/stores';
+	import { derived } from 'svelte/store';
+	import { onMount } from 'svelte';
+	import MonitorStats from '$lib/components/dashboard/MonitorStats.svelte';
+	import MonitorControls from '$lib/components/dashboard/MonitorControls.svelte';
+	import MonitorTable from '$lib/components/dashboard/MonitorTable.svelte';
+	import { servers, isLoading, serverStats, serverStoreActions } from '$lib/stores/serverStore';
+	import type { Server } from '$lib/models';
+	import { exportServersToCSV } from '$lib/utils/csv.js';
 
-  let filteredServers: Server[] = [];
-  
-  function isSuccessfulStatus(status: number): boolean {
-    return status >= 200 && status < 400;
-  }
+	let filteredServers: Server[] = [];
 
-  function hasGoodPingHistory(server: Server): boolean {
-    if (!server.ping_results || server.ping_results.length === 0) {
-      return true; // New server with no pings
-    }
+	function isSuccessfulStatus(status: number): boolean {
+		return status >= 200 && status < 400;
+	}
 
-    // Calculate success rate of all pings
-    const successfulPings = server.ping_results.filter(ping =>
-      isSuccessfulStatus(ping.status_code)
-    ).length;
+	function hasGoodPingHistory(server: Server): boolean {
+		if (!server.ping_results || server.ping_results.length === 0) {
+			return true; // New server with no pings
+		}
 
-    const successRate = successfulPings / server.ping_results.length;
-    return successRate >= 0.9; // 90% success rate threshold
-  }
-  let searchQuery = '';
-  let statusFilter = 'all';
+		// Calculate success rate of all pings
+		const successfulPings = server.ping_results.filter((ping) =>
+			isSuccessfulStatus(ping.status_code)
+		).length;
 
-  // Subscribe to page store to get URL parameters
-  $: activeFilter = $page.url.searchParams.get('active');
+		const successRate = successfulPings / server.ping_results.length;
+		return successRate >= 0.9; // 90% success rate threshold
+	}
+	let searchQuery = '';
+	let statusFilter = 'all';
 
-  // Create a derived store that filters servers based on search query and status
-  $: filteredStore = derived(servers, $servers => {
-    let result = $servers;
+	// Subscribe to page store to get URL parameters
+	$: activeFilter = $page.url.searchParams.get('active');
 
-    // Apply search query filter
-    if (searchQuery) {
-      const query = searchQuery.toLowerCase();
-      result = result.filter(server =>
-        server.url.toLowerCase().includes(query) ||
-        server.comment?.toLowerCase().includes(query)
-      );
-    }
+	// Create a derived store that filters servers based on search query and status
+	$: filteredStore = derived(servers, ($servers) => {
+		let result = $servers;
 
-    // Apply status filter
-    if (statusFilter !== 'all') {
-      if (statusFilter === 'online') {
-        result = result.filter(server => 
-          hasGoodPingHistory(server)
-        );
-      } else if (statusFilter === 'issues') {
-        result = result.filter(server => 
-          !hasGoodPingHistory(server)
-        );
-      } else if (statusFilter === 'new') {
-        const thirtyDaysAgo = new Date();
-        thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-        result = result.filter(server => new Date(server.CreatedAt) >= thirtyDaysAgo);
-      }
-    }
+		// Apply search query filter
+		if (searchQuery) {
+			const query = searchQuery.toLowerCase();
+			result = result.filter(
+				(server) =>
+					server.url.toLowerCase().includes(query) || server.comment?.toLowerCase().includes(query)
+			);
+		}
 
-    return result;
-  });
+		// Apply status filter
+		if (statusFilter !== 'all') {
+			if (statusFilter === 'online') {
+				result = result.filter((server) => hasGoodPingHistory(server));
+			} else if (statusFilter === 'issues') {
+				result = result.filter((server) => !hasGoodPingHistory(server));
+			} else if (statusFilter === 'new') {
+				const thirtyDaysAgo = new Date();
+				thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+				result = result.filter((server) => new Date(server.CreatedAt) >= thirtyDaysAgo);
+			}
+		}
 
-  // Subscribe to the filtered store
-  $: filteredServers = $filteredStore;
+		return result;
+	});
 
-  async function fetchServers(forceRefresh = false) {
-    await serverStoreActions.loadServers(activeFilter, forceRefresh);
-  }
+	// Subscribe to the filtered store
+	$: filteredServers = $filteredStore;
 
-  function handleSearch(event: CustomEvent) {
-    searchQuery = event.detail.query.toLowerCase();
-  }
+	async function fetchServers(forceRefresh = false) {
+		await serverStoreActions.loadServers(activeFilter, forceRefresh);
+	}
 
-  function handleRefresh() {
-    fetchServers(true); // Force refresh from server
-  }
-  
-  function handleFilter(event: CustomEvent) {
-    statusFilter = event.detail.status;
-  }
-  
-  // Handle CSV export
-  function handleExport() {
-    // Create a filename based on current filters and date
-    const date = new Date().toISOString().split('T')[0];
-    const filterName = statusFilter !== 'all' ? `-${statusFilter}` : '';
-    const searchSuffix = searchQuery ? `-search_${searchQuery}` : '';
-    const filename = `server-data${filterName}${searchSuffix}-${date}.csv`;
-    
-    // Export current filtered view to CSV
-    exportServersToCSV(filteredServers, filename);
-  }
+	function handleSearch(event: CustomEvent) {
+		searchQuery = event.detail.query.toLowerCase();
+	}
 
-  // Watch for changes in activeFilter and refetch data
-  $: if (activeFilter !== undefined) {
-    fetchServers();
-  }
+	function handleRefresh() {
+		fetchServers(true); // Force refresh from server
+	}
 
-  onMount(async () => {
-    // Initial fetch from cache or API (server data with ping_results included)
-    await fetchServers(true);
-  });
+	function handleFilter(event: CustomEvent) {
+		statusFilter = event.detail.status;
+	}
+
+	// Handle CSV export
+	function handleExport() {
+		// Create a filename based on current filters and date
+		const date = new Date().toISOString().split('T')[0];
+		const filterName = statusFilter !== 'all' ? `-${statusFilter}` : '';
+		const searchSuffix = searchQuery ? `-search_${searchQuery}` : '';
+		const filename = `server-data${filterName}${searchSuffix}-${date}.csv`;
+
+		// Export current filtered view to CSV
+		exportServersToCSV(filteredServers, filename);
+	}
+
+	// Watch for changes in activeFilter and refetch data
+	$: if (activeFilter !== undefined) {
+		fetchServers();
+	}
+
+	onMount(async () => {
+		// Initial fetch from cache or API (server data with ping_results included)
+		await fetchServers(true);
+	});
 </script>
 
 <div class="p-4 w-full">
-  <MonitorStats stats={$serverStats} />
-  <MonitorControls
-    isLoading={$isLoading}
-    on:search={handleSearch}
-    on:refresh={handleRefresh}
-    on:filter={handleFilter}
-    on:export={handleExport}
-    on:serverAdded={() => fetchServers(true)}
-  />
-  {#if $isLoading && filteredServers.length === 0}
-    <div class="flex justify-center items-center p-6">
-      <div class="animate-pulse text-gray-500">Loading server data...</div>
-    </div>
-  {:else}
-    <MonitorTable sites={filteredServers}/>
-  {/if}
+	<MonitorStats stats={$serverStats} />
+	<MonitorControls
+		isLoading={$isLoading}
+		on:search={handleSearch}
+		on:refresh={handleRefresh}
+		on:filter={handleFilter}
+		on:export={handleExport}
+		on:serverAdded={() => fetchServers(true)}
+	/>
+	{#if $isLoading && filteredServers.length === 0}
+		<div class="flex justify-center items-center p-6">
+			<div class="animate-pulse text-gray-500">Loading server data...</div>
+		</div>
+	{:else}
+		<MonitorTable sites={filteredServers} />
+	{/if}
 </div>
