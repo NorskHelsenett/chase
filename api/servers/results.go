@@ -11,8 +11,20 @@ import (
 	"github.com/norskhelsenett/chase/database"
 )
 
-// GetServerResults returns ping results for a specific server
-// with optional filtering and pagination
+// GetServerResults handles the request to retrieve ping results for a specific server.
+//
+// It extracts the server ID from the URL parameters and validates it exists in the database.
+// The function supports the following query parameters:
+//   - limit: Maximum number of results to return (default: 20, max: 100)
+//   - sort: Sort order for results by timestamp ("asc" or "desc", default: "desc")
+//   - from: Start time for results filtering (RFC3339 format, default: 7 days ago)
+//   - to: End time for results filtering (RFC3339 format, default: current time)
+//
+// Returns:
+//   - 200 OK with array of ping results on success
+//   - 400 Bad Request if server ID is missing or time parameters are invalid
+//   - 404 Not Found if the server doesn't exist
+//   - 500 Internal Server Error if database query fails
 func GetServerResults(c *gin.Context) {
 	serverID := c.Param("id")
 	if serverID == "" {
@@ -22,18 +34,17 @@ func GetServerResults(c *gin.Context) {
 
 	db := database.GetDB()
 
-	// Check if server exists
 	var server Server
 	if err := db.First(&server, serverID).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Server not found"})
 		return
 	}
 
-	// Parse query parameters
-	limit := 20 // default limit
+	// --- Parse query parameters ---
+	// Limit
+	limit := 20
 	if limitParam := c.Query("limit"); limitParam != "" {
 		if parsedLimit, err := strconv.Atoi(limitParam); err == nil && parsedLimit > 0 {
-			// Cap the maximum to 100 to prevent excessive queries
 			if parsedLimit > 100 {
 				limit = 100
 			} else {
@@ -42,34 +53,71 @@ func GetServerResults(c *gin.Context) {
 		}
 	}
 
-	// Parse time range parameter (in hours)
-	timeRange := 24 * 7 // default to 1 week
-	if rangeParam := c.Query("range"); rangeParam != "" {
-		if parsedRange, err := strconv.Atoi(rangeParam); err == nil && parsedRange > 0 {
-			// Cap the maximum to 30 days to prevent excessive queries
-			if parsedRange > 24*30 {
-				timeRange = 24 * 30
-			} else {
-				timeRange = parsedRange
-			}
-		}
+	// Sort
+	sortOrder := "DESC"
+	if strings.ToLower(c.Query("sort")) == "asc" {
+		sortOrder = "ASC"
 	}
 
-	// Calculate time threshold
-	timeThreshold := time.Now().Add(-time.Duration(timeRange) * time.Hour)
+	// includeDetail
+	includeDetail := false
+	if includeDetailParam := c.Query("includeDetail"); strings.ToLower(includeDetailParam) == "true" {
+		includeDetail = true
+	}
 
-	// Query ping results for this server
+	// From/To or Range
+	var fromTime, toTime time.Time
+	var err error
+
+	if fromParam := c.Query("from"); fromParam != "" {
+		fromTime, err = time.Parse(time.RFC3339, fromParam)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid 'from' time. Use RFC3339 format"})
+			return
+		}
+	} else {
+		rangeHours := 24 // default 24h
+		if rangeParam := c.Query("range"); rangeParam != "" {
+			if parsedRange, err := strconv.Atoi(rangeParam); err == nil && parsedRange > 0 {
+				if parsedRange > 24*30 {
+					rangeHours = 24 * 30
+				} else {
+					rangeHours = parsedRange
+				}
+			}
+		}
+		fromTime = time.Now().Add(-time.Duration(rangeHours) * time.Hour)
+	}
+
+	if toParam := c.Query("to"); toParam != "" {
+		toTime, err = time.Parse(time.RFC3339, toParam)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid 'to' time. Use RFC3339 format"})
+			return
+		}
+	} else {
+		toTime = time.Now()
+	}
+
+	// --- Build the query ---
+	query := db.Where("server_id = ? AND timestamp BETWEEN ? AND ?", serverID, fromTime, toTime).
+		Order("timestamp " + sortOrder).
+		Limit(limit)
+
+	if includeDetail {
+		query = query.Preload("PingDetail")
+	}
+
 	var results []PingResult
-	if err := db.Where("server_id = ? AND timestamp > ?", serverID, timeThreshold).
-		Order("timestamp DESC").
-		Limit(limit).
-		Find(&results).Error; err != nil {
+	if err := query.Find(&results).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch ping results"})
 		return
 	}
 
 	c.JSON(http.StatusOK, results)
 }
+
+
 
 // GetServersWithSecurityStatus fetches all servers with their latest ping result but without detailed ping history
 // This makes the initial load much faster
