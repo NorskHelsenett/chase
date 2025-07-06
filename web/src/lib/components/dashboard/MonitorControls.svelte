@@ -61,7 +61,7 @@
 <div class="bg-[#202020] rounded-lg p-4 mb-4">
   <div class="flex items-center justify-between gap-4">
     <!-- Search -->
-    <div class="flex-1">
+    <div class="flex-1 relative">
       <input
         type="text"
         bind:value={searchQuery}
@@ -69,6 +69,19 @@
         placeholder="Search domains..."
         class="w-full px-4 py-2 bg-[#2b2b2b] rounded-lg text-gray-200 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-green-500"
       />
+      {#if searchQuery}
+        <button
+          class="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-200 transition-colors p-1"
+          on:click={() => { searchQuery = ''; handleSearch(); }}
+          aria-label="Clear search"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10" />
+            <line x1="15" y1="9" x2="9" y2="15" />
+            <line x1="9" y1="9" x2="15" y2="15" />
+          </svg>
+        </button>
+      {/if}
     </div>
 
     <!-- Filter dropdown -->
