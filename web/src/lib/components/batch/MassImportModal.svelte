@@ -134,7 +134,8 @@ https://another-site.com`;
       dispatch('imported', {
         count: sitesList.length,
         successful: result.imported || 0,
-        failed: result.failed || 0
+        failed: result.failed || 0,
+        failedImports: failedImports // Pass the failed imports to parent
       });
     } catch (error) {
       console.error('Error importing sites:', error);
@@ -155,11 +156,17 @@ https://another-site.com`;
     dispatch('close');
   }
 
-  function resetForm() {
+  export function resetForm() {
     sites = '';
-    showModal = false;
+    intervalValue = 15; // Reset to default
+    followRedirect = true; // Reset to default
+    allowInsecure = false; // Reset to default
     showFailedModal = false;
     failedImports = [];
+    // Don't close the modal if called externally
+    if (showModal) {
+      showModal = false;
+    }
   }
   
   function closeFailedModal() {
@@ -188,6 +195,18 @@ https://another-site.com`;
     if (failedImports.length > 0) {
       showFailedModal = true;
     }
+  }
+  
+  // Show failed imports with specified data from parent
+  export function showFailedImports(imports) {
+    if (imports && imports.length > 0) {
+      // Set the failed imports
+      failedImports = imports;
+      // Show the modal
+      showFailedModal = true;
+      return true;
+    }
+    return false;
   }
 </script>
 
