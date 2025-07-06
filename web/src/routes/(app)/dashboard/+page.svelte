@@ -7,6 +7,7 @@
   import MonitorTable from "$lib/components/dashboard/MonitorTable.svelte";
   import { servers, isLoading, serverStats, serverStoreActions } from '$lib/stores/serverStore';
   import type { Server } from '$lib/models';
+  import { exportServersToCSV } from '$lib/utils/csv.js';
 
   let filteredServers: Server[] = [];
   
@@ -84,6 +85,18 @@
   function handleFilter(event: CustomEvent) {
     statusFilter = event.detail.status;
   }
+  
+  // Handle CSV export
+  function handleExport() {
+    // Create a filename based on current filters and date
+    const date = new Date().toISOString().split('T')[0];
+    const filterName = statusFilter !== 'all' ? `-${statusFilter}` : '';
+    const searchSuffix = searchQuery ? `-search_${searchQuery}` : '';
+    const filename = `server-data${filterName}${searchSuffix}-${date}.csv`;
+    
+    // Export current filtered view to CSV
+    exportServersToCSV(filteredServers, filename);
+  }
 
   // Watch for changes in activeFilter and refetch data
   $: if (activeFilter !== undefined) {
@@ -103,6 +116,7 @@
     on:search={handleSearch}
     on:refresh={handleRefresh}
     on:filter={handleFilter}
+    on:export={handleExport}
     on:serverAdded={() => fetchServers(true)}
   />
   {#if $isLoading && filteredServers.length === 0}

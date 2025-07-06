@@ -3,7 +3,7 @@
   import { createEventDispatcher } from 'svelte';
   import ServerDialog from '../ServerDialog.svelte';
   import CustomSelect from '../ui/CustomSelect.svelte';
-  import { Filter } from 'lucide-svelte';
+  import { Filter, Download } from 'lucide-svelte';
 
   const dispatch = createEventDispatcher();
 
@@ -117,6 +117,15 @@
 
     <!-- Control buttons -->
     <div class="flex gap-3">
+      <button
+        on:click={() => dispatch('export')}
+        disabled={isLoading}
+        class="px-4 py-2 bg-[#2b2b2b] hover:bg-[#333] rounded-lg text-gray-200 flex items-center gap-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+        title="Export current view as CSV"
+      >
+        <Download class="w-4 h-4" />
+      </button>
+
       <button
         on:click={handleRefresh}
         disabled={isLoading}
