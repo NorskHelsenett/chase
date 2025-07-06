@@ -198,7 +198,7 @@ export const serverStoreActions = {
 				}
 			}
 
-			const response = await fetch(`/api/servers/${serverId}/pings`);
+			const response = await fetch(`/api/servers/${serverId}/pings?range=1000`);
 			if (!response.ok) throw new Error(`Failed to fetch ping results for server ${serverId}`);
 
 			const pingResults = await response.json();
