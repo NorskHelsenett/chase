@@ -268,8 +268,11 @@
       <!-- Header -->
       <div class="flex justify-between items-center p-4 border-b border-green-900/30 bg-gradient-to-r from-[#1a1a1a] to-[#202020]">
         <h2 class="text-xl font-medium flex items-center gap-2">
-          <Globe size={20} class="text-green-400" />
+          <Globe size={20} class={pingStatusCode === 'down' ? 'text-red-500' : 'text-green-400'} />
           {getHostname(currentSite.url)}
+          {#if pingStatusCode === 'down'}
+            <span class="text-xs font-bold bg-red-500 text-white px-1.5 py-0.5 rounded uppercase tracking-wide ml-1">Down</span>
+          {/if}
         </h2>
         <div class="flex items-center gap-2">
           <button
