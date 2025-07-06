@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
   import { fade, fly, scale } from 'svelte/transition';
-  import { Scale, Globe, FileText, FileSearch, Shield, Server as ServerIcon, AlertTriangle, X, Zap, ArrowLeft, ArrowRight, ExternalLink, Maximize2, Minimize2 } from 'lucide-svelte';
+  import { Scale, Globe, FileText, FileSearch, Shield, Server as ServerIcon, AlertTriangle, X, Zap, ArrowLeft, ArrowRight, ExternalLink, Maximize2, Minimize2, Image } from 'lucide-svelte';
   import type { Server } from '$lib/models';
 
   export let sites: Server[] = [];
@@ -15,6 +15,7 @@
   let focusTrap: HTMLInputElement;
   let showingFullscreenImage = false;
   let imageLoaded = false;
+  let imageLoadError = false;
 
   // Store original overflow style
   let originalOverflow: string;
@@ -57,6 +58,7 @@
     const newIndex = currentIndex + direction;
     if (newIndex >= 0 && newIndex < sites.length) {
       currentIndex = newIndex;
+      resetImageState();
       fetchServerReport(sites[currentIndex].ID);
     }
   }
@@ -77,6 +79,17 @@
 
   function toggleFullscreen() {
     showingFullscreenImage = !showingFullscreenImage;
+  }
+
+  function handleImageError() {
+    imageLoadError = true;
+    imageLoaded = true; // Consider it "loaded" to remove loading indicator
+    console.error(`Failed to load screenshot for ${currentSite.url}`);
+  }
+
+  function resetImageState() {
+    imageLoaded = false;
+    imageLoadError = false;
   }
 
   onMount(() => {
@@ -232,13 +245,23 @@
               </div>
             </div>
 
-            <img
-              src={`/api/screenshot/${currentSite.url.replace(/^(https?:\/\/)/, '')}?cache=true`}
-              alt={`Screenshot of ${currentSite.url}`}
-              class="w-full h-full object-contain drop-shadow-2xl"
-              on:load={() => imageLoaded = true}
-              style={!imageLoaded ? 'visibility: hidden' : ''}
-            />
+            {#if imageLoadError}
+              <div class="flex flex-col items-center justify-center text-gray-400 p-8 bg-black/30 rounded-lg">
+                <Image size={64} class="mb-4 opacity-40" />
+                <p>Failed to load screenshot</p>
+                <p class="text-sm mt-2 text-gray-500">Could not load image for {currentSite.url}</p>
+              </div>
+            {:else}
+              <img
+                src={`/api/screenshot/${currentSite.url.replace(/^(https?:\/\/)/, '')}?cache=true`}
+                alt={`Screenshot of ${currentSite.url}`}
+                class="w-full h-full object-contain drop-shadow-2xl"
+                loading="lazy"
+                on:load={() => imageLoaded = true}
+                on:error={handleImageError}
+                style={!imageLoaded ? 'visibility: hidden' : ''}
+              />
+            {/if}
           </div>
         {:else}
           <!-- Regular Content View -->
@@ -257,13 +280,22 @@
                 </div>
               </div>
 
-              <img
-                src={`/api/screenshot/${currentSite.url.replace(/^(https?:\/\/)/, '')}`}
-                alt={`Screenshot of ${currentSite.url}`}
-                class="w-full h-full object-contain rounded-lg shadow-xl"
-                on:load={() => imageLoaded = true}
-                style={!imageLoaded ? 'visibility: hidden' : ''}
-              />
+              {#if imageLoadError}
+                <div class="flex flex-col items-center justify-center text-gray-400 p-8 bg-black/30 rounded-lg">
+                  <Image size={48} class="mb-3 opacity-40" />
+                  <p class="text-sm">Failed to load screenshot</p>
+                </div>
+              {:else}
+                <img
+                  src={`/api/screenshot/${currentSite.url.replace(/^(https?:\/\/)/, '')}`}
+                  alt={`Screenshot of ${currentSite.url}`}
+                  class="w-full h-full object-contain rounded-lg shadow-xl"
+                  loading="lazy"
+                  on:load={() => imageLoaded = true}
+                  on:error={handleImageError}
+                  style={!imageLoaded ? 'visibility: hidden' : ''}
+                />
+              {/if}
             </div>
           </div>
 
@@ -404,7 +436,7 @@
       <!-- Navigation Footer -->
       <div class="flex justify-between items-center p-4 border-t border-green-900/30 bg-gradient-to-r from-[#1a1a1a] to-[#202020]">
         <button
-          class="flex items-center gap-2 px-4 py-2 bg-green-900/30 hover:bg-green-800/50 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm"
+          class="flex items-center gap-2 px-4 py-2 bg-[#2b2b2b] hover:bg-[#333] rounded-lg text-gray-200 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm"
           disabled={currentIndex === 0}
           on:click={() => navigateImage(-1)}
         >
@@ -413,7 +445,7 @@
         </button>
         <span class="font-medium bg-black/30 px-3 py-1 rounded-full text-sm">{currentIndex + 1} of {sites.length}</span>
         <button
-          class="flex items-center gap-2 px-4 py-2 bg-green-900/30 hover:bg-green-800/50 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm"
+          class="flex items-center gap-2 px-4 py-2 bg-[#2b2b2b] hover:bg-[#333] rounded-lg text-gray-200 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm"
           disabled={currentIndex === sites.length - 1}
           on:click={() => navigateImage(1)}
         >
