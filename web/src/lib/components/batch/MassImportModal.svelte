@@ -220,39 +220,54 @@ https://another-site.com`;
 {#if showModal}
   <div class="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
     <div class="bg-[#202020] rounded-lg p-6 w-full max-w-2xl">
-      <div class="flex items-center justify-between mb-4">
-        <h2 class="text-xl text-gray-200 font-semibold">Mass Import Servers</h2>
+      <div class="flex items-center justify-between border-gray-700 pb-4">
+        <h2 class="text-2xl text-gray-200 font-semibold flex items-center gap-2">
+          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
+            <polyline points="17 21 17 13 7 13 7 21"></polyline>
+            <polyline points="7 3 7 8 15 8"></polyline>
+          </svg>
+          Mass Import Servers
+        </h2>
       </div>
 
-      <form on:submit|preventDefault={handleSubmit} class="space-y-4">
+      <form on:submit|preventDefault={handleSubmit} class="space-y-6">
         <!-- Sites textarea -->
-        <div>
-          <label class="block text-gray-300 mb-1" for="sites">
+        <div class="">
+          <label class="block text-gray-300 mb-2 font-medium" for="sites">
             Enter URLs (one per line or separated by commas/semicolons)
           </label>
           <textarea
             id="sites"
             bind:value={sites}
-            rows="10"
+            rows="8"
             required
             autofocus
-            class="w-full px-4 py-2 bg-[#2b2b2b] rounded-lg text-gray-200 focus:outline-none font-mono"
+            class="w-full px-4 py-2 bg-[#2b2b2b] rounded-lg text-gray-200 focus:outline-none focus:ring-1 focus:ring-green-500 font-mono"
             placeholder="{placeholderText}"
           ></textarea>
-          <p class="text-xs text-gray-400 mt-1">
+          <p class="text-xs text-gray-400 mt-2">
             Enter URLs separated by newlines, commas, or semicolons. You can mix separators as needed.
           </p>
         </div>
 
         <!-- Settings section -->
-        <div class="border-gray-700 pt-4 mt-4">
-          <h3 class="text-lg text-gray-200 mb-3">Global Settings</h3>
-          <p class="text-sm text-gray-400 mb-4">
+        <div class="border-gray-700">
+          <div class="flex items-center mb-4">
+            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mr-2 text-green-500">
+              <circle cx="12" cy="12" r="3"></circle>
+              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+            </svg>
+            <h2 class="text-lg text-gray-200 font-medium">Global Settings</h2>
+          </div>
+          <p class="text-sm text-gray-400 mb-5 ml-6">
             These settings will apply to all imported sites.
           </p>
 
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 bg-[#1e1e1e] p-4 rounded-lg">
+            <!-- Left column: Checkboxes -->
             <div class="space-y-4">
+              <h4 class="text-sm text-gray-300 font-medium mb-3">Options</h4>
               <CustomCheckbox
                 checked={followRedirect}
                 on:change={e => followRedirect = e.detail}
@@ -265,16 +280,34 @@ https://another-site.com`;
                 label="Allow Insecure"
               />
 
-              <div class="mt-4">
-                <label class="block text-gray-300 mb-2">Server Status</label>
+            </div>
+
+            <!-- Middle column: Server Status -->
+            <div class="">
+              <h4 class="text-sm text-gray-300 font-medium mb-3">Server Status</h4>
+              <div class="mt-2 flex-grow flex items-center">
                 <ToggleButton
                   bind:value={isActive}
                   on:change={e => isActive = e.detail}
-                  width="w-full sm:w-auto"
+                  width="w-36"
                   disabled={isLoading}
                 />
               </div>
+            </div>
 
+            <!-- Right column: Interval Slider -->
+            <div class="flex flex-col">
+              <h4 class="text-sm text-gray-300 font-medium mb-3">Check Interval</h4>
+              <div class="flex-grow">
+                <IntervalSlider
+                  value={intervalValue}
+                  on:change={e => intervalValue = e.detail}
+                  label="Check Interval"
+                />
+              </div>
+            </div>
+          </div>
+          <div class="mt-4 ml-4">
               <CustomCheckbox
                 checked={updateExisting}
                 on:change={e => updateExisting = e.detail}
@@ -285,40 +318,36 @@ https://another-site.com`;
                   Existing servers will have their settings updated to match these global settings
                 </p>
               {/if}
-            </div>
-
-            <div>
-              <IntervalSlider
-                value={intervalValue}
-                on:change={e => intervalValue = e.detail}
-                label="Check Interval"
-              />
-            </div>
           </div>
         </div>
 
         <!-- Form buttons -->
-        <div class="flex justify-end gap-3 mt-6 pt-4 border-gray-700">
+        <div class="border-gray-700 pt-5 mt-6 flex justify-end gap-4">
           <button
             type="button"
             on:click={handleClose}
             disabled={isLoading}
-            class="px-4 py-2 bg-[#2b2b2b] hover:bg-[#333] rounded-lg text-gray-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            class="px-5 py-2.5 bg-[#2b2b2b] hover:bg-[#333] rounded-lg text-gray-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-medium"
           >
             Cancel
           </button>
           <button
             type="submit"
             disabled={isLoading}
-            class="px-4 py-2 bg-green-600 hover:bg-green-700 rounded-lg text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+            class="px-5 py-2.5 bg-green-600 hover:bg-green-700 rounded-lg text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 font-medium min-w-[140px] justify-center"
           >
             {#if isLoading}
-              <svg class="animate-spin -ml-1 mr-2 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+              <svg class="animate-spin h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
                 <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
                 <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
               </svg>
-              Importing...
+              <span>Importing...</span>
             {:else}
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mr-1">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                <polyline points="7 10 12 15 17 10"></polyline>
+                <line x1="12" y1="15" x2="12" y2="3"></line>
+              </svg>
               {updateExisting ? 'Import/Update Servers' : 'Import Servers'}
             {/if}
           </button>
@@ -331,8 +360,8 @@ https://another-site.com`;
 <!-- Failed Imports Modal -->
 {#if showFailedModal}
   <div class="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
-    <div class="bg-[#202020] rounded-lg p-6 w-full max-w-2xl max-h-[80vh] flex flex-col">
-      <div class="flex items-center justify-between mb-4">
+    <div class="bg-[#202020] rounded-lg p-6 w-full max-w-3xl max-h-[80vh] flex flex-col">
+      <div class="flex items-center justify-between mb-6 border-gray-700 pb-4">
         <h2 class="text-xl text-red-400 font-semibold flex items-center gap-2">
           <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
@@ -343,7 +372,7 @@ https://another-site.com`;
         </h2>
         <button
           on:click={closeFailedModal}
-          class="p-1 hover:bg-[#333] rounded-lg transition-colors"
+          class="p-2 hover:bg-[#333] rounded-lg transition-colors"
         >
           <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <line x1="18" y1="6" x2="6" y2="18"></line>
@@ -352,29 +381,29 @@ https://another-site.com`;
         </button>
       </div>
 
-      <div class="overflow-y-auto flex-grow">
+      <div class="overflow-y-auto flex-grow bg-[#1e1e1e] rounded-lg">
         <table class="w-full text-sm text-left">
-          <thead class="bg-[#2b2b2b] text-gray-300">
+          <thead class="bg-[#2b2b2b] text-gray-300 sticky top-0">
             <tr>
-              <th class="py-2 px-4 rounded-tl-lg">URL</th>
-              <th class="py-2 px-4 rounded-tr-lg">Error</th>
+              <th class="py-3 px-4 rounded-tl-lg font-medium">URL</th>
+              <th class="py-3 px-4 rounded-tr-lg font-medium">Error</th>
             </tr>
           </thead>
           <tbody class="divide-y divide-gray-700">
             {#each failedImports as item}
               <tr class="hover:bg-[#2b2b2b]/50 transition-colors">
-                <td class="py-2 px-4 font-mono text-gray-300">{item.url}</td>
-                <td class="py-2 px-4 text-red-400">{item.reason}</td>
+                <td class="py-2.5 px-4 font-mono text-gray-300 break-all">{item.url}</td>
+                <td class="py-2.5 px-4 text-red-400">{item.reason}</td>
               </tr>
             {/each}
           </tbody>
         </table>
       </div>
 
-      <div class="mt-4 border-t border-gray-700 pt-4 flex justify-end gap-3">
+      <div class="mt-5 border-gray-700 pt-5 flex justify-end gap-4">
         <button
           on:click={retryFailedImports}
-          class="px-4 py-2 bg-[#2b2b2b] hover:bg-[#333] rounded-lg text-green-400 flex items-center gap-2 transition-colors"
+          class="px-5 py-2.5 bg-[#2b2b2b] hover:bg-[#333] rounded-lg text-green-400 flex items-center gap-2 transition-colors font-medium"
         >
           <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.3"/>
@@ -383,7 +412,7 @@ https://another-site.com`;
         </button>
         <button
           on:click={closeFailedModal}
-          class="px-4 py-2 bg-[#2b2b2b] hover:bg-[#333] rounded-lg text-gray-200 transition-colors"
+          class="px-5 py-2.5 bg-[#2b2b2b] hover:bg-[#333] rounded-lg text-gray-200 transition-colors font-medium"
         >
           Close
         </button>
