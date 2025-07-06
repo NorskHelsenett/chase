@@ -161,12 +161,12 @@
   on:click|self={closeModal}
 >
   <!-- Backdrop -->
-  <div class="absolute inset-0 bg-black/80 backdrop-blur-sm"></div>
+  <div class="absolute inset-0 bg-black/80 backdrop-blur-md"></div>
 
   <!-- Modal -->
   <div
     transition:fly={{ y: 20, duration: 300 }}
-    class="relative z-10 bg-[#202020] text-white rounded-lg shadow-2xl w-full max-w-7xl max-h-[90vh] m-4 overflow-hidden border border-green-900/30"
+    class="relative z-10 bg-[#202020] text-white rounded-xl shadow-2xl w-full max-w-7xl max-h-[90vh] m-4 overflow-hidden border border-green-900/30"
     role="dialog"
     aria-modal="true"
   >
@@ -181,9 +181,9 @@
 
     <div class="flex flex-col h-full">
       <!-- Header -->
-      <div class="flex justify-between items-center p-4 border-b border-green-900/30">
+      <div class="flex justify-between items-center p-4 border-b border-green-900/30 bg-gradient-to-r from-[#1a1a1a] to-[#202020]">
         <h2 class="text-xl font-medium flex items-center gap-2">
-          <Globe size={18} class="text-green-400" />
+          <Globe size={20} class="text-green-400" />
           {getHostname(currentSite.url)}
         </h2>
         <div class="flex items-center gap-2">
@@ -193,6 +193,17 @@
             title="Open site in new tab"
           >
             <ExternalLink size={20} />
+          </button>
+          <button
+            on:click={toggleFullscreen}
+            class="p-2 hover:bg-green-900/30 rounded-lg transition-colors text-green-400 hover:text-green-300"
+            title={showingFullscreenImage ? 'Exit fullscreen' : 'Fullscreen'}
+          >
+            {#if showingFullscreenImage}
+              <Minimize2 size={20} />
+            {:else}
+              <Maximize2 size={20} />
+            {/if}
           </button>
           <button
             on:click={closeModal}
@@ -209,21 +220,32 @@
         {#if showingFullscreenImage}
           <!-- Fullscreen Screenshot View -->
           <div
-            class="flex-1 p-4 flex items-center justify-center bg-black/50 cursor-zoom-out"
+            class="flex-1 p-4 flex items-center justify-center bg-black/80"
             on:click={toggleFullscreen}
+            transition:fade={{ duration: 200 }}
           >
+            <!-- Loading indicator for image -->
+            <div class="absolute inset-0 flex items-center justify-center" class:hidden={imageLoaded}>
+              <div class="relative">
+                <div class="w-16 h-16 border-4 border-t-green-500 border-r-green-400/40 border-b-green-400/20 border-l-green-400/60 rounded-full animate-spin"></div>
+                <div class="absolute inset-0 w-16 h-16 border-4 border-green-500/10 rounded-full animate-pulse"></div>
+              </div>
+            </div>
+
             <img
               src={`/api/screenshot/${currentSite.url.replace(/^(https?:\/\/)/, '')}`}
               alt={`Screenshot of ${currentSite.url}`}
-              class="w-full h-full object-contain"
+              class="w-full h-full object-contain drop-shadow-2xl"
+              on:load={() => imageLoaded = true}
+              style={!imageLoaded ? 'visibility: hidden' : ''}
             />
           </div>
         {:else}
           <!-- Regular Content View -->
           <!-- Screenshot -->
-          <div class="flex-1 p-4 bg-black/30 overflow-hidden">
+          <div class="flex-1 p-6 bg-gradient-to-br from-black/40 to-black/60 overflow-hidden">
             <div
-              class="w-full h-full flex items-center justify-center cursor-zoom-in relative"
+              class="w-full h-full flex items-center justify-center relative rounded-lg overflow-hidden"
               on:click={toggleFullscreen}
               title="Click to enlarge"
             >
@@ -234,11 +256,11 @@
                   <div class="absolute inset-0 w-12 h-12 border-4 border-green-500/10 rounded-full animate-pulse"></div>
                 </div>
               </div>
-              
+
               <img
                 src={`/api/screenshot/${currentSite.url.replace(/^(https?:\/\/)/, '')}`}
                 alt={`Screenshot of ${currentSite.url}`}
-                class="w-full h-full object-contain rounded-lg shadow-lg"
+                class="w-full h-full object-contain rounded-lg shadow-xl"
                 on:load={() => imageLoaded = true}
                 style={!imageLoaded ? 'visibility: hidden' : ''}
               />
@@ -246,7 +268,7 @@
           </div>
 
           <!-- Server Info Sidebar -->
-          <div class="w-96 bg-[#1a1a1a] p-4 overflow-y-auto border-l border-green-900/30">
+          <div class="w-96 bg-[#1a1a1a] p-4 overflow-y-auto ">
             {#if loading}
               <div class="flex flex-col items-center justify-center h-full space-y-4 py-8">
                 <div class="relative">
@@ -256,7 +278,7 @@
                 <p class="text-green-400">Loading report data...</p>
               </div>
             {:else if error}
-              <div class="p-4 bg-red-900/20 rounded-lg border border-red-800/50 text-red-400 flex items-start gap-3">
+              <div in:fade={{ duration: 200 }} class="p-4 bg-red-900/20 rounded-lg border border-red-800/50 text-red-400 flex items-start gap-3">
                 <AlertTriangle size={20} class="flex-shrink-0 mt-1" />
                 <div>
                   <p class="font-medium">Failed to load report</p>
@@ -264,16 +286,16 @@
                 </div>
               </div>
             {:else if currentReport}
-              <div class="space-y-5">
+              <div class="space-y-5" in:fade={{ duration: 300, delay: 100 }}>
                 <!-- URL -->
-                <div class="bg-gradient-to-r from-gray-800/50 to-gray-900/50 p-4 rounded-lg border border-green-900/30">
+                <div class="bg-gradient-to-r from-gray-800/50 to-gray-900/50 p-4 rounded-lg border border-green-900/30 shadow-md">
                   <a
                     href={`/server/${currentSite.ID}`}
                     target="_blank"
                     rel="noopener noreferrer"
-                    class="flex items-center gap-2 text-green-400 hover:text-green-300 transition-colors font-medium"
+                    class="flex items-center gap-2 text-green-400 hover:text-green-300 transition-colors font-medium group"
                   >
-                    <ServerIcon size={18} />
+                    <ServerIcon size={18} class="group-hover:scale-110 transition-transform" />
                     View Full Server Details
                   </a>
                   <a
@@ -288,65 +310,67 @@
                 <!-- Info Grid -->
                 <div class="space-y-3">
                   {#if currentReport.scanErrors?.length}
-                    <div class="bg-red-900/20 p-4 rounded-lg border border-red-800/50">
-                      <h3 class="font-semibold mb-2 flex items-center">
-                        <AlertTriangle size={18} class="mr-2 text-red-400" />
+                    <div in:fade={{ duration: 200 }} class="bg-red-900/20 p-4 rounded-lg border border-red-800/50 shadow-md">
+                      <h3 class="font-semibold mb-2 flex items-center gap-2">
+                        <AlertTriangle size={18} class="text-red-400" />
                         Scan Errors
                       </h3>
-                      {#each currentReport.scanErrors as error}
-                        <p class="text-sm text-red-400 mb-1 ml-6">{error.error}</p>
-                      {/each}
+                      <div class="space-y-2">
+                        {#each currentReport.scanErrors as error, i}
+                          <p in:fade={{ duration: 200, delay: 100 + i * 50 }} class="text-sm text-red-400 pl-6 border-l border-red-800/30">{error.error}</p>
+                        {/each}
+                      </div>
                     </div>
                   {:else}
-                    <h3 class="text-lg font-medium text-gray-300">Security Report</h3>
 
-                    <div class="bg-gray-800/30 rounded-lg border border-green-900/30">
-                      <div class="grid grid-cols-2 gap-px bg-gray-700">
+
+                    <div class="bg-gradient-to-b from-gray-800/30 to-gray-900/30 border border-green-900/30 rounded-lg  shadow-lg overflow-hidden">
+                      <div class="grid grid-cols-2 bg-gray-800/50">
                         <div class="flex items-center gap-2 p-3 bg-[#1a1a1a]">
                           <Shield size={18} class="text-green-400" />
-                          <span class="text-sm">Header Score</span>
+                          <span class="text-sm font-medium">Header Score</span>
                         </div>
                         <div class="p-3 bg-[#1a1a1a] flex justify-end items-center">
-                          <span class="font-medium px-2 py-1 rounded-md bg-gray-800 {getScoreColor(currentReport.headers?.score)}">{currentReport.headers?.score || 'N/A'}</span>
+                          <span in:scale={{duration: 200, delay: 200}} class="font-medium px-2 py-1 rounded-md bg-gray-800/80 shadow-inner {getScoreColor(currentReport.headers?.score)}">{currentReport.headers?.score || 'N/A'}</span>
                         </div>
 
                         <div class="flex items-center gap-2 p-3 bg-[#1a1a1a]">
                           <Scale size={18} class="text-green-400" />
-                          <span class="text-sm">Certificate</span>
+                          <span class="text-sm font-medium">Certificate</span>
                         </div>
                         <div class="p-3 bg-[#1a1a1a] flex justify-end items-center">
-                          <span class="font-medium px-2 py-1 rounded-md bg-gray-800 {getScoreColor(currentReport.certificate?.grade)}">{currentReport.certificate?.grade || 'N/A'}</span>
+                          <span in:scale={{duration: 200, delay: 250}} class="font-medium px-2 py-1 rounded-md bg-gray-800/80 shadow-inner {getScoreColor(currentReport.certificate?.grade)}">{currentReport.certificate?.grade || 'N/A'}</span>
                         </div>
 
                         <div class="flex items-center gap-2 p-3 bg-[#1a1a1a]">
                           <ServerIcon size={18} class="text-green-400" />
-                          <span class="text-sm">Infrastructure</span>
+                          <span class="text-sm font-medium">Infrastructure</span>
                         </div>
                         <div class="p-3 bg-[#1a1a1a] flex justify-end items-center">
-                          <span class="font-mono text-sm">{currentReport.infrastructure?.ip || 'N/A'}</span>
+                          <span class="font-mono text-sm text-gray-300">{currentReport.infrastructure?.ip || 'N/A'}</span>
                         </div>
 
                         <div class="flex items-center gap-2 p-3 bg-[#1a1a1a]">
                           <Zap size={18} class="text-green-400" />
-                          <span class="text-sm">Status</span>
+                          <span class="text-sm font-medium">Status</span>
                         </div>
                         <div class="p-3 bg-[#1a1a1a] flex justify-end items-center">
-                          <span class="font-medium px-2 py-1 rounded-md bg-gray-800 {getStatusColor(currentReport.infrastructure?.status)}">
+                          <span in:scale={{duration: 200, delay: 300}} class="font-medium px-2 py-1 rounded-md bg-gray-800/80 shadow-inner {getStatusColor(currentReport.infrastructure?.status)}">
                             {getStatusCode(currentReport.infrastructure?.status)}
                           </span>
                         </div>
 
                         <div class="flex items-center gap-2 p-3 bg-[#1a1a1a]">
                           <FileText size={18} class="text-green-400" />
-                          <span class="text-sm">robots.txt</span>
+                          <span class="text-sm font-medium">robots.txt</span>
                         </div>
                         <div class="p-3 bg-[#1a1a1a] flex justify-end items-center">
                           {#if currentReport.robotsTxt?.exists}
-                            <span class="text-green-400">
+                            <span in:scale={{duration: 200, delay: 350}} class="text-green-400 bg-green-500/10 p-1 rounded-full">
                               <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
                             </span>
                           {:else}
-                            <span class="text-red-400">
+                            <span in:scale={{duration: 200, delay: 350}} class="text-red-400 bg-red-500/10 p-1 rounded-full">
                               <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg>
                             </span>
                           {/if}
@@ -354,15 +378,15 @@
 
                         <div class="flex items-center gap-2 p-3 bg-[#1a1a1a]">
                           <FileSearch size={18} class="text-green-400" />
-                          <span class="text-sm">security.txt</span>
+                          <span class="text-sm font-medium">security.txt</span>
                         </div>
                         <div class="p-3 bg-[#1a1a1a] flex justify-end items-center">
                           {#if currentReport.securityTxt?.exists}
-                            <span class="text-green-400">
+                            <span in:scale={{duration: 200, delay: 400}} class="text-green-400 bg-green-500/10 p-1 rounded-full">
                               <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
                             </span>
                           {:else}
-                            <span class="text-red-400">
+                            <span in:scale={{duration: 200, delay: 400}} class="text-red-400 bg-red-500/10 p-1 rounded-full">
                               <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg>
                             </span>
                           {/if}
@@ -378,18 +402,18 @@
       </div>
 
       <!-- Navigation Footer -->
-      <div class="flex justify-between items-center p-4 border-t border-green-900/30">
+      <div class="flex justify-between items-center p-4 border-t border-green-900/30 bg-gradient-to-r from-[#1a1a1a] to-[#202020]">
         <button
-          class="flex items-center gap-2 px-4 py-2 bg-green-900/30 hover:bg-green-800/40 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          class="flex items-center gap-2 px-4 py-2 bg-green-900/30 hover:bg-green-800/50 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm"
           disabled={currentIndex === 0}
           on:click={() => navigateImage(-1)}
         >
           <ArrowLeft size={16} />
           <span>Previous</span>
         </button>
-        <span class="font-medium">{currentIndex + 1} of {sites.length}</span>
+        <span class="font-medium bg-black/30 px-3 py-1 rounded-full text-sm">{currentIndex + 1} of {sites.length}</span>
         <button
-          class="flex items-center gap-2 px-4 py-2 bg-green-900/30 hover:bg-green-800/40 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          class="flex items-center gap-2 px-4 py-2 bg-green-900/30 hover:bg-green-800/50 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm"
           disabled={currentIndex === sites.length - 1}
           on:click={() => navigateImage(1)}
         >

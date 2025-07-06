@@ -4,6 +4,7 @@ import { servers, serverStoreActions } from '$lib/stores/serverStore';
 import { writable } from 'svelte/store';
 import type { Server } from '$lib/models';
 import Graph from '$lib/components/dashboard/Graph.svelte';
+	import { Share2 } from 'lucide-svelte';
 
 const graphData = writable<{ nodes: GraphNode[]; edges: GraphEdge[] }>({ nodes: [], edges: [] });
 const isLoading = writable(true);
@@ -210,7 +211,10 @@ onMount(async () => {
 </script>
 
 <div class="p-4 w-full h-full">
-  <h2 class="text-2xl font-bold mb-4">Site Graph</h2>
+      <h1 class="text-2xl font-medium flex items-center gap-2">
+        <Share2 size={24} class="text-green-500"/>
+        Site Graph View
+      </h1>
   {#if $isLoading}
     <div class="flex justify-center items-center p-6">
       <div class="animate-pulse text-gray-500">Loading graph data...</div>
