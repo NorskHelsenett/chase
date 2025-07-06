@@ -1,4 +1,6 @@
 <script>
+  import { onMount } from 'svelte';
+  
   let imageErrors = {};
   let imageLoaded = {};
 
@@ -10,17 +12,58 @@
   }
 
   function lazyCheck(node, url) {
-    const observer = new IntersectionObserver(([entry]) => {
-      if (entry.isIntersecting) {
-        checkImage(url);
-        observer.disconnect(); // Only load once
+    let currentUrl = url;
+    let observer;
+    
+    function setupObserver() {
+      // Clear previous observer if it exists
+      if (observer) {
+        observer.disconnect();
       }
-    }, {
-      rootMargin: '100px' // preload a bit earlier
+      
+      observer = new IntersectionObserver(([entry]) => {
+        if (entry.isIntersecting) {
+          checkImage(currentUrl);
+        }
+      }, {
+        rootMargin: '100px' // preload a bit earlier
+      });
+      
+      observer.observe(node);
+    }
+    
+    // Initial setup
+    setupObserver();
+
+    return {
+      update(newUrl) {
+        if (newUrl !== currentUrl) {
+          currentUrl = newUrl;
+          setupObserver();
+        }
+      },
+      destroy() {
+        if (observer) {
+          observer.disconnect();
+        }
+      }
+    };
+  }
+
+  // Track if component is visible
+  let isVisible = false;
+  
+  // Function to check if element is in viewport
+  function checkVisibility(node) {
+    const observer = new IntersectionObserver(([entry]) => {
+      isVisible = entry.isIntersecting;
+      if (isVisible && imageUrl) {
+        checkImage(imageUrl);
+      }
     });
-
+    
     observer.observe(node);
-
+    
     return {
       destroy() {
         observer.disconnect();
@@ -30,7 +73,19 @@
 
   export let site;
   export let getScreenshotUrl;
-  $: imageUrl = getScreenshotUrl(site.url);
+  
+  let prevImageUrl = '';
+  let imageUrl;
+  
+  $: {
+    imageUrl = getScreenshotUrl(site.url);
+    // Reset states when URL changes
+    if (imageUrl !== prevImageUrl) {
+      delete imageLoaded[prevImageUrl];
+      delete imageErrors[prevImageUrl];
+      prevImageUrl = imageUrl;
+    }
+  }
 </script>
 
 <!-- Container that triggers lazy load -->
