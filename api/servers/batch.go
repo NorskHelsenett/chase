@@ -13,9 +13,9 @@ import (
 
 // BatchImportRequest represents the data sent in a batch import request
 type BatchImportRequest struct {
-	Sites         []string `json:"sites" binding:"required"` // URLs to import (already processed for separators on client side)
-	UpdateExisting bool     `json:"update_existing"`         // Whether to update existing servers or skip them
-	Settings      struct {
+	Sites          []string `json:"sites" binding:"required"` // URLs to import (already processed for separators on client side)
+	UpdateExisting bool     `json:"update_existing"`          // Whether to update existing servers or skip them
+	Settings       struct {
 		UpdateInterval int  `json:"update_interval"`
 		FollowRedirect bool `json:"follow_redirect"`
 		AllowInsecure  bool `json:"allow_insecure"`
@@ -40,7 +40,7 @@ func BatchImportServers(c *gin.Context) {
 	}
 
 	db := database.GetDB()
-	
+
 	// Start a database transaction
 	tx := db.Begin()
 	if tx.Error != nil {
@@ -62,7 +62,7 @@ func BatchImportServers(c *gin.Context) {
 		var err error
 		var parsedURL *url.URL
 		var formattedURL string
-		
+
 		// Process URL format
 		if formattedURL, err = utils.EnsureHTTPS(site); err != nil {
 			response.Failed++
@@ -94,11 +94,11 @@ func BatchImportServers(c *gin.Context) {
 			if request.UpdateExisting {
 				// Update existing server with new settings
 				updates := map[string]interface{}{
-					"follow_redirect":     request.Settings.FollowRedirect,
-					"allow_insecure":      request.Settings.AllowInsecure,
-					"update_interval":     request.Settings.UpdateInterval,
-					"active":              request.Settings.Active,
-					"next_check":          time.Now().Add(time.Duration(request.Settings.UpdateInterval) * time.Minute),
+					"follow_redirect": request.Settings.FollowRedirect,
+					"allow_insecure":  request.Settings.AllowInsecure,
+					"update_interval": request.Settings.UpdateInterval,
+					"active":          request.Settings.Active,
+					"next_check":      time.Now().Add(time.Duration(request.Settings.UpdateInterval) * time.Minute),
 				}
 
 				if err := tx.Model(&existingServer).Updates(updates).Error; err != nil {
@@ -106,10 +106,10 @@ func BatchImportServers(c *gin.Context) {
 					response.Errors = append(response.Errors, "Failed to update server: "+cleanURL+" - "+err.Error())
 					continue
 				}
-				
+
 				// Queue the updated server for checking
 				go checkServer(existingServer.ID, nil)
-				
+
 				response.Imported++ // Count updates as successful imports
 			} else {
 				// Skip existing servers when update_existing is false
@@ -135,10 +135,10 @@ func BatchImportServers(c *gin.Context) {
 				response.Errors = append(response.Errors, "Failed to create server: "+cleanURL+" - "+err.Error())
 				continue
 			}
-			
+
 			// Queue the new server for checking
 			go checkServer(server.ID, nil)
-			
+
 			response.Imported++
 		}
 

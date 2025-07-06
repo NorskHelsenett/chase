@@ -3,12 +3,13 @@
   import { createEventDispatcher } from 'svelte';
   import CustomCheckbox from '../ui/CustomCheckbox.svelte';
   import IntervalSlider from '../ui/IntervalSlider.svelte';
+  import ToggleButton from '../ui/ToggleButton.svelte';
 
   const dispatch = createEventDispatcher();
 
   export let showModal = false;
   export let isLoading = false;
-  
+
   // Track failed imports
   let showFailedModal = false;
   let failedImports: { url: string, reason: string }[] = [];
@@ -23,20 +24,20 @@
   const placeholderText = `https://example.com
 https://example.org
 https://another-site.com`;
-  
+
   // Process input to handle different separators (newlines, commas, semicolons)
   function processSiteInput(input: string): string[] {
     if (!input.trim()) return [];
-    
+
     // First split by newlines
     const lines = input.split(/\n+/);
     const result: string[] = [];
-    
+
     // Process each line for comma or semicolon separated values
     for (const line of lines) {
       const trimmed = line.trim();
       if (!trimmed) continue;
-      
+
       // Check if line contains commas or semicolons
       if (trimmed.includes(',') || trimmed.includes(';')) {
         // Split by both comma and semicolon
@@ -49,10 +50,10 @@ https://another-site.com`;
         result.push(trimmed);
       }
     }
-    
+
     return result;
   }
-  
+
   // Submit form data
   async function handleSubmit() {
     isLoading = true;
@@ -93,7 +94,7 @@ https://another-site.com`;
       }
 
       const result = await response.json();
-      
+
       // Process failed imports if any
       if (result.failed > 0 && result.errors && result.errors.length > 0) {
         failedImports = result.errors.map((error: string) => {
@@ -106,7 +107,7 @@ https://another-site.com`;
               reason: match[1]
             };
           }
-          
+
           // If the extraction pattern didn't work, try to find a URL in the error message
           const urlMatch = error.match(/https?:\/\/[^\s]+|[a-zA-Z0-9][-a-zA-Z0-9.]+\.[a-zA-Z]{2,}/);
           if (urlMatch) {
@@ -117,13 +118,13 @@ https://another-site.com`;
               reason: reason.trim() || "Unknown error"
             };
           }
-          
+
           return {
             url: "Unknown URL",
             reason: error
           };
         });
-        
+
         // First close the import modal, then show failed imports modal after a delay
         showModal = false;
         setTimeout(() => {
@@ -174,35 +175,35 @@ https://another-site.com`;
       showModal = false;
     }
   }
-  
+
   function closeFailedModal() {
     showFailedModal = false;
     // Now that the user has seen the failures, we can clear them
     failedImports = [];
   }
-  
+
   // Function to add failed imports back to the input
   function retryFailedImports() {
     if (failedImports.length === 0) return;
-    
+
     // Get URLs from failed imports
     const urlsToRetry = failedImports.map(item => item.url);
-    
+
     // Replace the textarea content with just the failed imports
     sites = urlsToRetry.join('\n');
-    
+
     // Close failed modal and show the main import modal
     showFailedModal = false;
     showModal = true;
   }
-  
+
   // Export a function to show failed imports modal from parent
   export function showFailedImportsModal() {
     if (failedImports.length > 0) {
       showFailedModal = true;
     }
   }
-  
+
   // Show failed imports with specified data from parent
   export function showFailedImports(imports) {
     if (imports && imports.length > 0) {
@@ -235,7 +236,7 @@ https://another-site.com`;
             rows="10"
             required
             autofocus
-            class="w-full px-4 py-2 bg-[#2b2b2b] rounded-lg text-gray-200 focus:outline-none focus:ring-2 focus:ring-green-500 font-mono"
+            class="w-full px-4 py-2 bg-[#2b2b2b] rounded-lg text-gray-200 focus:outline-none font-mono"
             placeholder="{placeholderText}"
           ></textarea>
           <p class="text-xs text-gray-400 mt-1">
@@ -263,13 +264,17 @@ https://another-site.com`;
                 on:change={e => allowInsecure = e.detail}
                 label="Allow Insecure"
               />
-              
-              <CustomCheckbox
-                checked={isActive}
-                on:change={e => isActive = e.detail}
-                label="Active Status"
-              />
-              
+
+              <div class="mt-4">
+                <label class="block text-gray-300 mb-2">Server Status</label>
+                <ToggleButton
+                  bind:value={isActive}
+                  on:change={e => isActive = e.detail}
+                  width="w-full sm:w-auto"
+                  disabled={isLoading}
+                />
+              </div>
+
               <CustomCheckbox
                 checked={updateExisting}
                 on:change={e => updateExisting = e.detail}
@@ -336,7 +341,7 @@ https://another-site.com`;
           </svg>
           Failed Imports ({failedImports.length})
         </h2>
-        <button 
+        <button
           on:click={closeFailedModal}
           class="p-1 hover:bg-[#333] rounded-lg transition-colors"
         >
@@ -346,7 +351,7 @@ https://another-site.com`;
           </svg>
         </button>
       </div>
-      
+
       <div class="overflow-y-auto flex-grow">
         <table class="w-full text-sm text-left">
           <thead class="bg-[#2b2b2b] text-gray-300">
@@ -365,7 +370,7 @@ https://another-site.com`;
           </tbody>
         </table>
       </div>
-      
+
       <div class="mt-4 border-t border-gray-700 pt-4 flex justify-end gap-3">
         <button
           on:click={retryFailedImports}
