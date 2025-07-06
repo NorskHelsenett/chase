@@ -79,8 +79,8 @@ func GetServerResults(c *gin.Context) {
 		rangeHours := 336 // default 2 weeks
 		if rangeParam := c.Query("range"); rangeParam != "" {
 			if parsedRange, err := strconv.Atoi(rangeParam); err == nil && parsedRange > 0 {
-				if parsedRange > 24*30 {
-					rangeHours = 24 * 30
+				if parsedRange > 24*90 {
+					rangeHours = 24 * 90
 				} else {
 					rangeHours = parsedRange
 				}
