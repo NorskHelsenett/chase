@@ -87,11 +87,21 @@ func BatchImportServers(c *gin.Context) {
 		// Remove scheme (http/https) from URL for storage
 		cleanURL := strings.TrimPrefix(strings.TrimPrefix(formattedURL, "https://"), "http://")
 
-		// Check if server already exists
+		// Check if server already exists (including soft-deleted ones)
 		var existingServer Server
-		if tx.Where("url = ?", cleanURL).First(&existingServer).RowsAffected > 0 {
+		if tx.Unscoped().Where("url = ?", cleanURL).First(&existingServer).RowsAffected > 0 {
 			// Server already exists
 			if request.UpdateExisting {
+				// Check if server was soft-deleted and restore if needed
+				if existingServer.DeletedAt.Valid {
+					// Undelete the server by setting DeletedAt to NULL
+					if err := tx.Unscoped().Model(&existingServer).Update("deleted_at", nil).Error; err != nil {
+						response.Failed++
+						response.Errors = append(response.Errors, "Failed to restore deleted server: "+cleanURL+" - "+err.Error())
+						continue
+					}
+				}
+
 				// Update existing server with new settings
 				updates := map[string]interface{}{
 					"follow_redirect": request.Settings.FollowRedirect,
