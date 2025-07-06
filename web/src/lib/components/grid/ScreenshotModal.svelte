@@ -40,7 +40,7 @@
 	let pingQueryParams = {
 		limit: 1,
 		sort: 'desc',
-		range: 24, // Default to last 24 hours
+		//range: 24, // Default to last 24 hours
 		includeDetail: true
 	};
 
