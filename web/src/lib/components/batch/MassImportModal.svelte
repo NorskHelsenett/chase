@@ -17,6 +17,8 @@
   let intervalValue = 15; // Default check interval (15 min)
   let followRedirect = true;
   let allowInsecure = false;
+  let isActive = true; // Default active status
+  let updateExisting = false; // Default to not update existing servers
   let sites = '';
   const placeholderText = `https://example.com
 https://example.org
@@ -72,7 +74,9 @@ https://another-site.com`;
           update_interval: intervalValue,
           follow_redirect: followRedirect,
           allow_insecure: allowInsecure,
-        }
+          active: isActive,
+        },
+        update_existing: updateExisting // Add the update option to the request
       };
 
       // Send to API
@@ -161,6 +165,8 @@ https://another-site.com`;
     intervalValue = 15; // Reset to default
     followRedirect = true; // Reset to default
     allowInsecure = false; // Reset to default
+    isActive = true; // Reset to default
+    updateExisting = false; // Reset to default
     showFailedModal = false;
     failedImports = [];
     // Don't close the modal if called externally
@@ -257,6 +263,23 @@ https://another-site.com`;
                 on:change={e => allowInsecure = e.detail}
                 label="Allow Insecure"
               />
+              
+              <CustomCheckbox
+                checked={isActive}
+                on:change={e => isActive = e.detail}
+                label="Active Status"
+              />
+              
+              <CustomCheckbox
+                checked={updateExisting}
+                on:change={e => updateExisting = e.detail}
+                label="Update Existing Servers"
+              />
+              {#if updateExisting}
+                <p class="text-xs text-amber-400 mt-1 pl-7">
+                  Existing servers will have their settings updated to match these global settings
+                </p>
+              {/if}
             </div>
 
             <div>
@@ -291,7 +314,7 @@ https://another-site.com`;
               </svg>
               Importing...
             {:else}
-              Import Servers
+              {updateExisting ? 'Import/Update Servers' : 'Import Servers'}
             {/if}
           </button>
         </div>

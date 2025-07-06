@@ -13,11 +13,13 @@ import (
 
 // BatchImportRequest represents the data sent in a batch import request
 type BatchImportRequest struct {
-	Sites    []string `json:"sites" binding:"required"` // URLs to import (already processed for separators on client side)
-	Settings struct {
+	Sites         []string `json:"sites" binding:"required"` // URLs to import (already processed for separators on client side)
+	UpdateExisting bool     `json:"update_existing"`         // Whether to update existing servers or skip them
+	Settings      struct {
 		UpdateInterval int  `json:"update_interval"`
 		FollowRedirect bool `json:"follow_redirect"`
 		AllowInsecure  bool `json:"allow_insecure"`
+		Active         bool `json:"active"`
 	} `json:"settings"`
 }
 
@@ -57,23 +59,18 @@ func BatchImportServers(c *gin.Context) {
 
 	// Process each URL
 	for _, site := range request.Sites {
-		server := Server{
-			URL:               site,
-			Active:            true,
-			FollowRedirect:    request.Settings.FollowRedirect,
-			AllowInsecure:     request.Settings.AllowInsecure,
-			ExpectedStatusCode: 200,
-			UpdateInterval:    request.Settings.UpdateInterval,
-		}
-
 		var err error
-		if server.URL, err = utils.EnsureHTTPS(server.URL); err != nil {
+		var parsedURL *url.URL
+		var formattedURL string
+		
+		// Process URL format
+		if formattedURL, err = utils.EnsureHTTPS(site); err != nil {
 			response.Failed++
 			response.Errors = append(response.Errors, "Invalid URL format: "+site)
 			continue
 		}
 
-		parsedURL, err := url.Parse(server.URL)
+		parsedURL, err = url.Parse(formattedURL)
 		if err != nil {
 			response.Failed++
 			response.Errors = append(response.Errors, "Invalid URL format: "+site)
@@ -88,26 +85,63 @@ func BatchImportServers(c *gin.Context) {
 		}
 
 		// Remove scheme (http/https) from URL for storage
-		server.URL = strings.TrimPrefix(strings.TrimPrefix(server.URL, "https://"), "http://")
+		cleanURL := strings.TrimPrefix(strings.TrimPrefix(formattedURL, "https://"), "http://")
 
-		server.NextCheck = time.Now().Add(time.Duration(server.UpdateInterval) * time.Minute)
+		// Check if server already exists
+		var existingServer Server
+		if tx.Where("url = ?", cleanURL).First(&existingServer).RowsAffected > 0 {
+			// Server already exists
+			if request.UpdateExisting {
+				// Update existing server with new settings
+				updates := map[string]interface{}{
+					"follow_redirect":     request.Settings.FollowRedirect,
+					"allow_insecure":      request.Settings.AllowInsecure,
+					"update_interval":     request.Settings.UpdateInterval,
+					"active":              request.Settings.Active,
+					"next_check":          time.Now().Add(time.Duration(request.Settings.UpdateInterval) * time.Minute),
+				}
 
-		// Attempt to create the server in the transaction
-		if err := tx.Create(&server).Error; err != nil {
-			if strings.Contains(err.Error(), "UNIQUE constraint") || strings.Contains(err.Error(), "Duplicate entry") {
+				if err := tx.Model(&existingServer).Updates(updates).Error; err != nil {
+					response.Failed++
+					response.Errors = append(response.Errors, "Failed to update server: "+cleanURL+" - "+err.Error())
+					continue
+				}
+				
+				// Queue the updated server for checking
+				go checkServer(existingServer.ID, nil)
+				
+				response.Imported++ // Count updates as successful imports
+			} else {
+				// Skip existing servers when update_existing is false
 				response.Failed++
-				response.Errors = append(response.Errors, "Server URL already exists: "+site)
+				response.Errors = append(response.Errors, "Server URL already exists: "+cleanURL)
 				continue
 			}
-			response.Failed++
-			response.Errors = append(response.Errors, "Failed to create server: "+site)
-			continue
+		} else {
+			// Create a new server
+			server := Server{
+				URL:                cleanURL,
+				Active:             request.Settings.Active,
+				FollowRedirect:     request.Settings.FollowRedirect,
+				AllowInsecure:      request.Settings.AllowInsecure,
+				ExpectedStatusCode: 200,
+				UpdateInterval:     request.Settings.UpdateInterval,
+				NextCheck:          time.Now().Add(time.Duration(request.Settings.UpdateInterval) * time.Minute),
+			}
+
+			// Attempt to create the server in the transaction
+			if err := tx.Create(&server).Error; err != nil {
+				response.Failed++
+				response.Errors = append(response.Errors, "Failed to create server: "+cleanURL+" - "+err.Error())
+				continue
+			}
+			
+			// Queue the new server for checking
+			go checkServer(server.ID, nil)
+			
+			response.Imported++
 		}
 
-		// Queue the server for checking
-		go checkServer(server.ID, nil)
-		
-		response.Imported++
 	}
 
 	// Commit the transaction if we imported at least one server

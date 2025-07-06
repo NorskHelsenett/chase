@@ -32,7 +32,7 @@
 <div class="space-y-6">
   <div class="bg-[#202020] rounded-lg p-4">
     <div class="flex items-center justify-between">
-      <h2 class="text-xl text-gray-200 font-semibold">Mass Import</h2>
+      <h2 class="text-xl text-gray-200 font-semibold">Mass Import/Update</h2>
 
       <button
         on:click={() => {
@@ -53,7 +53,7 @@
     </div>
 
     <p class="mt-2 text-gray-400 text-sm">
-      Add multiple servers at once with shared monitoring settings.
+      Add multiple servers at once with shared monitoring settings, or update existing servers in bulk.
     </p>
 
     {#if showStats}
