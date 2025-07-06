@@ -84,7 +84,7 @@
       {#if site.active}
         <div
           in:fade={{ duration: 300, delay: index * 70 }}
-          class="relative group rounded-xl transition-all duration-300 overflow-hidden cursor-pointer bg-gradient-to-br from-[#1a1a1a] to-[#222] shadow-md border border-gray-800/70 hover:border-green-500/50 hover:shadow-xl hover:shadow-green-900/5 hover:ring-2 hover:ring-green-500"
+          class="relative group rounded-xl transition-all duration-300 overflow-hidden cursor-pointer bg-gradient-to-br from-[#1a1a1a] to-[#222] shadow-md hover:border-green-500/50 hover:shadow-xl hover:shadow-green-900/5 hover:ring-2 hover:ring-green-500"
           on:click={(e) => handleClick(e, site, index)}
           on:keydown={(e) => handleKeyDown(e, site, index)}
           title="Click to view, Cmd/Ctrl+Click to open website"
