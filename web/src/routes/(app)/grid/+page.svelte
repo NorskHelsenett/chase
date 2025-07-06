@@ -3,6 +3,7 @@
   import { page } from '$app/stores';
   import type { Server } from '$lib/models';
   import ScreenshotGrid from '$lib/components/grid/ScreenshotGrid.svelte';
+  import CustomSelect from '$lib/components/ui/CustomSelect.svelte';
   import { Search, Grid, Server as ServerIcon, Filter } from 'lucide-svelte';
 
   let servers: Server[] = [];
@@ -91,7 +92,7 @@
 
 <div class="p-4 min-h-screen w-full">
   <!-- Header and filters -->
-  <div class="mb-6 flex flex-col gap-4">
+  <div class="bg-[#202020] rounded-lg p-4 mb-4 flex flex-col gap-4">
     <div class="flex flex-wrap justify-between items-center gap-4">
       <h1 class="text-2xl font-medium flex items-center gap-2">
         <Grid size={24} class="text-green-500"/>
@@ -102,32 +103,57 @@
       </h1>
 
       <div class="flex flex-wrap items-center gap-3">
-        <div class="relative group">
+        <div class="relative w-[400px]">
           <Search size={18} class="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500 group-focus-within:text-green-500 transition-colors" />
           <input
             type="text"
             bind:value={searchTerm}
             placeholder="Search servers..."
-            class="pl-10 pr-4 py-2.5 bg-black/30 border border-green-900/30 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-500/70 focus:border-transparent transition-all"
+            class="w-full pl-10 pr-4 py-2 bg-[#2b2b2b] rounded-lg text-gray-200 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-green-500 transition-all"
           />
+          {#if searchTerm}
+            <button
+              class="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-200 transition-colors p-1"
+              on:click={() => searchTerm = ''}
+              aria-label="Clear search"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="10" />
+                <line x1="15" y1="9" x2="9" y2="15" />
+                <line x1="9" y1="9" x2="15" y2="15" />
+              </svg>
+            </button>
+          {/if}
         </div>
 
-        <div class="relative flex items-center">
-          <Filter size={18} class="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500" />
-          <select
+        <div class="relative flex items-center z-10">
+          <CustomSelect
             bind:value={filterStatus}
-            class="appearance-none pl-10 pr-10 py-2.5 bg-black/30 border border-green-900/30 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-500/70 focus:border-transparent transition-all"
-          >
-            <option value="all">All servers</option>
-            <option value="online">Online</option>
-            <option value="issues">With issues</option>
-            <option value="new">New</option>
-          </select>
-          <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3 text-gray-500">
-            <svg class="fill-current h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20">
-              <path d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" />
-            </svg>
-          </div>
+            icon={Filter}
+            options={[
+              {
+                value: 'all',
+                label: 'All servers',
+                icon: '<div class="flex items-center"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect><line x1="8" y1="21" x2="16" y2="21"></line><line x1="12" y1="17" x2="12" y2="21"></line></svg><span class="text-gray-100 ml-2"> Show all</span></div>'
+              },
+              {
+                value: 'online',
+                label: 'Online',
+                icon: '<div class="flex items-center"><span class="w-2 h-2 bg-green-400 rounded-full mr-2 animate-pulse"></span><span class="text-green-400">Online</span></div>'
+              },
+              {
+                value: 'issues',
+                label: 'With issues',
+                icon: '<div class="flex items-center"><span class="w-2 h-2 bg-red-400 rounded-full mr-2"></span><span class="text-red-400">Issues</span></div>'
+              },
+              {
+                value: 'new',
+                label: 'New',
+                icon: '<div class="flex items-center"><span class="w-2 h-2 bg-gray-400 rounded-full mr-2"></span><span class="text-gray-300">New</span></div>'
+              }
+            ]}
+            on:change={() => {}}
+          />
         </div>
       </div>
     </div>
