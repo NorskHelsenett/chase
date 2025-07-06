@@ -7,6 +7,7 @@
   let isLoading = false;
   let importStats = null;
   let showStats = false;
+  let importModalComponent: MassImportModal;
   
   function handleImported(event) {
     importStats = event.detail;
@@ -14,6 +15,12 @@
     setTimeout(() => {
       showStats = false;
     }, 5000);
+  }
+  
+  function showFailedImports() {
+    if (importStats && importStats.failed > 0 && importModalComponent) {
+      importModalComponent.showFailedImportsModal();
+    }
   }
 </script>
 
@@ -47,7 +54,9 @@
           <p class="text-green-300">
             Imported {importStats.successful} of {importStats.count} servers successfully.
             {#if importStats.failed > 0}
-              <span class="text-yellow-300">{importStats.failed} failed.</span>
+              <span class="text-yellow-300 hover:underline cursor-pointer" on:click={showFailedImports}>
+                {importStats.failed} failed. Click to view details.
+              </span>
             {/if}
           </p>
         </div>
@@ -59,6 +68,7 @@
 <MassImportModal 
   bind:showModal={showImportModal} 
   bind:isLoading 
+  bind:this={importModalComponent}
   on:imported={handleImported} 
   on:close={() => showImportModal = false}
 />
