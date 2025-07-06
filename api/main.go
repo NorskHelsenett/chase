@@ -99,6 +99,7 @@ func setupRoutes(r *gin.Engine) {
 			api.GET("/servers/:id/report", security.LastSecurityScanHandler)
 			api.GET("/servers/:id/pings", servers.GetServerResults)
 			api.POST("/servers/:id/force-check", servers.ForceCheckServer)
+			api.POST("/servers/batch-import", servers.BatchImportServers)
 
 			api.POST("/batch/start", security.StartBatchHandler)
 			api.GET("/batch/:jobID/status", security.GetBatchStatusHandler)
