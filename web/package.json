@@ -35,10 +35,10 @@
 	"type": "module",
 	"dependencies": {
 		"@floating-ui/dom": "^1.6.12",
-		"apexcharts": "^3.54.1",
+		"apexcharts": "^5.3.5",
 		"date-fns": "^4.1.0",
-		"lucide-svelte": "^0.445.0",
+		"lucide-svelte": "^0.546.0",
 		"md5": "^2.3.0",
-		"vis-network": "^9.1.13"
+		"vis-network": "^10.0.2"
 	}
 }
