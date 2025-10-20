@@ -239,7 +239,7 @@
 				{#each sites as site}
 					<tr
 						data-server-id={site.ID}
-						class="group transition-colors duration-200 ease-in-out hover:bg-[#2b2b2b] cursor-pointer"
+						class="group transition-colors duration-200 ease-in-out cursor-pointer"
 						on:click={() => goto(`/server/${site.ID}`)}
 					>
 						<MonitorRow server={site} hover={true} />
