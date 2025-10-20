@@ -91,3 +91,21 @@ EOF
 ```
 
 </details>
+
+## Environment Variables
+
+Below are the environment variables used by CHASE. Set these in your `api/.env` file:
+
+| Variable                  | Default Value | Description                                                      |
+|--------------------------|---------------|------------------------------------------------------------------|
+| CHASE_HOSTNAME            | (empty)       | Hostname for scanner, used in User-Agent header.                 |
+| SCREENSHOT_SERVICE_URL    | (empty)       | URL for screenshot microservice.                                 |
+| MONITORING_INTERVAL       | 5             | Interval (minutes) for server monitoring.                        |
+| OIDC_ISSUER_URL           | (empty)       | OIDC issuer URL for authentication.                              |
+| OIDC_CLIENT_ID            | (empty)       | OIDC client ID.                                                  |
+| OIDC_CLIENT_SECRET        | (empty)       | OIDC client secret.                                              |
+| OIDC_REDIRECT_URL         | http://localhost:5173/api/callback | OIDC redirect URI.                      |
+| CHASE_SECRET_KEY          | (empty)       | Secret key for API authentication.                               |
+| ENV_FILE                  | api/.env      | Path to environment file to load.                                |
+
+> Fill in the values as needed for your deployment. If a variable is not set, defaults will be used where applicable.

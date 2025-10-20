@@ -70,7 +70,6 @@ func runMonitoring() {
 
 		server.NextCheck = now.Add(interval)
 		if !shouldRemainActive {
-			log.Printf("WARNING: Server %s has had >95%% failures in past week. Consider deactivating.", server.URL)
 			server.Comment = fmt.Sprintf("WARNING: Server %s has had >95%% failures in past week. Automatically deactivated.", server.URL)
 			server.Active = false
 		}
