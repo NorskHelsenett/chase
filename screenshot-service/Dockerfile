@@ -8,11 +8,20 @@ RUN apk add --no-cache \
     mesa-gl \
     pciutils-libs \
     bash \
-    && wget https://github.com/mozilla/geckodriver/releases/download/v0.35.0/geckodriver-v0.35.0-linux64.tar.gz \
-    && tar -xzf geckodriver-v0.35.0-linux64.tar.gz \
+    && ARCH=$(apk --print-arch) \
+    && case "$ARCH" in \
+        x86_64) GECKO_ARCH=linux64 ;; \
+        aarch64) GECKO_ARCH=linux-aarch64 ;; \
+        armv7) GECKO_ARCH=linux-arm7 ;; \
+        *) echo "Unsupported architecture: $ARCH" && exit 1 ;; \
+    esac \
+    && GECKO_VERSION=v0.36.0 \
+    && GECKO_FILE="geckodriver-${GECKO_VERSION}-${GECKO_ARCH}.tar.gz" \
+    && wget "https://github.com/mozilla/geckodriver/releases/download/${GECKO_VERSION}/${GECKO_FILE}" \
+    && tar -xzf "${GECKO_FILE}" \
     && mv geckodriver /usr/local/bin/ \
     && chmod +x /usr/local/bin/geckodriver \
-    && rm geckodriver-v0.35.0-linux64.tar.gz
+    && rm "${GECKO_FILE}"
 
 # Add user appuser with UID and GID 1001
 RUN addgroup -g 1001 appuser && \
