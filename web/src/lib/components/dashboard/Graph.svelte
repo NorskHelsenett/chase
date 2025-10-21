@@ -310,7 +310,7 @@
 				network.on('blurNode', blurNodeHandler);
 
 				// Dragging: move children (and their descendants) together with the dragged node
-				let _dragInterval: any = null;
+				let _dragRafId: any = null;
 				let _draggingState: any = null;
 
 				network.on('dragStart', (params: any) => {
@@ -342,12 +342,15 @@
 
 						_draggingState = { dragged, descArr, origPositions, origDraggedPos };
 
-						// Poll to move descendants in near-real-time while dragging
-						_dragInterval = setInterval(() => {
+						// Use requestAnimationFrame for smoother movement
+						function dragFrame() {
 							if (!_draggingState) return;
 							const posNowObj = network.getPositions([_draggingState.dragged]);
 							const posNow = posNowObj && posNowObj[_draggingState.dragged] ? posNowObj[_draggingState.dragged] : null;
-							if (!posNow) return;
+							if (!posNow) {
+								_dragRafId = requestAnimationFrame(dragFrame);
+								return;
+							}
 							const dx = posNow.x - _draggingState.origDraggedPos.x;
 							const dy = posNow.y - _draggingState.origDraggedPos.y;
 							_draggingState.descArr.forEach((id: any) => {
@@ -360,16 +363,18 @@
 									}
 								}
 							});
-						}, 20);
+							_dragRafId = requestAnimationFrame(dragFrame);
+						}
+						_dragRafId = requestAnimationFrame(dragFrame);
 					} catch (e) {
 						console.error('Error initializing drag move of children', e);
 					}
 				});
 
 				network.on('dragEnd', () => {
-					if (_dragInterval) {
-						clearInterval(_dragInterval);
-						_dragInterval = null;
+					if (_dragRafId) {
+						cancelAnimationFrame(_dragRafId);
+						_dragRafId = null;
 					}
 					_draggingState = null;
 				});
@@ -405,6 +410,16 @@
 
 			onDestroy(() => {
 				network.off('stabilizationIterationsDone', stabilizationHandler);
+				// Remove hover/blur handlers
+				network.off('hoverNode');
+				network.off('blurNode');
+				// Remove drag handlers
+				network.off('dragStart');
+				network.off('dragEnd');
+				if (_dragRafId) {
+					cancelAnimationFrame(_dragRafId);
+					_dragRafId = null;
+				}
 			});
 		} catch (error) {
 			console.error('Error initializing graph:', error);
