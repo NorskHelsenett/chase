@@ -1,496 +1,298 @@
 <script lang="ts">
-	import { onDestroy, onMount } from 'svelte';
-	import { get } from 'svelte/store';
-	import type { Writable } from 'svelte/store';
+  import { onDestroy, onMount } from 'svelte';
+  import { get } from 'svelte/store';
+  import type { Writable } from 'svelte/store';
 
-	type GraphNode = {
-		id: string | number;
-		label?: string;
-		group?: string;
-		isDown?: boolean; // Added to track down status
-		[key: string]: any; // Additional properties
-	};
+  type GraphNode = { id: string | number; label?: string; group?: string; isDown?: boolean; [k: string]: any };
+  type GraphEdge = { from: string | number; to: string | number; [k: string]: any };
 
-	type GraphEdge = {
-		from: string | number;
-		to: string | number;
-		[key: string]: any; // Additional properties
-	};
+  export let graphData: Writable<{ nodes: GraphNode[]; edges: GraphEdge[] }>;
 
-	export let graphData: Writable<{ nodes: GraphNode[]; edges: GraphEdge[] }>;
-	let container: HTMLDivElement;
-	let network: any;
+  let container: HTMLDivElement;
+  let network: any;
+  let nodeDataSet: any;
+  let edgeDataSet: any;
+  let unsubscribe: () => void;
 
-// Cleanup / handler refs that must be available to lifecycle hooks at initialization
-let _dragRafId: any = null;
-let _draggingState: any = null;
-let stabilizationHandler: any = null;
+  // --- helpers ---
+  const edgeId = (e: GraphEdge, idx?: number) => `${e.from}|${e.to}${idx !== undefined ? '|' + idx : ''}`;
 
-	const STABILIZATION_DELAY_MS = 1000; // Delay to allow final node positioning after stabilization
+  // Tune these if you want tighter/looser clusters
+  const SAME_GROUP_LEN = 60;   // shorter springs inside groups
+  const CROSS_GROUP_LEN = 160; // longer springs across groups
 
-	onMount(async () => {
-		const vis: any = await import('vis-network/standalone');
+  // Keep track of current highlighting so we can reset colors on the next click
+  let lastHighlightedNodes: Array<string | number> = [];
+  let lastHighlightedEdges: Array<string> = [];
 
-		try {
-			const { nodes, edges } = get(graphData);
-			console.log(`Building graph with ${nodes.length} nodes and ${edges.length} edges`);
+  // Drag state so children move together with the dragged parent
+  let dragState: {
+    anchorId: string | number | null;
+    startPos: Record<string | number, { x: number; y: number }>;
+    childIds: Array<string | number>;
+  } = {
+    anchorId: null,
+    startPos: {},
+    childIds: []
+  };
 
-			// Create new DataSets with uniqueness check
-			const nodeDataSet: any = new vis.DataSet();
-			const edgeDataSet: any = new vis.DataSet();
+  function baseNodeStyle(n: any) {
+    // Return node with default colors per group; do not overwrite group styling if present
+    const base: any = {
+      borderWidth: 2,
+      color: { border: '#e65c00', background: 'rgba(38,38,38,0.7)', highlight: { border: '#ff8c38', background: '#404040' } },
+      font: { size: 14, face: 'Helvetica', multi: true, bold: { color: '#ff9d4f', size: 14, face: 'Helvetica' }, color: '#e6e6e6' }
+    };
+    return { ...n, ...base };
+  }
 
-			// Add nodes one by one to handle potential duplicates
-			nodes.forEach((node) => {
-				try {
-					if (!nodeDataSet.get(node.id)) {
-						// If the node is marked as down, set its group to 'error'
-						if (node.isDown === true) {
-							console.log(`Node ${node.id} is down, rendering as error`);
-							node.group = 'error';
-						}
+  function highlightNodesAndEdges(parentId: string | number) {
+    // Reset previously highlighted nodes/edges to default colors
+    if (lastHighlightedNodes.length) {
+      const resetNodes = lastHighlightedNodes
+        .map(id => nodeDataSet.get(id))
+        .filter(Boolean)
+        .map((n: any) => baseNodeStyle(n));
+      if (resetNodes.length) nodeDataSet.update(resetNodes);
+      lastHighlightedNodes = [];
+    }
+    if (lastHighlightedEdges.length) {
+      const resetEdges = lastHighlightedEdges
+        .map(id => edgeDataSet.get(id))
+        .filter(Boolean)
+        .map((e: any) => ({ ...e, color: { color: 'rgba(100,100,100,0.7)', highlight: '#3B82F6', hover: '#60A5FA' }, width: 1.5 }));
+      if (resetEdges.length) edgeDataSet.update(resetEdges);
+      lastHighlightedEdges = [];
+    }
 
-						// Add the node to the dataset
-						const { isDown, ...nodeToAdd } = node; // Remove isDown property as vis-network doesn't need it
-						nodeDataSet.add(nodeToAdd);
-					} else {
-						console.log(`Skipping duplicate node: ${node.id}`);
-					}
-				} catch (e) {
-					console.error(`Error adding node ${node.id}:`, e);
-				}
-			});
+    // Highlight children (outgoing) nodes and the outgoing edges from parent
+    const allEdges: any[] = edgeDataSet.get();
+    const outgoing = allEdges.filter(e => String(e.from) === String(parentId));
+    const childIds = outgoing.map(e => e.to);
 
-			// Add edges one by one
-			edges.forEach((edge) => {
-				try {
-					edgeDataSet.add(edge);
-				} catch (e) {
-					console.error(`Error adding edge from ${edge.from} to ${edge.to}:`, e);
-				}
-			});
+    // Edge highlight first
+    const blue = '#3B82F6';
+    const updatedEdges = outgoing.map(e => ({ ...e, color: { color: blue, highlight: blue, hover: blue }, width: 2.5 }));
+    if (updatedEdges.length) edgeDataSet.update(updatedEdges);
 
-			const data = { nodes: nodeDataSet, edges: edgeDataSet };
-			const options = {
-				layout: { hierarchical: false, improvedLayout: false },
-				nodes: {
-					shape: 'dot',
-					size: 14,
-					font: {
-						size: 14,
-						face: 'Helvetica',
-						multi: true,
-						bold: {
-							color: '#ff9d4f', // Matches primary orange theme
-							size: 14,
-							face: 'Helvetica'
-						},
-						color: '#e6e6e6' // Light text for dark background
-					},
-					borderWidth: 2,
-					color: {
-						border: '#e65c00', // Using the gradient color from CSS
-						background: 'rgba(38, 38, 38, 0.7)', // Darker background matching site theme
-						highlight: {
-							border: '#ff8c38', // Brighter version of primary
-							background: '#404040' // Slightly lighter than background
-						}
-					}
-				},
-				groups: {
-					domain: {
-						color: { background: 'rgba(230, 92, 0, 0.8)', border: '#ff7b1f' }, // Orange based on site theme
-						shape: 'diamond',
-						size: 36,
-						font: { size: 16, color: '#ffffff' }
-					},
-					subdomain: {
-						color: { background: 'rgba(255, 158, 79, 0.7)', border: '#e65c00' }, // Lighter orange
-						shape: 'dot',
-						size: 18,
-						font: { size: 14, color: '#ffffff' }
-					},
-					site: {
-						color: { background: 'rgba(34, 197, 93, 0.6)', border: '#22C55D' }, // Green color from the theme
-						shape: 'dot',
-						size: 16,
-						font: { size: 14, color: '#ffffff' }
-					},
-					error: {
-						color: { background: 'rgba(255, 76, 76, 0.7)', border: '#ff4c4c' }, // Using alert color from CSS
-						shape: 'triangle',
-						size: 16,
-						font: { size: 14, color: '#ffffff' }
-					}
-				},
-				edges: {
-					width: 1.5,
-					// Default neutral color, with explicit hover/highlight set to a pleasant blue
-					color: {
-						color: 'rgba(100, 100, 100, 0.7)', // Slightly darker for better contrast
-						hover: '#60A5FA', // Tailwind sky-400 / pleasant blue on hover
-						highlight: '#3B82F6' // Tailwind blue-500 when selected
-					},
-					smooth: {
-						type: 'continuous',
-						forceDirection: 'none',
-						roundness: 0.5
-					},
-					shadow: {
-						enabled: true,
-						// Subtle blue-tinted shadow to match hover color (low alpha)
-						color: 'rgba(59, 130, 246, 0.12)',
-						size: 4,
-						x: 0,
-						y: 1
-					},
-					hoverWidth: 2, // Slightly wider on hover
-					selectionWidth: 2.5 // Wider when selected
-				},
-				physics: {
-					enabled: true,
-					solver: 'forceAtlas2Based',
-					forceAtlas2Based: {
-						gravitationalConstant: -150,
-						centralGravity: 0.007,
-						springLength: 95,
-						springConstant: 0.08,
-						damping: 0.4,
-						avoidOverlap: 0.5
-					},
-					stabilization: {
-						enabled: true,
-						iterations: 1000,
-						updateInterval: 25,
-						fit: true
-					},
-					maxVelocity: 10, // Reduced from 50
-					minVelocity: 0.5, // Increased from 0.1 to make it stop sooner
-					timestep: 0.5 // Added timestep to slow down simulation
-				},
-				interaction: {
-					hover: true,
-					tooltipDelay: 200,
-					multiselect: false,
-					navigationButtons: false,
-					keyboard: {
-						enabled: true,
-						bindToWindow: false
-					},
-					zoomView: true,
-					dragNodes: true,
-					dragView: true,
-					hideEdgesOnDrag: false,
-					hideEdgesOnZoom: false,
-					hoverConnectedEdges: true,
-					selectable: true,
-					selectConnectedEdges: true
-				}
-			};
-			network = new vis.Network(container, data as any, options);
+    // Node highlight (children only)
+    const updatedNodes = childIds
+      .map(id => nodeDataSet.get(id))
+      .filter(Boolean)
+      .map((n: any) => ({
+        ...n,
+        color: { ...n.color, border: blue, background: 'rgba(59,130,246,0.15)', highlight: { border: blue, background: 'rgba(59,130,246,0.22)' } },
+      }));
+    if (updatedNodes.length) nodeDataSet.update(updatedNodes);
 
-			// Add click handler for node interaction
-			network.on('click', function (params: any) {
-				if (params.nodes.length > 0) {
-					const nodeId = params.nodes[0];
-					const clickedNode: any = nodeDataSet.get(nodeId);
+    lastHighlightedNodes = childIds;
+    lastHighlightedEdges = outgoing.map(e => e.id);
+  }
 
-					// If it's a site node, try to open the URL
-					if (clickedNode && clickedNode.group === 'site') {
-						const url = clickedNode.label;
-						if (url) {
-							const fullUrl = url.startsWith('http') ? url : `https://${url}`;
-							window.open(fullUrl, '_blank');
-						}
-					}
-				}
-			});
+  function prepareData(nodes: GraphNode[], edges: GraphEdge[]) {
+    // Unique nodes, map isDown -> error
+    const seen = new Set<string | number>();
+    const uniqueNodes: any[] = [];
+    const groupOf: Map<string | number, string | undefined> = new Map();
+    for (const n of nodes) {
+      if (seen.has(n.id)) continue;
+      seen.add(n.id);
+      const { isDown, ...rest } = n as any;
+      if (isDown === true) (rest as any).group = 'error';
+      uniqueNodes.push(rest);
+      groupOf.set(rest.id, rest.group);
+    }
 
-				// Keep a map of original node colors so we can restore them after hover
-				const originalNodeColors = new Map();
+    // Add edge lengths to encourage clustering (shorter inside same group)
+    const processedEdges: any[] = [];
+    for (let i = 0; i < edges.length; i++) {
+      const e = edges[i];
+      const gFrom = groupOf.get(e.from);
+      const gTo = groupOf.get(e.to);
+      const sameGroup = gFrom && gTo && gFrom === gTo;
+      processedEdges.push({ id: edgeId(e, i), length: sameGroup ? SAME_GROUP_LEN : CROSS_GROUP_LEN, ...e });
+    }
 
-				function saveOriginalAndSetNodeColor(id: string | number, colorObj: any) {
-					try {
-						const node = nodeDataSet.get(id);
-						const orig = node && node.color ? node.color : null;
-						if (!originalNodeColors.has(id)) originalNodeColors.set(id, orig);
-						nodeDataSet.update({ id, color: colorObj });
-					} catch (e) {
-						console.error('Error tinting node', id, e);
-					}
-				}
+    return { uniqueNodes, processedEdges };
+  }
 
-				const hoverNodeHandler = function (params: any) {
-					if (!params || !params.node) return;
-					const nodeId = params.node;
-					// Determine parent nodes (edges that point to the hovered node)
-					const parentSet = new Set<any>();
-					try {
-						edgeDataSet.get().forEach((e: any) => {
-							if (e && e.to === nodeId) parentSet.add(e.from);
-						});
-					} catch (e) {
-						// Fallback: if edgeDataSet.get() fails, leave parentSet empty
-						console.error('Error computing parent set for hover', e);
-					}
+  function updateData(nodes: GraphNode[], edges: GraphEdge[]) {
+    if (!network || !nodeDataSet || !edgeDataSet) return;
 
-					// BFS up to depth 4 (first..fourth degree), excluding parents and the hovered node
-					const depths: Array<Array<any>> = [];
-					const visited = new Set<any>();
-					visited.add(nodeId);
+    const { uniqueNodes, processedEdges } = prepareData(nodes, edges);
 
-					// start with first-degree neighbors
-					let current = (network.getConnectedNodes(nodeId) || []).filter((n: any) => n !== nodeId && !parentSet.has(n));
-					for (let d = 1; d <= 4; d++) {
-						const next: any[] = [];
-						const uniqueCurrent = Array.from(new Set(current)).filter((n) => !visited.has(n) && !parentSet.has(n));
-						if (uniqueCurrent.length === 0) break;
-						depths[d] = uniqueCurrent;
-						uniqueCurrent.forEach((n) => visited.add(n));
-						// gather neighbors for next depth
-						uniqueCurrent.forEach((n) => {
-							const cn = network.getConnectedNodes(n) || [];
-							cn.forEach((nn: any) => {
-								if (!visited.has(nn) && nn !== nodeId && !parentSet.has(nn)) next.push(nn);
-							});
-						});
-						current = next;
-					}
+    // Preserve positions for nodes that remain
+    const existingIds = nodeDataSet.getIds();
+    const existingPositions = existingIds.length ? network.getPositions(existingIds) : {};
+    const nextIds = new Set(uniqueNodes.map(n => String(n.id)));
 
-					// Apply tint per depth with progressively subtler blues
-					// Depth 1: strongest
-					const depth1 = depths[1] || [];
-					depth1.forEach((id: any) => {
-						saveOriginalAndSetNodeColor(id, {
-							border: '#3B82F6',
-							background: 'rgba(59,130,246,0.14)',
-							highlight: { border: '#3B82F6', background: 'rgba(59,130,246,0.18)' }
-						});
-					});
+    // Remove nodes that disappeared (filter/update fix)
+    const toRemoveNodes = existingIds.filter((id: any) => !nextIds.has(String(id)));
+    if (toRemoveNodes.length) nodeDataSet.remove(toRemoveNodes);
 
-					// Depth 2: slightly less strong
-					const depth2 = depths[2] || [];
-					depth2.forEach((id: any) => {
-						saveOriginalAndSetNodeColor(id, {
-							border: '#60A5FA',
-							background: 'rgba(96,165,250,0.09)',
-							highlight: { border: '#60A5FA', background: 'rgba(96,165,250,0.12)' }
-						});
-					});
+    // Add or update nodes, injecting previous x/y when available
+    const upserts = uniqueNodes.map(n => {
+      const pos = (existingPositions as any)[n.id];
+      return pos ? { ...n, x: pos.x, y: pos.y } : n;
+    });
+    if (upserts.length) nodeDataSet.update(upserts);
 
-					// Depth 3: subtle
-					const depth3 = depths[3] || [];
-					depth3.forEach((id: any) => {
-						saveOriginalAndSetNodeColor(id, {
-							border: '#93C5FD',
-							background: 'rgba(147,197,253,0.06)',
-							highlight: { border: '#93C5FD', background: 'rgba(147,197,253,0.09)' }
-						});
-					});
+    // Edges: remove missing, then upsert
+    const existingEdgeIds = edgeDataSet.getIds();
+    const nextEdgeIdSet = new Set(processedEdges.map(e => String(e.id)));
+    const toRemoveEdges = existingEdgeIds.filter((id: any) => !nextEdgeIdSet.has(String(id)));
+    if (toRemoveEdges.length) edgeDataSet.remove(toRemoveEdges);
+    if (processedEdges.length) edgeDataSet.update(processedEdges);
 
-					// Depth 4: very subtle
-					const depth4 = depths[4] || [];
-					depth4.forEach((id: any) => {
-						saveOriginalAndSetNodeColor(id, {
-							border: '#BFDBFE',
-							background: 'rgba(191,219,254,0.04)',
-							highlight: { border: '#BFDBFE', background: 'rgba(191,219,254,0.06)' }
-						});
-					});
-				};
+    // Keep the layout stable; do not re-enable physics here
+    network.redraw();
+  }
 
-				const blurNodeHandler = function () {
-					// Restore original colors
-					originalNodeColors.forEach((orig, id) => {
-						try {
-							if (orig) nodeDataSet.update({ id, color: orig });
-							else nodeDataSet.update({ id, color: null });
-						} catch (e) {
-							console.error('Error restoring node color', id, e);
-						}
-					});
-					originalNodeColors.clear();
-				};
+  onMount(async () => {
+    const vis: any = await import('vis-network/standalone');
 
-				network.on('hoverNode', hoverNodeHandler);
-				network.on('blurNode', blurNodeHandler);
+    const initial = get(graphData);
+    const { uniqueNodes, processedEdges } = prepareData(initial.nodes, initial.edges);
 
-				// Dragging: move children (and their descendants) together with the dragged node
-				// Use top-level _dragRafId and _draggingState declared above (avoid shadowing)
+    nodeDataSet = new vis.DataSet(uniqueNodes);
+    edgeDataSet = new vis.DataSet(processedEdges);
 
-				network.on('dragStart', (params: any) => {
-					try {
-						if (!params || !params.nodes || params.nodes.length === 0) return;
-						// For now, use the first dragged node
-						const dragged = params.nodes[0];
-						// Build descendant set following outgoing edges (from -> to)
-						const descendants = new Set<any>();
-						const queue: any[] = [dragged];
-						while (queue.length) {
-							const cur = queue.shift();
-							edgeDataSet.get().forEach((e: any) => {
-								if (e && e.from === cur && e.to !== dragged && !descendants.has(e.to)) {
-									descendants.add(e.to);
-									queue.push(e.to);
-								}
-							});
-						}
+    const options = {
+      layout: { improvedLayout: false, randomSeed: 42 },
+      nodes: {
+        shape: 'dot', size: 14,
+        font: { size: 14, face: 'Helvetica', multi: true, bold: { color: '#ff9d4f', size: 14, face: 'Helvetica' }, color: '#e6e6e6' },
+        borderWidth: 2,
+        color: { border: '#e65c00', background: 'rgba(38,38,38,0.7)', highlight: { border: '#ff8c38', background: '#404040' } }
+      },
+      groups: {
+        domain:   { color: { background: 'rgba(230,92,0,0.8)', border: '#ff7b1f' }, shape: 'diamond', size: 36, font: { size: 16, color: '#fff' } },
+        subdomain:{ color: { background: 'rgba(255,158,79,0.7)', border: '#e65c00' }, shape: 'dot', size: 18, font: { size: 14, color: '#fff' } },
+        site:     { color: { background: 'rgba(34,197,93,0.6)', border: '#22C55D' }, shape: 'dot', size: 16, font: { size: 14, color: '#fff' } },
+        error:    { color: { background: 'rgba(255,76,76,0.7)', border: '#ff4c4c' }, shape: 'triangle', size: 16, font: { size: 14, color: '#fff' } }
+      },
+      edges: {
+        width: 1.5,
+        smooth: false,
+        shadow: { enabled: false },
+        color: { color: 'rgba(100,100,100,0.7)', hover: '#60A5FA', highlight: '#3B82F6' },
+        hoverWidth: 2, selectionWidth: 2.5
+      },
+      interaction: {
+        hover: true, hoverConnectedEdges: true,
+        multiselect: false, zoomView: true, dragNodes: true, dragView: true, selectable: true
+      },
+      physics: {
+        enabled: true,
+        solver: 'barnesHut',
+        barnesHut: {
+          gravitationalConstant: -2500,
+          centralGravity: 0.35,
+          springLength: 95,
+          springConstant: 0.02,
+          damping: 0.55,
+          avoidOverlap: 0.2
+        },
+        stabilization: { enabled: true, iterations: 300, fit: true },
+        adaptiveTimestep: true
+      }
+    } as any;
 
-						if (descendants.size === 0) return; // nothing to move
+    network = new vis.Network(container, { nodes: nodeDataSet, edges: edgeDataSet }, options);
 
-						// Record original positions
-						const descArr = Array.from(descendants);
-						const origPositions = network.getPositions(descArr);
-						const draggedPosObj = network.getPositions([dragged]);
-						const origDraggedPos = draggedPosObj && draggedPosObj[dragged] ? draggedPosObj[dragged] : null;
-						if (!origDraggedPos) return;
+    // Phase 2: brief FA2 refine, then freeze — yields compact clusters
+    network.once('stabilizationIterationsDone', () => {
+      network.setOptions({ physics: {
+        enabled: true,
+        solver: 'forceAtlas2Based',
+        forceAtlas2Based: {
+          gravitationalConstant: -120,
+          centralGravity: 0.012,
+          springLength: 90,
+          springConstant: 0.08,
+          damping: 0.7,
+          avoidOverlap: 0.5
+        },
+        stabilization: { enabled: true, iterations: 120, fit: true },
+        adaptiveTimestep: true
+      }});
 
-						_draggingState = { dragged, descArr, origPositions, origDraggedPos };
+      network.once('stabilizationIterationsDone', () => {
+        network.setOptions({ physics: false });
+      });
+    });
 
-						// Use requestAnimationFrame for smoother movement
-						function dragFrame() {
-							if (!_draggingState) return;
-							const posNowObj = network.getPositions([_draggingState.dragged]);
-							const posNow = posNowObj && posNowObj[_draggingState.dragged] ? posNowObj[_draggingState.dragged] : null;
-							if (!posNow) {
-								_dragRafId = requestAnimationFrame(dragFrame);
-								return;
-							}
-							const dx = posNow.x - _draggingState.origDraggedPos.x;
-							const dy = posNow.y - _draggingState.origDraggedPos.y;
-							_draggingState.descArr.forEach((id: any) => {
-								const op = _draggingState.origPositions[id];
-								if (op) {
-									try {
-										network.moveNode(id, op.x + dx, op.y + dy);
-									} catch (e) {
-										// ignore individual move errors
-									}
-								}
-							});
-							_dragRafId = requestAnimationFrame(dragFrame);
-						}
-						_dragRafId = requestAnimationFrame(dragFrame);
-					} catch (e) {
-						console.error('Error initializing drag move of children', e);
-					}
-				});
+    // --- Interactions ---
+    // Click: open site URL and highlight children/edges blue
+    network.on('click', (params: any) => {
+      if (!params.nodes?.length) return;
+      const nodeId = params.nodes[0];
+      const n = nodeDataSet.get(nodeId);
 
-				network.on('dragEnd', () => {
-					if (_dragRafId) {
-						cancelAnimationFrame(_dragRafId);
-						_dragRafId = null;
-					}
-					_draggingState = null;
-				});
+      // Highlight children in blue (like the edge highlight color)
+      highlightNodesAndEdges(nodeId);
 
-			// Keep physics enabled but make the network static after stabilization
-			stabilizationHandler = function () {
-				setTimeout(() => {
-					// Keep physics enabled but with minimal movement by adjusting parameters
-					network.setOptions({
-						physics: {
-							enabled: true,
-							solver: 'forceAtlas2Based',
-							forceAtlas2Based: {
-								gravitationalConstant: -150,
-								centralGravity: 0.007,
-								springLength: 95,
-								springConstant: 0.08,
-								damping: 0.9,
-								avoidOverlap: 0.5
-							},
-							minVelocity: 0.75, // Higher value to stop movement sooner
-							maxVelocity: 0.75, // Limit maximum velocity
-							timestep: 0.25, // Slower updates
-							stabilization: {
-								enabled: false // Disable further stabilization
-							}
-						}
-					});
-					console.log('Network stabilized - static positioning enabled');
-				}, STABILIZATION_DELAY_MS); // Short delay to allow final node positioning
-			};
-			network.on('stabilizationIterationsDone', stabilizationHandler as any);
+      // Click-to-open for site nodes
+      if (n?.group === 'site' && n?.label) {
+        const url = String(n.label);
+        const fullUrl = url.startsWith('http') ? url : `https://${url}`;
+        window.open(fullUrl, '_blank');
+      }
+    });
 
-			// NOTE: cleanup is registered at component initialization below using onDestroy
-		} catch (error) {
-			console.error('Error initializing graph:', error);
-		}
-	});
+    // Drag parent and its children as a unit
+    network.on('dragStart', (params: any) => {
+      if (!params.nodes?.length) return;
+      const anchorId = params.nodes[0];
+      const allEdges: any[] = edgeDataSet.get();
+      const children = allEdges.filter(e => String(e.from) === String(anchorId)).map(e => e.to);
+      const ids = [anchorId, ...children];
+      const pos = network.getPositions(ids);
+      dragState = { anchorId, startPos: pos as any, childIds: children };
+    });
 
-	// Register component-level cleanup during initialization (allowed by Svelte)
-	onDestroy(() => {
-		try {
-			if (network) {
-				// If we have a specific stabilization handler, remove that one, otherwise remove all
-				if (stabilizationHandler) network.off('stabilizationIterationsDone', stabilizationHandler);
-				else network.off('stabilizationIterationsDone');
+    network.on('dragging', (params: any) => {
+      if (!dragState.anchorId) return;
+      const anchorId = dragState.anchorId;
+      const start = dragState.startPos[anchorId];
+      // Current anchor pos from event is in canvas coordinates
+      const cur = params.pointer.canvas;
+      const dx = cur.x - start.x;
+      const dy = cur.y - start.y;
+      // Move children by the same delta
+      for (const cid of dragState.childIds) {
+        const cStart = dragState.startPos[cid];
+        if (cStart) network.moveNode(cid, cStart.x + dx, cStart.y + dy);
+      }
+    });
 
-				// Remove other handlers (removeAll variants are fine)
-				network.off('hoverNode');
-				network.off('blurNode');
-				network.off('dragStart');
-				network.off('dragEnd');
-			}
-		} catch (e) {
-			// swallow cleanup errors
-		}
+    network.on('dragEnd', () => {
+      dragState = { anchorId: null, startPos: {}, childIds: [] };
+    });
 
-		if (_dragRafId) {
-			try {
-				cancelAnimationFrame(_dragRafId);
-			} catch (e) {
-				// ignore
-			}
-			_dragRafId = null;
-		}
-	});
+    // Subscribe to reactive updates (filtering, etc.)
+    unsubscribe = graphData.subscribe(({ nodes, edges }) => updateData(nodes, edges));
+  });
+
+  onDestroy(() => {
+    try { unsubscribe?.(); } catch {}
+    try { network?.off('click'); network?.off('dragStart'); network?.off('dragging'); network?.off('dragEnd'); } catch {}
+    try { network?.destroy(); } catch {}
+    try { nodeDataSet?.clear(); edgeDataSet?.clear(); } catch {}
+  });
 </script>
 
 <div bind:this={container} class="w-full h-[80vh] rounded bg-transparent"></div>
 
 <style>
-	:global(.vis-network:focus) {
-		outline: none;
-		border: none;
-	}
-	:global(.vis-network) {
-		width: 100% !important;
-		height: 100% !important;
-		border: none;
-		background: transparent !important;
-	}
-
-	:global(.vis-network canvas) {
-		background: transparent !important;
-	}
-
-	:global(.vis-tooltip) {
-		position: absolute;
-		visibility: hidden;
-		padding: 12px;
-		white-space: nowrap;
-		font-family: 'Helvetica', sans-serif;
-		font-size: 14px;
-		color: #e6e6e6;
-		background-color: rgba(32, 32, 32, 0.95);
-		border-radius: 8px;
-		border: 1px solid rgba(77, 76, 76, 0.5);
-		box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-		z-index: 10000;
-		pointer-events: none;
-		max-width: 300px;
-		transition: opacity 0.3s ease;
-	}
-
-	:global(.tooltip) {
-		padding: 2px;
-	}
-
-	:global(.tooltip strong) {
-		margin-bottom: 4px;
-		display: block;
-		font-weight: bold;
-		color: #ff9d4f; /* Match primary orange theme */
-	}
+  :global(.vis-network:focus) { outline: none; border: none; }
+  :global(.vis-network) { width: 100% !important; height: 100% !important; border: none; background: transparent !important; }
+  :global(.vis-network canvas) { background: transparent !important; }
+  :global(.vis-tooltip) {
+    position: absolute; visibility: hidden; padding: 12px; white-space: nowrap; font-family: 'Helvetica', sans-serif; font-size: 14px; color: #e6e6e6;
+    background-color: rgba(32, 32, 32, 0.95); border-radius: 8px; border: 1px solid rgba(77, 76, 76, 0.5); box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+    z-index: 10000; pointer-events: none; max-width: 300px; transition: opacity 0.3s ease;
+  }
+  :global(.tooltip) { padding: 2px; }
+  :global(.tooltip strong) { margin-bottom: 4px; display: block; font-weight: bold; color: #ff9d4f; }
 </style>
