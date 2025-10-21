@@ -119,7 +119,12 @@
 				},
 				edges: {
 					width: 1.5,
-					color: { color: 'rgba(100, 100, 100, 0.7)' }, // Slightly darker for better contrast
+					// Default neutral color, with explicit hover/highlight set to a pleasant blue
+					color: {
+						color: 'rgba(100, 100, 100, 0.7)', // Slightly darker for better contrast
+						hover: '#60A5FA', // Tailwind sky-400 / pleasant blue on hover
+						highlight: '#3B82F6' // Tailwind blue-500 when selected
+					},
 					smooth: {
 						type: 'continuous',
 						forceDirection: 'none',
@@ -127,9 +132,10 @@
 					},
 					shadow: {
 						enabled: true,
-						color: 'rgba(230, 92, 0, 0.2)', // Slight orange tint matching primary color
-						size: 3,
-						x: 1,
+						// Subtle blue-tinted shadow to match hover color (low alpha)
+						color: 'rgba(59, 130, 246, 0.12)',
+						size: 4,
+						x: 0,
 						y: 1
 					},
 					hoverWidth: 2, // Slightly wider on hover
@@ -193,6 +199,180 @@
 					}
 				}
 			});
+
+				// Keep a map of original node colors so we can restore them after hover
+				const originalNodeColors = new Map();
+
+				function saveOriginalAndSetNodeColor(id: string | number, colorObj: any) {
+					try {
+						const node = nodeDataSet.get(id);
+						const orig = node && node.color ? node.color : null;
+						if (!originalNodeColors.has(id)) originalNodeColors.set(id, orig);
+						nodeDataSet.update({ id, color: colorObj });
+					} catch (e) {
+						console.error('Error tinting node', id, e);
+					}
+				}
+
+				const hoverNodeHandler = function (params) {
+					if (!params || !params.node) return;
+					const nodeId = params.node;
+					// Determine parent nodes (edges that point to the hovered node)
+					const parentSet = new Set<any>();
+					try {
+						edgeDataSet.get().forEach((e: any) => {
+							if (e && e.to === nodeId) parentSet.add(e.from);
+						});
+					} catch (e) {
+						// Fallback: if edgeDataSet.get() fails, leave parentSet empty
+						console.error('Error computing parent set for hover', e);
+					}
+
+					// BFS up to depth 4 (first..fourth degree), excluding parents and the hovered node
+					const depths: Array<Array<any>> = [];
+					const visited = new Set<any>();
+					visited.add(nodeId);
+
+					// start with first-degree neighbors
+					let current = (network.getConnectedNodes(nodeId) || []).filter((n: any) => n !== nodeId && !parentSet.has(n));
+					for (let d = 1; d <= 4; d++) {
+						const next: any[] = [];
+						const uniqueCurrent = Array.from(new Set(current)).filter((n) => !visited.has(n) && !parentSet.has(n));
+						if (uniqueCurrent.length === 0) break;
+						depths[d] = uniqueCurrent;
+						uniqueCurrent.forEach((n) => visited.add(n));
+						// gather neighbors for next depth
+						uniqueCurrent.forEach((n) => {
+							const cn = network.getConnectedNodes(n) || [];
+							cn.forEach((nn: any) => {
+								if (!visited.has(nn) && nn !== nodeId && !parentSet.has(nn)) next.push(nn);
+							});
+						});
+						current = next;
+					}
+
+					// Apply tint per depth with progressively subtler blues
+					// Depth 1: strongest
+					const depth1 = depths[1] || [];
+					depth1.forEach((id: any) => {
+						saveOriginalAndSetNodeColor(id, {
+							border: '#3B82F6',
+							background: 'rgba(59,130,246,0.14)',
+							highlight: { border: '#3B82F6', background: 'rgba(59,130,246,0.18)' }
+						});
+					});
+
+					// Depth 2: slightly less strong
+					const depth2 = depths[2] || [];
+					depth2.forEach((id: any) => {
+						saveOriginalAndSetNodeColor(id, {
+							border: '#60A5FA',
+							background: 'rgba(96,165,250,0.09)',
+							highlight: { border: '#60A5FA', background: 'rgba(96,165,250,0.12)' }
+						});
+					});
+
+					// Depth 3: subtle
+					const depth3 = depths[3] || [];
+					depth3.forEach((id: any) => {
+						saveOriginalAndSetNodeColor(id, {
+							border: '#93C5FD',
+							background: 'rgba(147,197,253,0.06)',
+							highlight: { border: '#93C5FD', background: 'rgba(147,197,253,0.09)' }
+						});
+					});
+
+					// Depth 4: very subtle
+					const depth4 = depths[4] || [];
+					depth4.forEach((id: any) => {
+						saveOriginalAndSetNodeColor(id, {
+							border: '#BFDBFE',
+							background: 'rgba(191,219,254,0.04)',
+							highlight: { border: '#BFDBFE', background: 'rgba(191,219,254,0.06)' }
+						});
+					});
+				};
+
+				const blurNodeHandler = function () {
+					// Restore original colors
+					originalNodeColors.forEach((orig, id) => {
+						try {
+							if (orig) nodeDataSet.update({ id, color: orig });
+							else nodeDataSet.update({ id, color: null });
+						} catch (e) {
+							console.error('Error restoring node color', id, e);
+						}
+					});
+					originalNodeColors.clear();
+				};
+
+				network.on('hoverNode', hoverNodeHandler);
+				network.on('blurNode', blurNodeHandler);
+
+				// Dragging: move children (and their descendants) together with the dragged node
+				let _dragInterval: any = null;
+				let _draggingState: any = null;
+
+				network.on('dragStart', (params: any) => {
+					try {
+						if (!params || !params.nodes || params.nodes.length === 0) return;
+						// For now, use the first dragged node
+						const dragged = params.nodes[0];
+						// Build descendant set following outgoing edges (from -> to)
+						const descendants = new Set<any>();
+						const queue: any[] = [dragged];
+						while (queue.length) {
+							const cur = queue.shift();
+							edgeDataSet.get().forEach((e: any) => {
+								if (e && e.from === cur && e.to !== dragged && !descendants.has(e.to)) {
+									descendants.add(e.to);
+									queue.push(e.to);
+								}
+							});
+						}
+
+						if (descendants.size === 0) return; // nothing to move
+
+						// Record original positions
+						const descArr = Array.from(descendants);
+						const origPositions = network.getPositions(descArr);
+						const draggedPosObj = network.getPositions([dragged]);
+						const origDraggedPos = draggedPosObj && draggedPosObj[dragged] ? draggedPosObj[dragged] : null;
+						if (!origDraggedPos) return;
+
+						_draggingState = { dragged, descArr, origPositions, origDraggedPos };
+
+						// Poll to move descendants in near-real-time while dragging
+						_dragInterval = setInterval(() => {
+							if (!_draggingState) return;
+							const posNowObj = network.getPositions([_draggingState.dragged]);
+							const posNow = posNowObj && posNowObj[_draggingState.dragged] ? posNowObj[_draggingState.dragged] : null;
+							if (!posNow) return;
+							const dx = posNow.x - _draggingState.origDraggedPos.x;
+							const dy = posNow.y - _draggingState.origDraggedPos.y;
+							_draggingState.descArr.forEach((id: any) => {
+								const op = _draggingState.origPositions[id];
+								if (op) {
+									try {
+										network.moveNode(id, op.x + dx, op.y + dy);
+									} catch (e) {
+										// ignore individual move errors
+									}
+								}
+							});
+						}, 20);
+					} catch (e) {
+						console.error('Error initializing drag move of children', e);
+					}
+				});
+
+				network.on('dragEnd', () => {
+					if (_dragInterval) {
+						clearInterval(_dragInterval);
+						_dragInterval = null;
+					}
+					_draggingState = null;
+				});
 
 			// Keep physics enabled but make the network static after stabilization
 			const stabilizationHandler = function () {
