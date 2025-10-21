@@ -18,9 +18,8 @@
   const edgeId = (e: GraphEdge, idx?: number) => `${e.from}|${e.to}${idx !== undefined ? '|' + idx : ''}`;
 
   // Tune these if you want tighter/looser clusters
-  const SAME_GROUP_LEN = 60;   // shorter springs inside groups
-  const CROSS_GROUP_LEN = 160; // longer springs across groups
-
+const SAME_GROUP_LEN = 15;    // was 60
+const CROSS_GROUP_LEN = 160;  // was 160
   // Keep track of current highlighting so we can reset colors on the next click
   let lastHighlightedNodes: Array<string | number> = [];
   let lastHighlightedEdges: Array<string> = [];
@@ -254,42 +253,44 @@
         multiselect: false, zoomView: true, dragNodes: true, dragView: true, selectable: true
       },
       physics: {
-        enabled: true,
-        solver: 'barnesHut',
-        barnesHut: {
-          gravitationalConstant: -2500,
-          centralGravity: 0.35,
-          springLength: 95,
-          springConstant: 0.02,
-          damping: 0.55,
-          avoidOverlap: 0.2
-        },
-        stabilization: { enabled: true, iterations: 300, fit: true },
-        adaptiveTimestep: true
-      }
+  enabled: true,
+  solver: 'barnesHut',
+  barnesHut: {
+    gravitationalConstant: -3500, // more repulsion => more inter-cluster space
+    centralGravity: 0.22,         // less pull to center, keeps clusters apart
+    springLength: 80,
+    springConstant: 0.03,
+    damping: 0.6,
+    avoidOverlap: 0.30            // a touch more spacing between blobs
+  },
+  stabilization: { enabled: true, iterations: 300, fit: true },
+  adaptiveTimestep: true
+}
     } as any;
 
     network = new vis.Network(container, { nodes: nodeDataSet, edges: edgeDataSet }, options);
 
     // Phase 2: brief FA2 refine, then freeze — yields compact clusters
-    network.once('stabilizationIterationsDone', () => {
-      network.setOptions({ physics: {
-        enabled: true,
-        solver: 'forceAtlas2Based',
-        forceAtlas2Based: {
-          gravitationalConstant: -120,
-          centralGravity: 0.012,
-          springLength: 90,
-        springConstant: 0.08,
-          damping: 0.7,
-          avoidOverlap: 0.5
-        },
-        stabilization: { enabled: true, iterations: 120, fit: true },
-        adaptiveTimestep: true
-      }});
+network.once('stabilizationIterationsDone', () => {
+  network.setOptions({ physics: {
+    enabled: true,
+    solver: 'forceAtlas2Based',
+    forceAtlas2Based: {
+      gravitationalConstant: -90,
+      centralGravity: 0.008,  // tiny pull so clusters don't merge
+      springLength: 70,       // shorter = tighter clusters
+      springConstant: 0.12,   // stronger = tighter clusters
+      damping: 0.75,
+      avoidOverlap: 0.20
+    },
+    stabilization: { enabled: true, iterations: 120, fit: true },
+    adaptiveTimestep: true
+  }});
 
       network.once('stabilizationIterationsDone', () => {
-        network.setOptions({ physics: false });
+        // Stop the physics engine so any residual rotation/motion halts,
+        // but keep physics enabled in the options (so interactions can restart it).
+        try { network.stopSimulation?.(); } catch {}
       });
     });
 
