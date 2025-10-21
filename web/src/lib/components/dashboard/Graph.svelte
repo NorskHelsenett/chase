@@ -66,7 +66,7 @@
 
 			const data = { nodes: nodeDataSet, edges: edgeDataSet };
 			const options = {
-				layout: { hierarchical: false },
+				layout: { hierarchical: false, improvedLayout: false },
 				nodes: {
 					shape: 'dot',
 					size: 14,
