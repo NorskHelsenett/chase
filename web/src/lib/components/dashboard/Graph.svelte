@@ -127,9 +127,6 @@
     // Store positions to prevent movement
     network.storePositions();
 
-    // Temporarily disable physics to prevent recalculation
-    // network.setOptions({ physics: { enabled: false } });
-
     if (lastHighlightedNodes.length) {
       const resetNodes = lastHighlightedNodes
         .map(id => nodeDataSet.get(id))
@@ -154,9 +151,6 @@
       if (resetEdges.length) edgeDataSet.update(resetEdges);
       lastHighlightedEdges = [];
     }
-
-    // Re-enable physics if it was enabled before
-    // network.setOptions({ physics: { enabled: true } });
   }
 
   function getDescendantsAndEdges(rootId: string | number) {
@@ -207,9 +201,6 @@
     // Store positions to prevent movement
     network.storePositions();
 
-    // Temporarily disable physics to prevent recalculation
-    // network.setOptions({ physics: { enabled: false } });
-
     // Edges first
     const updatedEdges = edges.map(e => ({
       ...e,
@@ -240,9 +231,6 @@
 
     lastHighlightedNodes = nodeIds;
     lastHighlightedEdges = edgeIds;
-
-    // Re-enable physics if it was enabled before
-    // network.setOptions({ physics: { enabled: true } });
   }
 
   onMount(async () => {
