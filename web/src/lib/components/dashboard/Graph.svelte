@@ -128,7 +128,7 @@
     network.storePositions();
 
     // Temporarily disable physics to prevent recalculation
-    network.setOptions({ physics: { enabled: false } });
+    // network.setOptions({ physics: { enabled: false } });
 
     if (lastHighlightedNodes.length) {
       const resetNodes = lastHighlightedNodes
@@ -156,7 +156,7 @@
     }
 
     // Re-enable physics if it was enabled before
-    network.setOptions({ physics: { enabled: true } });
+    // network.setOptions({ physics: { enabled: true } });
   }
 
   function getDescendantsAndEdges(rootId: string | number) {
@@ -208,7 +208,7 @@
     network.storePositions();
 
     // Temporarily disable physics to prevent recalculation
-    network.setOptions({ physics: { enabled: false } });
+    // network.setOptions({ physics: { enabled: false } });
 
     // Edges first
     const updatedEdges = edges.map(e => ({
@@ -242,7 +242,7 @@
     lastHighlightedEdges = edgeIds;
 
     // Re-enable physics if it was enabled before
-    network.setOptions({ physics: { enabled: true } });
+    // network.setOptions({ physics: { enabled: true } });
   }
 
   onMount(async () => {
@@ -318,6 +318,7 @@
         // Stop the physics engine so any residual rotation/motion halts,
         // but keep physics enabled in the options (so interactions can restart it).
         try { network.stopSimulation?.(); } catch {}
+network.setOptions({ physics: { enabled: false } }); // <- keep it off
       });
     });
 
