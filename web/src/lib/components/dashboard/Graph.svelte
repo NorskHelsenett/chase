@@ -18,8 +18,9 @@
   const edgeId = (e: GraphEdge, idx?: number) => `${e.from}|${e.to}${idx !== undefined ? '|' + idx : ''}`;
 
   // Tune these if you want tighter/looser clusters
-const SAME_GROUP_LEN = 15;    // was 60
-const CROSS_GROUP_LEN = 160;  // was 160
+  const SAME_GROUP_LEN = 15;    // was 60
+  const CROSS_GROUP_LEN = 160;  // was 160
+
   // Keep track of current highlighting so we can reset colors on the next click
   let lastHighlightedNodes: Array<string | number> = [];
   let lastHighlightedEdges: Array<string> = [];
@@ -123,11 +124,20 @@ const CROSS_GROUP_LEN = 160;  // was 160
   function resetHighlights() {
     if (!nodeDataSet || !edgeDataSet) return;
 
+    // Store positions to prevent movement
+    network.storePositions();
+
+    // Temporarily disable physics to prevent recalculation
+    network.setOptions({ physics: { enabled: false } });
+
     if (lastHighlightedNodes.length) {
       const resetNodes = lastHighlightedNodes
         .map(id => nodeDataSet.get(id))
         .filter(Boolean)
-        .map((n: any) => resetNodeToBase(n));
+        .map((n: any) => {
+          const pos = network.getPositions([n.id])[n.id];
+          return { ...resetNodeToBase(n), x: pos?.x, y: pos?.y };
+        });
       if (resetNodes.length) nodeDataSet.update(resetNodes);
       lastHighlightedNodes = [];
     }
@@ -144,6 +154,9 @@ const CROSS_GROUP_LEN = 160;  // was 160
       if (resetEdges.length) edgeDataSet.update(resetEdges);
       lastHighlightedEdges = [];
     }
+
+    // Re-enable physics if it was enabled before
+    network.setOptions({ physics: { enabled: true } });
   }
 
   function getDescendantsAndEdges(rootId: string | number) {
@@ -191,6 +204,12 @@ const CROSS_GROUP_LEN = 160;  // was 160
     const { nodeIds, edges, edgeIds } = getDescendantsAndEdges(parentId);
     const blue = '#3B82F6';
 
+    // Store positions to prevent movement
+    network.storePositions();
+
+    // Temporarily disable physics to prevent recalculation
+    network.setOptions({ physics: { enabled: false } });
+
     // Edges first
     const updatedEdges = edges.map(e => ({
       ...e,
@@ -203,19 +222,27 @@ const CROSS_GROUP_LEN = 160;  // was 160
     const updatedNodes = nodeIds
       .map(id => nodeDataSet.get(id))
       .filter(Boolean)
-      .map((n: any) => ({
-        ...n,
-        color: {
-          ...(n.color ?? {}),
-          border: blue,
-          background: 'rgba(59,130,246,0.15)',
-          highlight: { border: blue, background: 'rgba(59,130,246,0.22)' }
-        }
-      }));
+      .map((n: any) => {
+        const pos = network.getPositions([n.id])[n.id];
+        return {
+          ...n,
+          x: pos?.x,
+          y: pos?.y,
+          color: {
+            ...(n.color ?? {}),
+            border: blue,
+            background: 'rgba(59,130,246,0.15)',
+            highlight: { border: blue, background: 'rgba(59,130,246,0.22)' }
+          }
+        };
+      });
     if (updatedNodes.length) nodeDataSet.update(updatedNodes);
 
     lastHighlightedNodes = nodeIds;
     lastHighlightedEdges = edgeIds;
+
+    // Re-enable physics if it was enabled before
+    network.setOptions({ physics: { enabled: true } });
   }
 
   onMount(async () => {
@@ -253,39 +280,39 @@ const CROSS_GROUP_LEN = 160;  // was 160
         multiselect: false, zoomView: true, dragNodes: true, dragView: true, selectable: true
       },
       physics: {
-  enabled: true,
-  solver: 'barnesHut',
-  barnesHut: {
-    gravitationalConstant: -3500, // more repulsion => more inter-cluster space
-    centralGravity: 0.22,         // less pull to center, keeps clusters apart
-    springLength: 80,
-    springConstant: 0.03,
-    damping: 0.6,
-    avoidOverlap: 0.30            // a touch more spacing between blobs
-  },
-  stabilization: { enabled: true, iterations: 300, fit: true },
-  adaptiveTimestep: true
-}
+        enabled: true,
+        solver: 'barnesHut',
+        barnesHut: {
+          gravitationalConstant: -3500, // more repulsion => more inter-cluster space
+          centralGravity: 0.22,         // less pull to center, keeps clusters apart
+          springLength: 80,
+          springConstant: 0.03,
+          damping: 0.6,
+          avoidOverlap: 0.30            // a touch more spacing between blobs
+        },
+        stabilization: { enabled: true, iterations: 300, fit: true },
+        adaptiveTimestep: true
+      }
     } as any;
 
     network = new vis.Network(container, { nodes: nodeDataSet, edges: edgeDataSet }, options);
 
     // Phase 2: brief FA2 refine, then freeze — yields compact clusters
-network.once('stabilizationIterationsDone', () => {
-  network.setOptions({ physics: {
-    enabled: true,
-    solver: 'forceAtlas2Based',
-    forceAtlas2Based: {
-      gravitationalConstant: -90,
-      centralGravity: 0.008,  // tiny pull so clusters don't merge
-      springLength: 70,       // shorter = tighter clusters
-      springConstant: 0.12,   // stronger = tighter clusters
-      damping: 0.75,
-      avoidOverlap: 0.20
-    },
-    stabilization: { enabled: true, iterations: 120, fit: true },
-    adaptiveTimestep: true
-  }});
+    network.once('stabilizationIterationsDone', () => {
+      network.setOptions({ physics: {
+        enabled: true,
+        solver: 'forceAtlas2Based',
+        forceAtlas2Based: {
+          gravitationalConstant: -90,
+          centralGravity: 0.008,  // tiny pull so clusters don't merge
+          springLength: 70,       // shorter = tighter clusters
+          springConstant: 0.12,   // stronger = tighter clusters
+          damping: 0.75,
+          avoidOverlap: 0.20
+        },
+        stabilization: { enabled: true, iterations: 120, fit: true },
+        adaptiveTimestep: true
+      }});
 
       network.once('stabilizationIterationsDone', () => {
         // Stop the physics engine so any residual rotation/motion halts,
@@ -362,7 +389,6 @@ network.once('stabilizationIterationsDone', () => {
     try { nodeDataSet?.clear(); edgeDataSet?.clear(); } catch {}
   });
 </script>
-
 
 <div bind:this={container} class="w-full h-[80vh] rounded bg-transparent"></div>
 
