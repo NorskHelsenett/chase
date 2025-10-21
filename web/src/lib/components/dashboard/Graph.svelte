@@ -21,18 +21,23 @@
 	let container: HTMLDivElement;
 	let network: any;
 
+// Cleanup / handler refs that must be available to lifecycle hooks at initialization
+let _dragRafId: any = null;
+let _draggingState: any = null;
+let stabilizationHandler: any = null;
+
 	const STABILIZATION_DELAY_MS = 1000; // Delay to allow final node positioning after stabilization
 
 	onMount(async () => {
-		const vis = await import('vis-network/standalone');
+		const vis: any = await import('vis-network/standalone');
 
 		try {
 			const { nodes, edges } = get(graphData);
 			console.log(`Building graph with ${nodes.length} nodes and ${edges.length} edges`);
 
 			// Create new DataSets with uniqueness check
-			const nodeDataSet = new vis.DataSet();
-			const edgeDataSet = new vis.DataSet();
+			const nodeDataSet: any = new vis.DataSet();
+			const edgeDataSet: any = new vis.DataSet();
 
 			// Add nodes one by one to handle potential duplicates
 			nodes.forEach((node) => {
@@ -181,13 +186,13 @@
 					selectConnectedEdges: true
 				}
 			};
-			network = new vis.Network(container, data, options);
+			network = new vis.Network(container, data as any, options);
 
 			// Add click handler for node interaction
-			network.on('click', function (params) {
+			network.on('click', function (params: any) {
 				if (params.nodes.length > 0) {
 					const nodeId = params.nodes[0];
-					const clickedNode = nodeDataSet.get(nodeId);
+					const clickedNode: any = nodeDataSet.get(nodeId);
 
 					// If it's a site node, try to open the URL
 					if (clickedNode && clickedNode.group === 'site') {
@@ -214,7 +219,7 @@
 					}
 				}
 
-				const hoverNodeHandler = function (params) {
+				const hoverNodeHandler = function (params: any) {
 					if (!params || !params.node) return;
 					const nodeId = params.node;
 					// Determine parent nodes (edges that point to the hovered node)
@@ -310,8 +315,7 @@
 				network.on('blurNode', blurNodeHandler);
 
 				// Dragging: move children (and their descendants) together with the dragged node
-				let _dragRafId: any = null;
-				let _draggingState: any = null;
+				// Use top-level _dragRafId and _draggingState declared above (avoid shadowing)
 
 				network.on('dragStart', (params: any) => {
 					try {
@@ -380,7 +384,7 @@
 				});
 
 			// Keep physics enabled but make the network static after stabilization
-			const stabilizationHandler = function () {
+			stabilizationHandler = function () {
 				setTimeout(() => {
 					// Keep physics enabled but with minimal movement by adjusting parameters
 					network.setOptions({
@@ -406,23 +410,39 @@
 					console.log('Network stabilized - static positioning enabled');
 				}, STABILIZATION_DELAY_MS); // Short delay to allow final node positioning
 			};
-			network.on('stabilizationIterationsDone', stabilizationHandler);
+			network.on('stabilizationIterationsDone', stabilizationHandler as any);
 
-			onDestroy(() => {
-				network.off('stabilizationIterationsDone', stabilizationHandler);
-				// Remove hover/blur handlers
-				network.off('hoverNode');
-				network.off('blurNode');
-				// Remove drag handlers
-				network.off('dragStart');
-				network.off('dragEnd');
-				if (_dragRafId) {
-					cancelAnimationFrame(_dragRafId);
-					_dragRafId = null;
-				}
-			});
+			// NOTE: cleanup is registered at component initialization below using onDestroy
 		} catch (error) {
 			console.error('Error initializing graph:', error);
+		}
+	});
+
+	// Register component-level cleanup during initialization (allowed by Svelte)
+	onDestroy(() => {
+		try {
+			if (network) {
+				// If we have a specific stabilization handler, remove that one, otherwise remove all
+				if (stabilizationHandler) network.off('stabilizationIterationsDone', stabilizationHandler);
+				else network.off('stabilizationIterationsDone');
+
+				// Remove other handlers (removeAll variants are fine)
+				network.off('hoverNode');
+				network.off('blurNode');
+				network.off('dragStart');
+				network.off('dragEnd');
+			}
+		} catch (e) {
+			// swallow cleanup errors
+		}
+
+		if (_dragRafId) {
+			try {
+				cancelAnimationFrame(_dragRafId);
+			} catch (e) {
+				// ignore
+			}
+			_dragRafId = null;
 		}
 	});
 </script>

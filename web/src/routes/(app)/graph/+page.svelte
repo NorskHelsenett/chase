@@ -204,15 +204,6 @@
 					nodeIsDown
 				);
 				edges.push({ from: parentForInstance, to: instanceNodeId });
-
-				// --- Logging
-				if (import.meta.env.MODE === 'development') {
-					console.log(
-						`Processed: ${hostname}\n` +
-							`  → Parent: ${parentForInstance}\n` +
-							`  → Domain nodes: [${[...groupHostnames].join(', ')}]`
-					);
-				}
 				// ---
 			} catch (error) {
 				const errId = `error:${server.ID || idx}:${server.url}`;
