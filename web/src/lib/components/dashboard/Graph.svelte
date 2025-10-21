@@ -13,7 +13,7 @@
   let nodeDataSet: any;
   let edgeDataSet: any;
   let unsubscribe: () => void;
-  let loading = true;
+  export let loading = true;
   let loadPct = 0;
 
   // --- helpers ---
@@ -445,7 +445,7 @@ network.setOptions({ physics: { enabled: false } }); // <- keep it off
     height: 44px;
     border-radius: 9999px;
     border: 4px solid rgba(255,255,255,0.2);
-    border-top-color: #3B82F6;
+    border-top-color: #22C55D;
     animation: spin 0.9s linear infinite;
   }
   .label {
