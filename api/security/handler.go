@@ -225,7 +225,7 @@ func captureAndSendScreenshot(c *gin.Context, domain string) error {
 	}
 
 	// Create request body
-	jsonData, err := json.Marshal(map[string]string{"url": domain})
+	jsonData, err := json.Marshal(map[string]string{"url": domain, "wait_time": "5"})
 	if err != nil {
 		return fmt.Errorf("failed to create request: %v", err)
 	}
