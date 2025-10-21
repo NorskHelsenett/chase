@@ -13,6 +13,8 @@
   let nodeDataSet: any;
   let edgeDataSet: any;
   let unsubscribe: () => void;
+  let loading = true;
+  let loadPct = 0;
 
   // --- helpers ---
   const edgeId = (e: GraphEdge, idx?: number) => `${e.from}|${e.to}${idx !== undefined ? '|' + idx : ''}`;
@@ -285,6 +287,28 @@
 
     network = new vis.Network(container, { nodes: nodeDataSet, edges: edgeDataSet }, options);
 
+    // Optional: show rough progress while physics runs
+    network.on && network.on('stabilizationProgress', (p: any) => {
+      if (!p?.total) return;
+      loadPct = Math.min(100, Math.round((p.iterations / p.total) * 100));
+    });
+
+    // Hide the loader only after the graph is laid out *and* a frame has been painted
+    network.once && network.once('stabilizationIterationsDone', () => {
+      try { network.stopSimulation?.(); } catch {}
+      // Keep physics disabled for performance after layout
+      try { network.setOptions({ physics: { enabled: false } }); } catch {}
+
+      // Wait a tick so the canvas draws before removing the overlay
+      requestAnimationFrame(() => (loading = false));
+    });
+
+    // Safety: if there are very few nodes and stabilization doesn’t fire,
+    // fall back to first draw event
+    network.once && network.once('afterDrawing', () => {
+      if (loading) requestAnimationFrame(() => (loading = false));
+    });
+
     // Phase 2: brief FA2 refine, then freeze — yields compact clusters
     network.once('stabilizationIterationsDone', () => {
       network.setOptions({ physics: {
@@ -379,7 +403,16 @@ network.setOptions({ physics: { enabled: false } }); // <- keep it off
   });
 </script>
 
-<div bind:this={container} class="w-full h-[80vh] rounded bg-transparent"></div>
+<div class="graph-wrapper">
+  <div bind:this={container} class="w-full h-[80vh] rounded bg-transparent"></div>
+
+  {#if loading}
+    <div class="graph-loading" role="status" aria-live="polite" aria-label="Loading graph">
+      <div class="spinner" aria-hidden="true"></div>
+      <div class="label">Loading graph{#if loadPct}&nbsp;— {loadPct}%{/if}</div>
+    </div>
+  {/if}
+</div>
 
 <style>
   :global(.vis-network:focus) { outline: none; border: none; }
@@ -392,4 +425,36 @@ network.setOptions({ physics: { enabled: false } }); // <- keep it off
   }
   :global(.tooltip) { padding: 2px; }
   :global(.tooltip strong) { margin-bottom: 4px; display: block; font-weight: bold; color: #ff9d4f; }
+
+  /* Graph loading overlay */
+  .graph-wrapper { position: relative; }
+  .graph-loading {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(to bottom, rgba(16,16,16,0.6), rgba(16,16,16,0.6));
+    backdrop-filter: blur(2px);
+    z-index: 20;
+  }
+  .spinner {
+    width: 44px;
+    height: 44px;
+    border-radius: 9999px;
+    border: 4px solid rgba(255,255,255,0.2);
+    border-top-color: #3B82F6;
+    animation: spin 0.9s linear infinite;
+  }
+  .label {
+    font-family: Helvetica, Arial, sans-serif;
+    font-size: 14px;
+    color: #e6e6e6;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .spinner { animation: none; border-top-color: rgba(255,255,255,0.6); }
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
 </style>
