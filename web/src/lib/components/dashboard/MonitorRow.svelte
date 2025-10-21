@@ -92,7 +92,9 @@
 	};
 </script>
 
-<td class={`py-2 px-2 ${hover ? 'group-hover:rounded-l-lg' : ''}`}>
+<td
+	class={`py-2 px-2 ${hover ? 'group-hover:rounded-l-lg' : ''} ${hover ? 'group-hover:bg-[#2b2b2b]' : ''}`}
+>
 	<span
 		class={`px-2 py-0.5 text-xs w-[7em] text-center font-medium rounded-full ${getStatusClasses(rowData.status)}`}
 	>
@@ -100,17 +102,21 @@
 	</span>
 </td>
 
-<td class="text-white min-w-[300px] max-w-[300px]">
+<td class={`text-white min-w-[300px] max-w-[300px] ${hover ? 'group-hover:bg-[#2b2b2b]' : ''}`}>
 	<div class="whitespace-nowrap overflow-hidden text-ellipsis w-full max-w-full">
 		{rowData.title}
 	</div>
 </td>
 
-<td class={getScoreColor(rowData.headerScore)}>{rowData.headerScore}</td>
+<td class={`${getScoreColor(rowData.headerScore)} ${hover ? 'group-hover:bg-[#2b2b2b]' : ''}`}
+	>{rowData.headerScore}</td
+>
 
-<td class={getScoreColor(rowData.certScore)}>{rowData.certScore}</td>
+<td class={`${getScoreColor(rowData.certScore)} ${hover ? 'group-hover:bg-[#2b2b2b]' : ''}`}
+	>{rowData.certScore}</td
+>
 
-<td>
+<td class={hover ? 'group-hover:bg-[#2b2b2b]' : ''}>
 	<div
 		class={`px-2 py-1 w-[7em] text-center rounded-full text-sm ${getRiskColor(rowData.adminRisk)}`}
 	>
@@ -118,7 +124,7 @@
 	</div>
 </td>
 
-<td>
+<td class={hover ? 'group-hover:bg-[#2b2b2b]' : ''}>
 	<div
 		class={`px-2 py-1 w-[7em] text-center rounded-full text-sm ${getRiskColor(rowData.apiRisk)}`}
 	>
@@ -126,7 +132,7 @@
 	</div>
 </td>
 
-<td class={hover ? 'group-hover:rounded-r-lg' : ''}>
+<td class={`${hover ? 'group-hover:rounded-r-lg' : ''} ${hover ? 'group-hover:bg-[#2b2b2b]' : ''}`}>
 	<div class="flex gap-1">
 		{#each Array(10) as _, i}
 			{#if i < 10 - rowData.uptime.length}

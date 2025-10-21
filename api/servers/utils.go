@@ -4,6 +4,7 @@ import (
 	"crypto/tls"
 	"net"
 	"net/http"
+	"os"
 	"time"
 )
 
@@ -94,6 +95,12 @@ func pingServer(server Server) PingResult {
 			},
 		}
 
+		// Use ENV CHASE_HOSTNAME for User-Agent, else fallback to GitHub repo URL
+		scannerURL := os.Getenv("CHASE_HOSTNAME")
+		if scannerURL == "" {
+			scannerURL = "https://github.com/NorskHelsenett/chase"
+		}
+
 		// Create request
 		req, err := http.NewRequest("GET", fullURL, nil)
 		if err != nil {
@@ -101,7 +108,7 @@ func pingServer(server Server) PingResult {
 			continue
 		}
 
-		req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+		req.Header.Set("User-Agent", "ChaseMonitor/1.0 (+"+scannerURL+") Automated Security Scanner for "+server.URL)
 		req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8")
 
 		startTime := time.Now()
