@@ -36,57 +36,29 @@
     childIds: []
   };
 
-  function baseNodeStyle(n: any) {
-    // Return node with default colors per group; do not overwrite group styling if present
-    const base: any = {
-      borderWidth: 2,
-      color: { border: '#e65c00', background: 'rgba(38,38,38,0.7)', highlight: { border: '#ff8c38', background: '#404040' } },
-      font: { size: 14, face: 'Helvetica', multi: true, bold: { color: '#ff9d4f', size: 14, face: 'Helvetica' }, color: '#e6e6e6' }
-    };
-    return { ...n, ...base };
-  }
+  // --- styling defaults (used only for UNgrouped nodes) ---
+  const DEFAULT_NODE_COLOR = {
+    border: '#e65c00',
+    background: 'rgba(38,38,38,0.7)',
+    highlight: { border: '#ff8c38', background: '#404040' }
+  };
+  const DEFAULT_NODE_FONT = {
+    size: 14,
+    face: 'Helvetica',
+    multi: true,
+    bold: { color: '#ff9d4f', size: 14, face: 'Helvetica' },
+    color: '#e6e6e6'
+  };
 
-  function highlightNodesAndEdges(parentId: string | number) {
-    // Reset previously highlighted nodes/edges to default colors
-    if (lastHighlightedNodes.length) {
-      const resetNodes = lastHighlightedNodes
-        .map(id => nodeDataSet.get(id))
-        .filter(Boolean)
-        .map((n: any) => baseNodeStyle(n));
-      if (resetNodes.length) nodeDataSet.update(resetNodes);
-      lastHighlightedNodes = [];
+  function resetNodeToBase(n: any) {
+    // Keep group styling by removing custom color if grouped; use defaults otherwise
+    const ret: any = { ...n, borderWidth: 2, font: n.font ?? DEFAULT_NODE_FONT };
+    if (n.group) {
+      delete ret.color; // let groups.{...}.color take over
+    } else {
+      ret.color = DEFAULT_NODE_COLOR;
     }
-    if (lastHighlightedEdges.length) {
-      const resetEdges = lastHighlightedEdges
-        .map(id => edgeDataSet.get(id))
-        .filter(Boolean)
-        .map((e: any) => ({ ...e, color: { color: 'rgba(100,100,100,0.7)', highlight: '#3B82F6', hover: '#60A5FA' }, width: 1.5 }));
-      if (resetEdges.length) edgeDataSet.update(resetEdges);
-      lastHighlightedEdges = [];
-    }
-
-    // Highlight children (outgoing) nodes and the outgoing edges from parent
-    const allEdges: any[] = edgeDataSet.get();
-    const outgoing = allEdges.filter(e => String(e.from) === String(parentId));
-    const childIds = outgoing.map(e => e.to);
-
-    // Edge highlight first
-    const blue = '#3B82F6';
-    const updatedEdges = outgoing.map(e => ({ ...e, color: { color: blue, highlight: blue, hover: blue }, width: 2.5 }));
-    if (updatedEdges.length) edgeDataSet.update(updatedEdges);
-
-    // Node highlight (children only)
-    const updatedNodes = childIds
-      .map(id => nodeDataSet.get(id))
-      .filter(Boolean)
-      .map((n: any) => ({
-        ...n,
-        color: { ...n.color, border: blue, background: 'rgba(59,130,246,0.15)', highlight: { border: blue, background: 'rgba(59,130,246,0.22)' } },
-      }));
-    if (updatedNodes.length) nodeDataSet.update(updatedNodes);
-
-    lastHighlightedNodes = childIds;
-    lastHighlightedEdges = outgoing.map(e => e.id);
+    return ret;
   }
 
   function prepareData(nodes: GraphNode[], edges: GraphEdge[]) {
@@ -146,6 +118,105 @@
 
     // Keep the layout stable; do not re-enable physics here
     network.redraw();
+  }
+
+  // --- highlight helpers (now does ALL descendants) ---
+  function resetHighlights() {
+    if (!nodeDataSet || !edgeDataSet) return;
+
+    if (lastHighlightedNodes.length) {
+      const resetNodes = lastHighlightedNodes
+        .map(id => nodeDataSet.get(id))
+        .filter(Boolean)
+        .map((n: any) => resetNodeToBase(n));
+      if (resetNodes.length) nodeDataSet.update(resetNodes);
+      lastHighlightedNodes = [];
+    }
+
+    if (lastHighlightedEdges.length) {
+      const resetEdges = lastHighlightedEdges
+        .map(id => edgeDataSet.get(id))
+        .filter(Boolean)
+        .map((e: any) => ({
+          ...e,
+          color: { color: 'rgba(100,100,100,0.7)', highlight: '#3B82F6', hover: '#60A5FA' },
+          width: 1.5
+        }));
+      if (resetEdges.length) edgeDataSet.update(resetEdges);
+      lastHighlightedEdges = [];
+    }
+  }
+
+  function getDescendantsAndEdges(rootId: string | number) {
+    // BFS over directed edges: follow e.from -> e.to
+    const allEdges: any[] = edgeDataSet.get();
+    const outMap = new Map<string | number, Array<any>>();
+    for (const e of allEdges) {
+      const key = String(e.from);
+      const arr = outMap.get(key) || [];
+      arr.push(e);
+      outMap.set(key, arr);
+    }
+
+    const visited = new Set<string | number>();
+    const q: Array<string | number> = [rootId];
+    const edgesTouched: Array<any> = [];
+
+    visited.add(rootId);
+
+    while (q.length) {
+      const cur = q.shift()!;
+      const outgoing = outMap.get(String(cur)) || [];
+      for (const e of outgoing) {
+        edgesTouched.push(e);
+        if (!visited.has(e.to)) {
+          visited.add(e.to);
+          q.push(e.to);
+        }
+      }
+    }
+
+    // Remove the root itself from node highlighting set; we only color descendants
+    visited.delete(rootId);
+
+    return {
+      nodeIds: Array.from(visited),
+      edgeIds: edgesTouched.map(e => e.id),
+      edges: edgesTouched
+    };
+  }
+
+  function highlightSubtree(parentId: string | number) {
+    resetHighlights();
+
+    const { nodeIds, edges, edgeIds } = getDescendantsAndEdges(parentId);
+    const blue = '#3B82F6';
+
+    // Edges first
+    const updatedEdges = edges.map(e => ({
+      ...e,
+      color: { color: blue, highlight: blue, hover: blue },
+      width: 2.5
+    }));
+    if (updatedEdges.length) edgeDataSet.update(updatedEdges);
+
+    // Nodes (descendants only)
+    const updatedNodes = nodeIds
+      .map(id => nodeDataSet.get(id))
+      .filter(Boolean)
+      .map((n: any) => ({
+        ...n,
+        color: {
+          ...(n.color ?? {}),
+          border: blue,
+          background: 'rgba(59,130,246,0.15)',
+          highlight: { border: blue, background: 'rgba(59,130,246,0.22)' }
+        }
+      }));
+    if (updatedNodes.length) nodeDataSet.update(updatedNodes);
+
+    lastHighlightedNodes = nodeIds;
+    lastHighlightedEdges = edgeIds;
   }
 
   onMount(async () => {
@@ -209,7 +280,7 @@
           gravitationalConstant: -120,
           centralGravity: 0.012,
           springLength: 90,
-          springConstant: 0.08,
+        springConstant: 0.08,
           damping: 0.7,
           avoidOverlap: 0.5
         },
@@ -223,14 +294,18 @@
     });
 
     // --- Interactions ---
-    // Click: open site URL and highlight children/edges blue
+    // Click: background clears; node click highlights whole subtree and opens site URLs
     network.on('click', (params: any) => {
-      if (!params.nodes?.length) return;
+      if (!params.nodes?.length) {
+        resetHighlights();
+        network.unselectAll();
+        return;
+      }
+
       const nodeId = params.nodes[0];
       const n = nodeDataSet.get(nodeId);
 
-      // Highlight children in blue (like the edge highlight color)
-      highlightNodesAndEdges(nodeId);
+      highlightSubtree(nodeId);
 
       // Click-to-open for site nodes
       if (n?.group === 'site' && n?.label) {
@@ -240,7 +315,12 @@
       }
     });
 
-    // Drag parent and its children as a unit
+    // Deselect event from vis also clears
+    network.on('deselectNode', () => {
+      resetHighlights();
+    });
+
+    // Drag parent and its direct children as a unit (descendants can be large; keep it direct for perf)
     network.on('dragStart', (params: any) => {
       if (!params.nodes?.length) return;
       const anchorId = params.nodes[0];
@@ -276,11 +356,12 @@
 
   onDestroy(() => {
     try { unsubscribe?.(); } catch {}
-    try { network?.off('click'); network?.off('dragStart'); network?.off('dragging'); network?.off('dragEnd'); } catch {}
+    try { network?.off('click'); network?.off('dragStart'); network?.off('dragging'); network?.off('dragEnd'); network?.off('deselectNode'); } catch {}
     try { network?.destroy(); } catch {}
     try { nodeDataSet?.clear(); edgeDataSet?.clear(); } catch {}
   });
 </script>
+
 
 <div bind:this={container} class="w-full h-[80vh] rounded bg-transparent"></div>
 
