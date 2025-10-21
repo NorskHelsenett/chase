@@ -122,13 +122,15 @@ func ScreenshotHandler(c *gin.Context) {
 
 	cachedOnly := c.Query("cached") == "true"
 
-	// Check if we have a recent screenshot
-	if screenshot, err := getRecentScreenshot(domain, cachedOnly); err == nil {
-		// Set cache headers
-		c.Header("Cache-Control", "public, max-age=86400") // 24 hours
-		c.Header("Content-Type", screenshot.MIMEType)
-		c.Data(200, screenshot.MIMEType, screenshot.Data)
-		return
+	if cachedOnly {
+		// Check if we have a recent screenshot
+		if screenshot, err := getRecentScreenshot(domain); err == nil {
+			// Set cache headers
+			c.Header("Cache-Control", "public, max-age=86400") // 24 hours
+			c.Header("Content-Type", screenshot.MIMEType)
+			c.Data(200, screenshot.MIMEType, screenshot.Data)
+			return
+		}
 	}
 
 	// Make request to screenshot service
@@ -223,7 +225,7 @@ func captureAndSendScreenshot(c *gin.Context, domain string) error {
 	}
 
 	// Create request body
-	jsonData, err := json.Marshal(map[string]string{"url": domain})
+	jsonData, err := json.Marshal(map[string]string{"url": domain, "wait_time": "5"})
 	if err != nil {
 		return fmt.Errorf("failed to create request: %v", err)
 	}
@@ -320,16 +322,11 @@ func storeScreenshot(url string, data []byte, mimeType string) error {
 	return db.Create(&screenshot).Error
 }
 
-func getRecentScreenshot(url string, useCache bool) (*Screenshot, error) {
+func getRecentScreenshot(url string) (*Screenshot, error) {
 	db := database.GetDB()
 	var screenshot Screenshot
 
 	query := db.Where("server_url = ?", url)
-
-	if !useCache {
-		cutoff := time.Now().Add(-168 * time.Hour)
-		query = query.Where("created_at > ?", cutoff)
-	}
 
 	err := query.Order("created_at DESC").First(&screenshot).Error
 

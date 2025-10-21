@@ -1,10 +1,29 @@
+
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import CustomSelect from '$lib/components/ui/CustomSelect.svelte';
 	import { servers, serverStoreActions } from '$lib/stores/serverStore';
 	import { writable } from 'svelte/store';
 	import type { Server } from '$lib/models';
 	import Graph from '$lib/components/dashboard/Graph.svelte';
 	import { Share2 } from 'lucide-svelte';
+
+	let statusFilter = 'all';
+
+	function isSuccessfulStatus(status: number): boolean {
+		return status >= 200 && status < 400;
+	}
+
+	function hasGoodPingHistory(server: Server): boolean {
+		if (!server.ping_results || server.ping_results.length === 0) {
+			return true;
+		}
+		const successfulPings = server.ping_results.filter((ping) =>
+			isSuccessfulStatus(ping.status_code)
+		).length;
+		const successRate = successfulPings / server.ping_results.length;
+		return successRate >= 0.9;
+	}
 
 	const graphData = writable<{ nodes: GraphNode[]; edges: GraphEdge[] }>({ nodes: [], edges: [] });
 	const isLoading = writable(true);
@@ -185,15 +204,6 @@
 					nodeIsDown
 				);
 				edges.push({ from: parentForInstance, to: instanceNodeId });
-
-				// --- Logging
-				if (import.meta.env.MODE === 'development') {
-					console.log(
-						`Processed: ${hostname}\n` +
-							`  → Parent: ${parentForInstance}\n` +
-							`  → Domain nodes: [${[...groupHostnames].join(', ')}]`
-					);
-				}
 				// ---
 			} catch (error) {
 				const errId = `error:${server.ID || idx}:${server.url}`;
@@ -211,17 +221,65 @@
 
 	onMount(async () => {
 		isLoading.set(true);
-		const serverList = await loadServersFromCacheOrFetch();
-		graphData.set(buildGraphData(serverList));
+		await serverStoreActions.loadServers(null, true);
+		updateGraph();
 		isLoading.set(false);
 	});
+
+	function updateGraph() {
+		let serverList = $servers;
+		if (statusFilter !== 'all') {
+			if (statusFilter === 'online') {
+				serverList = serverList.filter((server) => hasGoodPingHistory(server));
+			} else if (statusFilter === 'issues' || statusFilter === 'offline') {
+				serverList = serverList.filter((server) => !hasGoodPingHistory(server));
+			} else if (statusFilter === 'new') {
+				const thirtyDaysAgo = new Date();
+				thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+				serverList = serverList.filter((server) => new Date(server.CreatedAt) >= thirtyDaysAgo);
+			}
+		}
+		graphData.set(buildGraphData(serverList));
+	}
 </script>
 
 <div class="p-4 w-full h-full">
-	<h1 class="text-2xl font-medium flex items-center gap-2">
-		<Share2 size={24} class="text-green-500" />
-		Site Graph View
-	</h1>
+	<div class="bg-[#202020] rounded-lg p-4 mb-4 gap-4 flex flex-wrap justify-between items-center gap-4 mb-4">
+		<h1 class="text-2xl font-medium flex items-center gap-2">
+			<Share2 size={24} class="text-green-500" />
+			Site Graph View
+		</h1>
+		<div class="flex flex-wrap items-center gap-3">
+			<div class="relative flex items-center z-10">
+				<CustomSelect
+					bind:value={statusFilter}
+					options={[
+						{
+							value: 'all',
+							label: 'All servers',
+							icon: '<div class="flex items-center"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect><line x1="8" y1="21" x2="16" y2="21"></line><line x1="12" y1="17" x2="12" y2="21"></line></svg><span class="text-gray-100 ml-2"> Show all</span></div>'
+						},
+						{
+							value: 'online',
+							label: 'Online',
+							icon: '<div class="flex items-center"><span class="w-2 h-2 bg-green-400 rounded-full mr-2 animate-pulse"></span><span class="text-green-400">Online</span></div>'
+						},
+						{
+							value: 'offline',
+							label: 'Offline',
+							icon: '<div class="flex items-center"><span class="w-2 h-2 bg-red-400 rounded-full mr-2"></span><span class="text-red-400">Offline</span></div>'
+						},
+						{
+							value: 'new',
+							label: 'New',
+							icon: '<div class="flex items-center"><span class="w-2 h-2 bg-gray-400 rounded-full mr-2"></span><span class="text-gray-300">New</span></div>'
+						}
+					]}
+					on:change={() => { updateGraph(); }}
+				/>
+			</div>
+		</div>
+	</div>
 	{#if $isLoading}
 		<div class="flex justify-center items-center p-6">
 			<div class="animate-pulse text-gray-500">Loading graph data...</div>
