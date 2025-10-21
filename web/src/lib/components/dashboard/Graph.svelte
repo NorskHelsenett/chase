@@ -300,13 +300,38 @@
       try { network.setOptions({ physics: { enabled: false } }); } catch {}
 
       // Wait a tick so the canvas draws before removing the overlay
-      requestAnimationFrame(() => (loading = false));
+      requestAnimationFrame(() => {
+        loading = false;
+
+        // Auto-start: highlight the first node so the graph shows the starting position
+        try {
+          const ids = nodeDataSet?.getIds?.();
+          if (ids && ids.length) {
+            const startNode = ids[0];
+            // highlight subtree (colors descendants) and select the node
+            highlightSubtree(startNode);
+            network.selectNodes?.([startNode]);
+          }
+        } catch (e) {
+          // ignore
+        }
+      });
     });
 
     // Safety: if there are very few nodes and stabilization doesn’t fire,
-    // fall back to first draw event
+    // fall back to first draw event and auto-start as well
     network.once && network.once('afterDrawing', () => {
-      if (loading) requestAnimationFrame(() => (loading = false));
+      if (loading) requestAnimationFrame(() => {
+        loading = false;
+        try {
+          const ids = nodeDataSet?.getIds?.();
+          if (ids && ids.length) {
+            const startNode = ids[0];
+            highlightSubtree(startNode);
+            network.selectNodes?.([startNode]);
+          }
+        } catch (e) {}
+      });
     });
 
     // Phase 2: brief FA2 refine, then freeze — yields compact clusters
