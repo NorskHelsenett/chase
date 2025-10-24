@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -112,7 +113,6 @@ func SecurityScanHandler(c *gin.Context) {
 		return
 	}
 }
-
 func ScreenshotHandler(c *gin.Context) {
 	domain := c.Param("domain")
 	if domain == "" {
@@ -122,6 +122,16 @@ func ScreenshotHandler(c *gin.Context) {
 
 	cachedOnly := c.Query("cached") == "true"
 
+	fullSize := c.Query("fullSize") == "true"
+
+	// Parse wait parameter as integer seconds with a default of 3
+	waitStr := c.DefaultQuery("waitTime", "3")
+	waitInt, err := strconv.Atoi(waitStr)
+	if err != nil || waitInt < 0 {
+		waitInt = 3
+	}
+
+	// Only use cached screenshot when client does not request waiting and not full size
 	if cachedOnly {
 		// Check if we have a recent screenshot
 		if screenshot, err := getRecentScreenshot(domain); err == nil {
@@ -134,7 +144,7 @@ func ScreenshotHandler(c *gin.Context) {
 	}
 
 	// Make request to screenshot service
-	err := captureAndSendScreenshot(c, domain)
+	err = captureAndSendScreenshot(c, domain, fullSize, waitInt)
 	if err != nil {
 		c.JSON(500, gin.H{"error": err.Error(), "url": domain})
 	}
@@ -209,12 +219,16 @@ func SetMaxParallelScreenshots(limit int) {
 	close(oldSemaphore)
 }
 
-func captureAndSendScreenshot(c *gin.Context, domain string) error {
+func captureAndSendScreenshot(c *gin.Context, domain string, fullSize bool, wait int) error {
 	// Acquire semaphore before starting screenshot operation
 	screenshotSemaphore <- struct{}{} // Block if max parallel operations reached
 	defer func() {
 		<-screenshotSemaphore // Release semaphore when done
 	}()
+
+	if wait < 0 {
+		wait = 0
+	}
 
 	var err error
 	if domain, err = utils.EnsureHTTPS(domain); err != nil {
@@ -225,7 +239,7 @@ func captureAndSendScreenshot(c *gin.Context, domain string) error {
 	}
 
 	// Create request body
-	jsonData, err := json.Marshal(map[string]string{"url": domain, "wait_time": "5"})
+	jsonData, err := json.Marshal(map[string]interface{}{"url": domain, "wait_time": wait, "full_size": fullSize})
 	if err != nil {
 		return fmt.Errorf("failed to create request: %v", err)
 	}

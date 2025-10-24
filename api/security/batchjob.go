@@ -319,7 +319,7 @@ func processServer(ctx context.Context, server types.Server) BatchResult {
 		if !strings.HasPrefix(url, "http") {
 			url = "https://" + url
 		}
-		err := captureAndSendScreenshot(nil, url)
+		err := captureAndSendScreenshot(nil, url, false, 0)
 		screenshotChan <- err
 	}()
 
