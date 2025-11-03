@@ -1,4 +1,3 @@
-package regeneratevapid
 package main
 
 import (
@@ -16,10 +15,10 @@ func main() {
 	_ = godotenv.Load()
 
 	// Initialize database
-	db, err := database.InitDB()
-	if err != nil {
+	if err := database.InitDatabase(); err != nil {
 		log.Fatalf("Failed to initialize database: %v", err)
 	}
+	db := database.GetDB()
 
 	// Get current keys
 	fmt.Println("Checking current VAPID keys...")

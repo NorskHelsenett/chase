@@ -54,6 +54,8 @@ type NotificationLog struct {
 	Title     string                `gorm:"type:varchar(255)" json:"title"`
 	Body      string                `gorm:"type:text" json:"body"`
 	URL       string                `gorm:"type:text" json:"url"`
+	ServerID  *uint                 `gorm:"index" json:"server_id,omitempty"`    // Associated server ID if applicable
+	Metadata  string                `gorm:"type:text" json:"metadata,omitempty"` // JSON encoded metadata
 	Success   bool                  `gorm:"default:false" json:"sent"`
 	ErrorMsg  string                `gorm:"type:text" json:"error_msg,omitempty"`
 	SentAt    time.Time             `json:"sent_at"`

@@ -407,7 +407,21 @@ func notifyHighRisk(serverURL, riskLevel, description string) {
 		return
 	}
 
-	if err := sender.NotifyHighRiskFound(serverURL, riskLevel, description); err != nil {
+	// Look up the server ID from the URL
+	var server struct {
+		ID  uint   `json:"id"`
+		URL string `json:"url"`
+	}
+	if err := db.Table("servers").Select("id, url").Where("url = ?", serverURL).First(&server).Error; err != nil {
+		log.Printf("Failed to find server ID for URL %s: %v", serverURL, err)
+		// Still send notification, but without direct link
+		if err := sender.NotifyHighRiskFound(0, serverURL, riskLevel, description); err != nil {
+			log.Printf("Failed to send high risk notification: %v", err)
+		}
+		return
+	}
+
+	if err := sender.NotifyHighRiskFound(server.ID, serverURL, riskLevel, description); err != nil {
 		log.Printf("Failed to send high risk notification: %v", err)
 	}
 }

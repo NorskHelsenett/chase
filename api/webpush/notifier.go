@@ -73,7 +73,7 @@ func (ns *NotificationSender) SendToUser(userID uint, notification *Notification
 }
 
 // SendToAll sends a notification to all users subscribed to a specific event type
-func (ns *NotificationSender) SendToAll(eventType NotificationEventType, notification *Notification) (int, error) {
+func (ns *NotificationSender) SendToAll(eventType NotificationEventType, notification *Notification, serverID *uint) (int, error) {
 	subscriptions, err := GetSubscribersForEvent(ns.db, eventType)
 	if err != nil {
 		return 0, fmt.Errorf("failed to get subscribers: %v", err)
@@ -93,24 +93,42 @@ func (ns *NotificationSender) SendToAll(eventType NotificationEventType, notific
 
 	successCount := 0
 	for _, sub := range subscriptions {
-		err := SendNotification(&sub, notification, options)
-
-		// Log the notification attempt
-		LogNotification(
+		// Create notification log entry FIRST to get the ID
+		logID, logErr := LogNotification(
 			ns.db,
 			sub.UserID,
 			eventType,
 			notification.Title,
 			notification.Body,
 			notification.URL,
-			err == nil,
-			getErrorMessage(err),
+			serverID,
+			false, // Will update after send attempt
+			"",
 		)
 
-		if err != nil {
-			log.Printf("Failed to send notification to user %d: %v", sub.UserID, err)
+		// Update notification to use the log ID in the URL
+		notificationCopy := *notification
+		if logID > 0 {
+			notificationCopy.URL = fmt.Sprintf("/notification/%d", logID)
+			if notificationCopy.Data == nil {
+				notificationCopy.Data = make(map[string]interface{})
+			}
+			notificationCopy.Data["notificationId"] = logID
+		}
 
-			// If subscription is expired, clean it up
+		err := SendNotification(&sub, &notificationCopy, options)
+
+		// Update the log entry with the result
+		if logErr == nil && logID > 0 {
+			ns.db.Model(&NotificationLog{}).Where("id = ?", logID).Updates(map[string]interface{}{
+				"success":   err == nil,
+				"error_msg": getErrorMessage(err),
+				"sent_at":   time.Now(),
+			})
+		}
+
+		if err != nil {
+			// If subscription is expired, clean it up silently
 			if isSubscriptionExpiredError(err) {
 				CleanupInvalidSubscriptions(ns.db, sub.Endpoint)
 			}
@@ -123,7 +141,7 @@ func (ns *NotificationSender) SendToAll(eventType NotificationEventType, notific
 }
 
 // NotifyServerAdded sends a notification when a new server is added
-func (ns *NotificationSender) NotifyServerAdded(serverURL string) error {
+func (ns *NotificationSender) NotifyServerAdded(serverID uint, serverURL string) error {
 	notification := &Notification{
 		Title: "New Server Added",
 		Body:  fmt.Sprintf("Server %s has been added to monitoring", serverURL),
@@ -132,18 +150,18 @@ func (ns *NotificationSender) NotifyServerAdded(serverURL string) error {
 		Data: map[string]interface{}{
 			"type":      string(EventServerAdded),
 			"serverUrl": serverURL,
-			"url":       "/dashboard",
+			"serverId":  serverID,
+			"url":       fmt.Sprintf("/server/%d", serverID),
 			"timestamp": time.Now().Unix(),
 		},
 	}
 
-	count, err := ns.SendToAll(EventServerAdded, notification)
-	log.Printf("Sent 'server added' notification to %d users", count)
+	_, err := ns.SendToAll(EventServerAdded, notification, &serverID)
 	return err
 }
 
 // NotifyServerOffline sends a notification when a server goes offline
-func (ns *NotificationSender) NotifyServerOffline(serverURL, serverName string) error {
+func (ns *NotificationSender) NotifyServerOffline(serverID uint, serverURL, serverName string) error {
 	notification := &Notification{
 		Title: "Server Offline",
 		Body:  fmt.Sprintf("%s is offline", serverName),
@@ -153,18 +171,18 @@ func (ns *NotificationSender) NotifyServerOffline(serverURL, serverName string) 
 		Data: map[string]interface{}{
 			"type":      string(EventServerOffline),
 			"serverUrl": serverURL,
-			"url":       "/server/" + serverURL,
+			"serverId":  serverID,
+			"url":       fmt.Sprintf("/server/%d", serverID),
 			"timestamp": time.Now().Unix(),
 		},
 	}
 
-	count, err := ns.SendToAll(EventServerOffline, notification)
-	log.Printf("Sent 'server offline' notification to %d users", count)
+	_, err := ns.SendToAll(EventServerOffline, notification, &serverID)
 	return err
 }
 
 // NotifyServerOnline sends a notification when a server comes back online
-func (ns *NotificationSender) NotifyServerOnline(serverURL, serverName string) error {
+func (ns *NotificationSender) NotifyServerOnline(serverID uint, serverURL, serverName string) error {
 	notification := &Notification{
 		Title: "Server Online",
 		Body:  fmt.Sprintf("%s is back online", serverName),
@@ -174,18 +192,18 @@ func (ns *NotificationSender) NotifyServerOnline(serverURL, serverName string) e
 		Data: map[string]interface{}{
 			"type":      string(EventServerOnline),
 			"serverUrl": serverURL,
-			"url":       "/server/" + serverURL,
+			"serverId":  serverID,
+			"url":       fmt.Sprintf("/server/%d", serverID),
 			"timestamp": time.Now().Unix(),
 		},
 	}
 
-	count, err := ns.SendToAll(EventServerOnline, notification)
-	log.Printf("Sent 'server online' notification to %d users", count)
+	_, err := ns.SendToAll(EventServerOnline, notification, &serverID)
 	return err
 }
 
 // NotifyServerDeleted sends a notification when a server is removed
-func (ns *NotificationSender) NotifyServerDeleted(serverURL string) error {
+func (ns *NotificationSender) NotifyServerDeleted(serverID uint, serverURL string) error {
 	notification := &Notification{
 		Title: "Server Removed",
 		Body:  fmt.Sprintf("Server %s has been removed from monitoring", serverURL),
@@ -194,18 +212,17 @@ func (ns *NotificationSender) NotifyServerDeleted(serverURL string) error {
 		Data: map[string]interface{}{
 			"type":      string(EventServerDeleted),
 			"serverUrl": serverURL,
-			"url":       "/dashboard",
+			"serverId":  serverID,
 			"timestamp": time.Now().Unix(),
 		},
 	}
 
-	count, err := ns.SendToAll(EventServerDeleted, notification)
-	log.Printf("Sent 'server deleted' notification to %d users", count)
+	_, err := ns.SendToAll(EventServerDeleted, notification, &serverID)
 	return err
 }
 
 // NotifyServerDeactivated sends a notification when a server is automatically deactivated
-func (ns *NotificationSender) NotifyServerDeactivated(serverURL string, reason string) error {
+func (ns *NotificationSender) NotifyServerDeactivated(serverID uint, serverURL string, reason string) error {
 	notification := &Notification{
 		Title: "Server Deactivated",
 		Body:  fmt.Sprintf("Server %s has been automatically deactivated: %s", serverURL, reason),
@@ -214,19 +231,18 @@ func (ns *NotificationSender) NotifyServerDeactivated(serverURL string, reason s
 		Data: map[string]interface{}{
 			"type":      string(EventServerDeactivated),
 			"serverUrl": serverURL,
+			"serverId":  serverID,
 			"reason":    reason,
-			"url":       "/dashboard",
 			"timestamp": time.Now().Unix(),
 		},
 	}
 
-	count, err := ns.SendToAll(EventServerDeactivated, notification)
-	log.Printf("Sent 'server deactivated' notification to %d users", count)
+	_, err := ns.SendToAll(EventServerDeactivated, notification, &serverID)
 	return err
 }
 
 // NotifyScanCompleted sends a notification when a security scan completes
-func (ns *NotificationSender) NotifyScanCompleted(serverURL string, findingsCount int) error {
+func (ns *NotificationSender) NotifyScanCompleted(serverID uint, serverURL string, findingsCount int) error {
 	notification := &Notification{
 		Title: "Security Scan Complete",
 		Body:  fmt.Sprintf("Scan of %s found %d findings", serverURL, findingsCount),
@@ -235,19 +251,19 @@ func (ns *NotificationSender) NotifyScanCompleted(serverURL string, findingsCoun
 		Data: map[string]interface{}{
 			"type":          string(EventScanCompleted),
 			"serverUrl":     serverURL,
+			"serverId":      serverID,
 			"findingsCount": findingsCount,
-			"url":           "/server/" + serverURL,
+			"url":           fmt.Sprintf("/server/%d", serverID),
 			"timestamp":     time.Now().Unix(),
 		},
 	}
 
-	count, err := ns.SendToAll(EventScanCompleted, notification)
-	log.Printf("Sent 'scan completed' notification to %d users", count)
+	_, err := ns.SendToAll(EventScanCompleted, notification, &serverID)
 	return err
 }
 
 // NotifyHighRiskFound sends a notification when high/critical risks are detected
-func (ns *NotificationSender) NotifyHighRiskFound(serverURL string, riskLevel, description string) error {
+func (ns *NotificationSender) NotifyHighRiskFound(serverID uint, serverURL string, riskLevel, description string) error {
 	notification := &Notification{
 		Title: fmt.Sprintf("%s Risk Detected", riskLevel),
 		Body:  fmt.Sprintf("%s: %s", serverURL, description),
@@ -257,9 +273,10 @@ func (ns *NotificationSender) NotifyHighRiskFound(serverURL string, riskLevel, d
 		Data: map[string]interface{}{
 			"type":        string(EventHighRiskFound),
 			"serverUrl":   serverURL,
+			"serverId":    serverID,
 			"riskLevel":   riskLevel,
 			"description": description,
-			"url":         "/server/" + serverURL,
+			"url":         fmt.Sprintf("/server/%d", serverID),
 			"timestamp":   time.Now().Unix(),
 		},
 		Actions: []NotificationAction{
@@ -274,8 +291,7 @@ func (ns *NotificationSender) NotifyHighRiskFound(serverURL string, riskLevel, d
 		},
 	}
 
-	count, err := ns.SendToAll(EventHighRiskFound, notification)
-	log.Printf("Sent 'high risk found' notification to %d users", count)
+	_, err := ns.SendToAll(EventHighRiskFound, notification, &serverID)
 	return err
 }
 

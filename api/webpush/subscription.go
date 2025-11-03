@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"time"
 
 	"gorm.io/gorm"
 )
@@ -153,18 +154,23 @@ func GetSubscribersForEvent(db *gorm.DB, eventType NotificationEventType) ([]Pus
 }
 
 // LogNotification creates a log entry for a sent notification
-func LogNotification(db *gorm.DB, userID uint, eventType NotificationEventType, title, body, url string, success bool, errorMsg string) error {
+func LogNotification(db *gorm.DB, userID uint, eventType NotificationEventType, title, body, url string, serverID *uint, success bool, errorMsg string) (uint, error) {
 	log := NotificationLog{
 		UserID:    userID,
 		EventType: eventType,
 		Title:     title,
 		Body:      body,
 		URL:       url,
+		ServerID:  serverID,
 		Success:   success,
 		ErrorMsg:  errorMsg,
+		SentAt:    time.Now(),
 	}
 
-	return db.Create(&log).Error
+	if err := db.Create(&log).Error; err != nil {
+		return 0, err
+	}
+	return log.ID, nil
 }
 
 // GetNotificationHistory retrieves notification history for a user
@@ -184,7 +190,6 @@ func GetNotificationHistory(db *gorm.DB, userID uint, limit int) ([]Notification
 
 // CleanupInvalidSubscriptions removes subscriptions that have failed repeatedly
 func CleanupInvalidSubscriptions(db *gorm.DB, endpoint string) error {
-	log.Printf("Cleaning up invalid subscription: %s", endpoint)
 	return db.Where("endpoint = ?", endpoint).Delete(&PushSubscription{}).Error
 }
 

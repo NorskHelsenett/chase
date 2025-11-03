@@ -96,7 +96,7 @@ func runMonitoring() {
 
 		// Send notification if server was deactivated
 		if wasActive && !server.Active {
-			NotifyServerDeactivated(server.URL, ">95% failures in past week")
+			NotifyServerDeactivated(server.ID, server.URL, ">95% failures in past week")
 		}
 
 		// Check if status changed and send notification
@@ -106,7 +106,7 @@ func runMonitoring() {
 			if server.Comment != "" && len(server.Comment) < 100 {
 				serverName = server.Comment
 			}
-			go NotifyServerStatusChange(server.URL, serverName, wasOnline, isOnline)
+			go NotifyServerStatusChange(server.ID, server.URL, serverName, wasOnline, isOnline)
 		}
 	}
 }

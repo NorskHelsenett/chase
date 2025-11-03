@@ -79,6 +79,9 @@ func (h *Handler) RegisterRoutes(router *gin.RouterGroup) {
 		push.GET("/admin/vapid-keys-status", h.GetVAPIDKeysStatus)
 		push.POST("/admin/regenerate-vapid-keys", h.RegenerateVAPIDKeysHandler)
 	}
+
+	// Notification redirect endpoint (outside /push group for cleaner URLs)
+	router.GET("/notification/:id", h.NotificationRedirect)
 }
 
 // GetVAPIDPublicKey returns the public VAPID key for client-side use
@@ -439,5 +442,42 @@ func (h *Handler) RegenerateVAPIDKeysHandler(c *gin.Context) {
 		"publicKey":        keys.PublicKey,
 		"publicKeyLength":  len(keys.PublicKey),
 		"privateKeyLength": len(keys.PrivateKey),
+	})
+}
+
+// NotificationRedirect handles redirecting from notification ID to the actual target
+func (h *Handler) NotificationRedirect(c *gin.Context) {
+	idStr := c.Param("id")
+	id, err := strconv.ParseUint(idStr, 10, 32)
+	if err != nil {
+		c.JSON(400, gin.H{"error": "Invalid notification ID"})
+		return
+	}
+
+	var notificationLog NotificationLog
+	if err := h.db.First(&notificationLog, id).Error; err != nil {
+		c.JSON(404, gin.H{"error": "Notification not found"})
+		return
+	}
+
+	// Determine the redirect URL based on the event type and server ID
+	var redirectURL string
+	if notificationLog.ServerID != nil && *notificationLog.ServerID > 0 {
+		// Server-related notification: redirect to server details page
+		redirectURL = fmt.Sprintf("/server/%d", *notificationLog.ServerID)
+	} else if notificationLog.URL != "" {
+		// Use the stored URL if available
+		redirectURL = notificationLog.URL
+	} else {
+		// Default to dashboard
+		redirectURL = "/dashboard"
+	}
+
+	// Return the redirect info as JSON (for SPA navigation)
+	c.JSON(200, gin.H{
+		"redirect":  redirectURL,
+		"eventType": notificationLog.EventType,
+		"title":     notificationLog.Title,
+		"serverId":  notificationLog.ServerID,
 	})
 }

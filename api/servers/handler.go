@@ -100,8 +100,8 @@ func DeleteServer(c *gin.Context) {
 		return
 	}
 
-	// Send push notification for deleted server
-	go NotifyServerDeleted(server.URL)
+	// Send push notification for deleted server (after committing, but before losing server data)
+	go NotifyServerDeleted(server.ID, server.URL)
 
 	c.Status(204)
 }
@@ -173,7 +173,7 @@ func AddServer(c *gin.Context) {
 	}
 
 	// Send push notification for new server
-	go NotifyServerAdded(server.URL)
+	go NotifyServerAdded(server.ID, server.URL)
 
 	// Start the ping in a goroutine without waiting for the result
 	go checkServer(server.ID, nil)
@@ -309,7 +309,7 @@ func UpdateServer(c *gin.Context) {
 
 	// Send notification if server was manually deactivated
 	if wasActive && !server.Active {
-		NotifyServerDeactivated(server.URL, "manually deactivated")
+		NotifyServerDeactivated(server.ID, server.URL, "manually deactivated")
 	}
 
 	c.JSON(200, server)

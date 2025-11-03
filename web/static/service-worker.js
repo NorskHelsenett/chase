@@ -40,16 +40,32 @@ self.addEventListener('push', (event) => {
 
 self.addEventListener('notificationclick', (event) => {
 	event.notification.close();
-	const targetUrl = event.notification.data?.url || '/';
+
+	// Get the target URL from notification data (will be /notification/[id])
+	let targetUrl = event.notification.data?.url || '/dashboard';
+
+	// Handle action-specific behavior
+	if (event.action === 'dismiss') {
+		// Just close the notification, don't navigate
+		return;
+	}
+
+	// Ensure the URL is absolute for this origin
+	const baseUrl = self.registration.scope;
+	if (!targetUrl.startsWith('http')) {
+		targetUrl = new URL(targetUrl, baseUrl).href;
+	}
 
 	event.waitUntil(
 		self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
+			// Try to find an existing window and navigate it
 			for (const client of clientList) {
-				if ('focus' in client) {
-					client.navigate(targetUrl);
-					return client.focus();
+				if (client.url.startsWith(baseUrl) && 'focus' in client) {
+					return client.focus().then(() => client.navigate(targetUrl));
 				}
 			}
+
+			// If no existing window, open a new one
 			if (self.clients.openWindow) {
 				return self.clients.openWindow(targetUrl);
 			}
