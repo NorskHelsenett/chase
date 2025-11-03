@@ -1,24 +1,17 @@
 // Service Worker for Push Notifications
-// This file should be placed in the /static directory of your SvelteKit project
 
-const CACHE_NAME = 'chase-notifications-v1';
-
-// Install event - cache static assets if needed
+// Install event
 self.addEventListener('install', (event) => {
-	console.log('Service Worker installing...');
 	self.skipWaiting();
 });
 
 // Activate event
 self.addEventListener('activate', (event) => {
-	console.log('Service Worker activating...');
 	event.waitUntil(clients.claim());
 });
 
 // Push event - handle incoming push notifications
 self.addEventListener('push', (event) => {
-	console.log('Push received:', event);
-
 	let notification = {
 		title: 'New Notification',
 		body: 'You have a new notification',
@@ -49,9 +42,8 @@ self.addEventListener('push', (event) => {
 		console.error('Error parsing push data:', error);
 	}
 
-	const promiseChain = self.registration.showNotification(
-		notification.title,
-		{
+	event.waitUntil(
+		self.registration.showNotification(notification.title, {
 			body: notification.body,
 			icon: notification.icon,
 			badge: notification.badge,
@@ -61,10 +53,8 @@ self.addEventListener('push', (event) => {
 			vibrate: notification.vibrate,
 			data: notification.data,
 			actions: notification.actions
-		}
+		})
 	);
-
-	event.waitUntil(promiseChain);
 });
 
 // Notification click event

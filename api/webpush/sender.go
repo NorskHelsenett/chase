@@ -60,7 +60,7 @@ func SendNotification(subscription *PushSubscription, notification *Notification
 	}
 
 	// Encrypt payload
-	encryptedPayload, salt, serverPublicKey, err := encryptPayload(payload, subscription.P256dh, subscription.Auth)
+	encryptedPayload, _, _, err := encryptPayload(payload, subscription.P256dh, subscription.Auth)
 	if err != nil {
 		return fmt.Errorf("failed to encrypt payload: %v", err)
 	}
@@ -108,17 +108,8 @@ func SendNotification(subscription *PushSubscription, notification *Notification
 		req.Header.Set("Authorization", authHeader)
 	}
 
-	// Set Crypto-Key header with server public key
-	cryptoKey := fmt.Sprintf("dh=%s", base64.RawURLEncoding.EncodeToString(serverPublicKey))
-	if options != nil && options.VAPIDPublicKey != "" {
-		cryptoKey = fmt.Sprintf("dh=%s;p256ecdsa=%s",
-			base64.RawURLEncoding.EncodeToString(serverPublicKey),
-			options.VAPIDPublicKey)
-	}
-	req.Header.Set("Crypto-Key", cryptoKey)
-
-	// Set Encryption header with salt
-	req.Header.Set("Encryption", fmt.Sprintf("salt=%s", base64.RawURLEncoding.EncodeToString(salt)))
+	// Note: With aes128gcm, the salt and server public key are embedded in the payload
+	// We do NOT send Crypto-Key or Encryption headers (those are only for legacy aesgcm)
 
 	// Send request
 	client := &http.Client{Timeout: 30 * time.Second}
