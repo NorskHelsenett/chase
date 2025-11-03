@@ -100,6 +100,9 @@ func DeleteServer(c *gin.Context) {
 		return
 	}
 
+	// Send push notification for deleted server (after committing, but before losing server data)
+	go NotifyServerDeleted(server.ID, server.URL)
+
 	c.Status(204)
 }
 
@@ -168,6 +171,9 @@ func AddServer(c *gin.Context) {
 		c.JSON(500, gin.H{"error": "Failed to commit transaction"})
 		return
 	}
+
+	// Send push notification for new server
+	go NotifyServerAdded(server.ID, server.URL)
 
 	// Start the ping in a goroutine without waiting for the result
 	go checkServer(server.ID, nil)
@@ -289,6 +295,9 @@ func UpdateServer(c *gin.Context) {
 		return
 	}
 
+	// Store the original active state before updating
+	wasActive := server.Active
+
 	if err := c.ShouldBindJSON(&server); err != nil {
 		c.JSON(400, gin.H{"error": err.Error()})
 		return
@@ -297,5 +306,11 @@ func UpdateServer(c *gin.Context) {
 	server.NextCheck = time.Now().Add(time.Duration(server.UpdateInterval) * time.Minute)
 
 	db.Save(&server)
+
+	// Send notification if server was manually deactivated
+	if wasActive && !server.Active {
+		NotifyServerDeactivated(server.ID, server.URL, "manually deactivated")
+	}
+
 	c.JSON(200, server)
 }

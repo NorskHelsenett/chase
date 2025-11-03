@@ -16,7 +16,10 @@
           "program": "${workspaceFolder}/api",
           "env": {
               "DATA_FOLDER": "${workspaceFolder}/.debug/data",
-              "OIDC_REDIRECT_URL":"http://localhost:5173/api/callback"
+              "OIDC_REDIRECT_URL":"http://localhost:5173/api/callback",
+              "OIDC_ISSUER_URL": "http://host.docker.internal:9999",
+              "OIDC_CLIENT_ID": "CHASE",
+              "OIDC_CLIENT_SECRET": "chase-secret"
           },
           "envFile": "${workspaceFolder}/api/.env",
         //   "preLaunchTask": "ensure-debug-dir",

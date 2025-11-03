@@ -64,11 +64,15 @@ func runMonitoring() {
 	}
 
 	for _, server := range servers {
+		// Get the previous online status before pinging
+		wasOnline := isServerOnline(server)
+
 		result := pingServer(server)
 
 		interval, shouldRemainActive := calculateNextCheckInterval(server)
 
 		server.NextCheck = now.Add(interval)
+		wasActive := server.Active
 		if !shouldRemainActive {
 			server.Comment = fmt.Sprintf("WARNING: Server %s has had >95%% failures in past week. Automatically deactivated.", server.URL)
 			server.Active = false
@@ -89,5 +93,37 @@ func runMonitoring() {
 		}
 
 		tx.Commit()
+
+		// Send notification if server was deactivated
+		if wasActive && !server.Active {
+			NotifyServerDeactivated(server.ID, server.URL, ">95% failures in past week")
+		}
+
+		// Check if status changed and send notification
+		isOnline := result.Error == ""
+		if wasOnline != isOnline {
+			serverName := server.URL
+			if server.Comment != "" && len(server.Comment) < 100 {
+				serverName = server.Comment
+			}
+			go NotifyServerStatusChange(server.ID, server.URL, serverName, wasOnline, isOnline)
+		}
 	}
+}
+
+// isServerOnline checks if the most recent ping was successful
+func isServerOnline(server Server) bool {
+	if len(server.PingResults) == 0 {
+		return true // Assume online if no results yet
+	}
+
+	// Get the most recent result
+	mostRecent := server.PingResults[0]
+	for _, result := range server.PingResults {
+		if result.Timestamp.After(mostRecent.Timestamp) {
+			mostRecent = result
+		}
+	}
+
+	return mostRecent.Error == ""
 }

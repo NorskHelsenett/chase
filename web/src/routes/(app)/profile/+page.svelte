@@ -2,9 +2,14 @@
 	import { onMount } from 'svelte';
 	import { isLoggedIn, user } from '$lib/auth';
 	import { goto } from '$app/navigation';
-	import { User, Mail, Settings, Edit2 } from 'lucide-svelte';
+	import { User, Mail, ChevronDown, ChevronUp } from 'lucide-svelte';
 	import Avatar from '$lib/components/Avatar.svelte';
 	import ApiToken from '$lib/components/ApiToken.svelte';
+	import PushNotificationSettings from '$lib/push/PushNotificationSettings.svelte';
+	import NotificationHistory from '$lib/push/NotificationHistory.svelte';
+
+	let pushSettingsOpen = false;
+	let notificationHistoryOpen = false;
 
 	onMount(() => {
 		const unsubscribe = isLoggedIn.subscribe((loggedIn) => {
@@ -68,6 +73,51 @@
 					</div>
 
 					<ApiToken />
+
+				</div>
+				
+				<!-- Push Notification Settings -->
+				<div class="mt-6">
+					<div class="bg-[#202020] rounded-lg overflow-hidden">
+						<button
+							on:click={() => (pushSettingsOpen = !pushSettingsOpen)}
+							class="w-full px-6 py-4 flex items-center justify-between hover:bg-[#252525] transition-colors"
+						>
+							<h2 class="text-xl text-gray-100">Push Notifications</h2>
+							{#if pushSettingsOpen}
+								<ChevronUp size={20} class="text-gray-400" />
+							{:else}
+								<ChevronDown size={20} class="text-gray-400" />
+							{/if}
+						</button>
+						{#if pushSettingsOpen}
+							<div class="">
+								<PushNotificationSettings />
+							</div>
+						{/if}
+					</div>
+				</div>
+
+				<!-- Notification History -->
+				<div class="mt-6">
+					<div class="bg-[#202020] rounded-lg overflow-hidden">
+						<button
+							on:click={() => (notificationHistoryOpen = !notificationHistoryOpen)}
+							class="w-full px-6 py-4 flex items-center justify-between hover:bg-[#252525] transition-colors"
+						>
+							<h2 class="text-xl text-gray-100">Notification History</h2>
+							{#if notificationHistoryOpen}
+								<ChevronUp size={20} class="text-gray-400" />
+							{:else}
+								<ChevronDown size={20} class="text-gray-400" />
+							{/if}
+						</button>
+						{#if notificationHistoryOpen}
+							<div class="">
+								<NotificationHistory />
+							</div>
+						{/if}
+					</div>
 				</div>
 			{/if}
 		</div>
