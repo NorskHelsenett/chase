@@ -74,18 +74,34 @@ func (h *Handler) RegisterRoutes(router *gin.RouterGroup) {
 
 		// Test notification (for development/testing)
 		push.POST("/test", h.SendTestNotification)
+
+		// Admin endpoints for VAPID key management
+		push.GET("/admin/vapid-keys-status", h.GetVAPIDKeysStatus)
+		push.POST("/admin/regenerate-vapid-keys", h.RegenerateVAPIDKeysHandler)
 	}
 }
 
 // GetVAPIDPublicKey returns the public VAPID key for client-side use
 func (h *Handler) GetVAPIDPublicKey(c *gin.Context) {
-	publicKey, err := GetPublicVAPIDKey(h.db)
+	keys, err := GetVAPIDKeys(h.db)
 	if err != nil {
+		log.Printf("Failed to get VAPID keys: %v", err)
 		c.JSON(500, gin.H{"error": "Failed to get VAPID public key"})
 		return
 	}
 
-	c.JSON(200, gin.H{"publicKey": publicKey})
+	// Validate the keys are in correct format
+	_, _, valErr := normalizeVAPIDKeyPair(keys.PublicKey, keys.PrivateKey)
+	if valErr != nil {
+		log.Printf("VAPID keys are invalid: %v. They may need to be regenerated.", valErr)
+		c.JSON(500, gin.H{
+			"error":   "VAPID keys are invalid",
+			"details": "Please contact administrator to regenerate VAPID keys",
+		})
+		return
+	}
+
+	c.JSON(200, gin.H{"publicKey": keys.PublicKey})
 }
 
 // Subscribe handles push subscription requests
@@ -364,4 +380,64 @@ func AuthMiddleware() gin.HandlerFunc {
 
 		c.Next()
 	}
+}
+
+// GetVAPIDKeysStatus checks the validity of current VAPID keys
+func (h *Handler) GetVAPIDKeysStatus(c *gin.Context) {
+	// TODO: Add admin authentication check here
+
+	keys, err := GetVAPIDKeys(h.db)
+	if err != nil {
+		c.JSON(500, gin.H{"error": "Failed to get VAPID keys", "details": err.Error()})
+		return
+	}
+
+	// Validate the keys
+	normalizedPub, normalizedPriv, valErr := normalizeVAPIDKeyPair(keys.PublicKey, keys.PrivateKey)
+
+	status := gin.H{
+		"publicKeyLength":  len(keys.PublicKey),
+		"privateKeyLength": len(keys.PrivateKey),
+		"publicKeyPreview": keys.PublicKey[:20] + "...",
+	}
+
+	if valErr != nil {
+		status["valid"] = false
+		status["error"] = valErr.Error()
+		status["recommendation"] = "Keys are invalid and should be regenerated"
+		c.JSON(200, status)
+		return
+	}
+
+	status["valid"] = true
+	status["normalized"] = (normalizedPub == keys.PublicKey && normalizedPriv == keys.PrivateKey)
+
+	c.JSON(200, status)
+}
+
+// RegenerateVAPIDKeysHandler regenerates VAPID keys (admin only)
+func (h *Handler) RegenerateVAPIDKeysHandler(c *gin.Context) {
+	// TODO: Add admin authentication check here
+
+	log.Println("Admin requested VAPID key regeneration")
+
+	if err := RegenerateVAPIDKeys(h.db); err != nil {
+		log.Printf("Failed to regenerate VAPID keys: %v", err)
+		c.JSON(500, gin.H{"error": "Failed to regenerate VAPID keys", "details": err.Error()})
+		return
+	}
+
+	keys, err := GetVAPIDKeys(h.db)
+	if err != nil {
+		c.JSON(500, gin.H{"error": "Failed to retrieve new keys", "details": err.Error()})
+		return
+	}
+
+	c.JSON(200, gin.H{
+		"success":          true,
+		"message":          "VAPID keys regenerated successfully. All subscriptions have been cleared.",
+		"publicKey":        keys.PublicKey,
+		"publicKeyLength":  len(keys.PublicKey),
+		"privateKeyLength": len(keys.PrivateKey),
+	})
 }

@@ -72,6 +72,31 @@ func GetVAPIDKeys(db *gorm.DB) (*VAPIDKeys, error) {
 	if err := db.First(&keys).Error; err != nil {
 		return nil, err
 	}
+
+	// Validate and normalize the keys
+	publicKey, privateKey, err := normalizeVAPIDKeyPair(keys.PublicKey, keys.PrivateKey)
+	if err != nil {
+		log.Printf("Warning: Invalid VAPID keys in database: %v. Regenerating...", err)
+		// Keys are invalid, regenerate them
+		if regErr := RegenerateVAPIDKeys(db); regErr != nil {
+			return nil, fmt.Errorf("failed to regenerate invalid VAPID keys: %v", regErr)
+		}
+		// Retrieve the new keys
+		if err := db.First(&keys).Error; err != nil {
+			return nil, err
+		}
+		return &keys, nil
+	}
+
+	// Update keys in database if they were normalized
+	if publicKey != keys.PublicKey || privateKey != keys.PrivateKey {
+		keys.PublicKey = publicKey
+		keys.PrivateKey = privateKey
+		if err := db.Save(&keys).Error; err != nil {
+			log.Printf("Warning: Failed to save normalized keys: %v", err)
+		}
+	}
+
 	return &keys, nil
 }
 
@@ -126,6 +151,54 @@ func decodeBase64URLOrStandard(s string) ([]byte, error) {
 
 	// Try standard base64
 	return base64.StdEncoding.DecodeString(s)
+}
+
+// normalizeVAPIDKeyPair validates and normalizes VAPID keys to the format expected by webpush-go
+func normalizeVAPIDKeyPair(publicKey, privateKey string) (string, string, error) {
+	// Decode and validate private key (must be 32 bytes)
+	privBytes, err := decodeBase64URLOrStandard(privateKey)
+	if err != nil {
+		return "", "", fmt.Errorf("invalid private key encoding: %v", err)
+	}
+
+	if len(privBytes) != 32 {
+		return "", "", fmt.Errorf("private key must be 32 bytes, got %d", len(privBytes))
+	}
+
+	// Decode and validate public key (must be 65 bytes uncompressed)
+	pubBytes, err := decodeBase64URLOrStandard(publicKey)
+	if err != nil {
+		return "", "", fmt.Errorf("invalid public key encoding: %v", err)
+	}
+
+	if len(pubBytes) != 65 {
+		return "", "", fmt.Errorf("public key must be 65 bytes (uncompressed P-256), got %d", len(pubBytes))
+	}
+
+	if pubBytes[0] != 0x04 {
+		return "", "", fmt.Errorf("public key must start with 0x04 (uncompressed format), got 0x%02x", pubBytes[0])
+	}
+
+	// Validate that it's a valid P-256 point
+	curve := elliptic.P256()
+	x := new(big.Int).SetBytes(pubBytes[1:33])
+	y := new(big.Int).SetBytes(pubBytes[33:65])
+
+	if !curve.IsOnCurve(x, y) {
+		return "", "", fmt.Errorf("public key is not a valid P-256 curve point")
+	}
+
+	// Validate private key is in valid range
+	d := new(big.Int).SetBytes(privBytes)
+	if d.Cmp(curve.Params().N) >= 0 {
+		return "", "", fmt.Errorf("private key is out of range")
+	}
+
+	// Normalize to base64 URL-safe encoding without padding
+	normalizedPub := base64.RawURLEncoding.EncodeToString(pubBytes)
+	normalizedPriv := base64.RawURLEncoding.EncodeToString(privBytes)
+
+	return normalizedPub, normalizedPriv, nil
 }
 
 // ValidatePrivateKey checks if the private key is valid

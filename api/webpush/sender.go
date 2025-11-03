@@ -3,6 +3,7 @@ package webpush
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 
 	webpush "github.com/SherClockHolmes/webpush-go"
 )
@@ -71,6 +72,15 @@ func SendNotification(subscription *PushSubscription, notification *Notification
 		}
 	}
 
+	// Validate VAPID keys are present
+	if vapidPublicKey == "" || vapidPrivateKey == "" {
+		return fmt.Errorf("VAPID keys are required for sending notifications")
+	}
+
+	// Log key lengths for debugging (don't log actual keys!)
+	log.Printf("[WebPush] Sending notification with VAPID public key length: %d, private key length: %d",
+		len(vapidPublicKey), len(vapidPrivateKey))
+
 	// Send the notification using webpush-go
 	resp, err := webpush.SendNotification(payload, sub, &webpush.Options{
 		Subscriber:      subscriber,
@@ -80,7 +90,7 @@ func SendNotification(subscription *PushSubscription, notification *Notification
 		Urgency:         webpush.UrgencyNormal,
 	})
 	if err != nil {
-		return fmt.Errorf("failed to send notification: %v", err)
+		return fmt.Errorf("failed to send notification (check VAPID key format): %v", err)
 	}
 	defer resp.Body.Close()
 
