@@ -19,6 +19,7 @@ import (
 	"github.com/norskhelsenett/chase/database"
 	"github.com/norskhelsenett/chase/types"
 	"github.com/norskhelsenett/chase/utils"
+	"github.com/norskhelsenett/chase/webpush"
 	"gorm.io/gorm"
 )
 
@@ -385,7 +386,30 @@ func storeSecurityReport(report *SecurityReport) error {
 		Description: generateReportSummary(report),
 	}
 
-	return db.Create(&reportRecord).Error
+	if err := db.Create(&reportRecord).Error; err != nil {
+		return err
+	}
+
+	// Send notification if high or critical risk found
+	if reportRecord.RiskLevel == RiskHigh || reportRecord.RiskLevel == RiskCritical {
+		go notifyHighRisk(reportRecord.ServerURL, string(reportRecord.RiskLevel), reportRecord.Description)
+	}
+
+	return nil
+}
+
+// notifyHighRisk sends a push notification for high/critical security findings
+func notifyHighRisk(serverURL, riskLevel, description string) {
+	db := database.GetDB()
+	sender, err := webpush.NewNotificationSender(db)
+	if err != nil {
+		log.Printf("Failed to create notification sender: %v", err)
+		return
+	}
+
+	if err := sender.NotifyHighRiskFound(serverURL, riskLevel, description); err != nil {
+		log.Printf("Failed to send high risk notification: %v", err)
+	}
 }
 
 func storeScreenshot(url string, data []byte, mimeType string) error {

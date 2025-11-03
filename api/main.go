@@ -14,6 +14,7 @@ import (
 	"github.com/norskhelsenett/chase/session"
 	"github.com/norskhelsenett/chase/spa"
 	"github.com/norskhelsenett/chase/utils"
+	"github.com/norskhelsenett/chase/webpush"
 
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
@@ -110,6 +111,10 @@ func setupRoutes(r *gin.Engine) {
 
 			api.GET("/profile", getProfile)
 			api.GET("/api-token", getApiToken)
+
+			// Web Push notification routes
+			pushHandler := webpush.NewHandler(db)
+			pushHandler.RegisterRoutes(api)
 		}
 	}
 
@@ -137,6 +142,13 @@ func main() {
 	db.AutoMigrate(&security.BatchJobStore{}, &security.BatchResultStore{})
 	security.InitDatabase()
 	security.SetMaxParallelScreenshots(2)
+
+	// Initialize web push notification system
+	if err := webpush.InitDatabase(db); err != nil {
+		log.Printf("Failed to initialize web push: %v", err)
+	} else {
+		log.Println("Web push notification system initialized")
+	}
 
 	go servers.StartMonitoring()
 
