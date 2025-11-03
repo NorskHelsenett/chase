@@ -172,7 +172,7 @@
 				<button
 					on:click={handleSubscribe}
 					disabled={isLoading}
-					class="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-700 disabled:text-gray-500 text-white px-4 py-2 rounded-lg flex items-center gap-2 transition-colors"
+					class="px-4 py-2 bg-green-600 hover:bg-green-700 rounded-lg text-white flex items-center gap-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
 				>
 					{#if isLoading}
 						<Loader size={18} class="animate-spin" />
