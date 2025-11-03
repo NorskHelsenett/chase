@@ -7,6 +7,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
+	"math"
 	"net/http"
 	"os"
 	"strconv"
@@ -120,33 +122,56 @@ func ScreenshotHandler(c *gin.Context) {
 		return
 	}
 
-	cachedOnly := c.Query("cached") == "true"
+	// Case-insensitive parameter parsing
+	cachedOnly := strings.ToLower(c.Query("cached")) == "true"
 
-	fullSize := c.Query("fullSize") == "true"
+	// Case-insensitive fullSize parameter
+	fullSizeParam := strings.ToLower(c.Query("fullSize"))
+	fullSize := fullSizeParam == "true"
 
 	// Parse wait parameter as integer seconds with a default of 3
 	waitStr := c.DefaultQuery("waitTime", "3")
+	if waitStr == "" {
+		waitStr = c.DefaultQuery("waittime", "3") // Case-insensitive fallback
+	}
 	waitInt, err := strconv.Atoi(waitStr)
 	if err != nil || waitInt < 0 {
 		waitInt = 3
 	}
 
-	// Only use cached screenshot when client does not request waiting and not full size
+	// Try to get cached screenshot first for any request
+	cachedScreenshot, cacheErr := getRecentScreenshot(domain)
+
+	// If cachedOnly is requested, return cached or 404
 	if cachedOnly {
-		// Check if we have a recent screenshot
-		if screenshot, err := getRecentScreenshot(domain); err == nil {
-			// Set cache headers
+		if cacheErr == nil {
 			c.Header("Cache-Control", "public, max-age=86400") // 24 hours
-			c.Header("Content-Type", screenshot.MIMEType)
-			c.Data(200, screenshot.MIMEType, screenshot.Data)
+			c.Header("Content-Type", cachedScreenshot.MIMEType)
+			c.Data(200, cachedScreenshot.MIMEType, cachedScreenshot.Data)
 			return
 		}
+		c.JSON(404, gin.H{"error": "No cached screenshot available"})
+		return
 	}
 
-	// Make request to screenshot service
+	// Try to capture new screenshot
 	err = captureAndSendScreenshot(c, domain, fullSize, waitInt)
 	if err != nil {
-		c.JSON(500, gin.H{"error": err.Error(), "url": domain})
+		// Log error server-side
+		log.Printf("Screenshot service error for %s: %v", domain, err)
+
+		// Fall back to cached screenshot if available
+		if cacheErr == nil {
+			log.Printf("Returning cached screenshot for %s after service error", domain)
+			c.Header("Cache-Control", "public, max-age=3600")
+			c.Header("X-Screenshot-Cached", "true")
+			c.Header("Content-Type", cachedScreenshot.MIMEType)
+			c.Data(200, cachedScreenshot.MIMEType, cachedScreenshot.Data)
+			return
+		}
+
+		// No cache available - return generic error without details
+		c.JSON(503, gin.H{"error": "Screenshot service temporarily unavailable"})
 	}
 }
 
@@ -238,32 +263,69 @@ func captureAndSendScreenshot(c *gin.Context, domain string, fullSize bool, wait
 		return err
 	}
 
-	// Create request body
-	jsonData, err := json.Marshal(map[string]interface{}{"url": domain, "wait_time": wait, "full_size": fullSize})
+	// Create request body with correct parameter name 'fullpage' instead of 'full_size'
+	jsonData, err := json.Marshal(map[string]interface{}{
+		"url":       domain,
+		"wait_time": wait,
+		"fullpage":  fullSize,
+	})
 	if err != nil {
 		return fmt.Errorf("failed to create request: %v", err)
 	}
 
-	// Make request to screenshot service
+	// Get screenshot service URL
 	serviceURL := os.Getenv("SCREENSHOT_SERVICE_URL")
 	if serviceURL == "" {
 		serviceURL = "http://screenshot:8080"
 	}
 
-	client := &http.Client{Timeout: 30 * time.Second}
-	resp, err := client.Post(
-		serviceURL+"/screenshot",
-		"application/json",
-		bytes.NewBuffer(jsonData),
-	)
-	if err != nil {
-		return fmt.Errorf("screenshot service error: %v", err)
+	// Retry logic with exponential backoff
+	maxRetries := 3
+	var resp *http.Response
+	var lastErr error
+
+	for attempt := 0; attempt < maxRetries; attempt++ {
+		if attempt > 0 {
+			// Exponential backoff: 1s, 2s, 4s
+			backoff := time.Duration(math.Pow(2, float64(attempt-1))) * time.Second
+			log.Printf("Retrying screenshot for %s after %v (attempt %d/%d)", domain, backoff, attempt+1, maxRetries)
+			time.Sleep(backoff)
+		}
+
+		// Increase timeout for retries
+		timeout := 30 * time.Second
+		if attempt > 0 {
+			timeout = 45 * time.Second
+		}
+
+		client := &http.Client{Timeout: timeout}
+		resp, err = client.Post(
+			serviceURL+"/screenshot",
+			"application/json",
+			bytes.NewBuffer(jsonData),
+		)
+
+		if err == nil {
+			// Request succeeded, break retry loop
+			lastErr = nil
+			break
+		}
+
+		lastErr = err
+		log.Printf("Screenshot service attempt %d failed for %s: %v", attempt+1, domain, err)
 	}
+
+	// If all retries failed
+	if lastErr != nil {
+		return fmt.Errorf("screenshot service unavailable after %d attempts", maxRetries)
+	}
+
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("service returned status %d: %s", resp.StatusCode, string(body))
+		log.Printf("Screenshot service returned status %d for %s: %s", resp.StatusCode, domain, string(body))
+		return fmt.Errorf("screenshot service returned error status %d", resp.StatusCode)
 	}
 
 	// Parse response
@@ -273,7 +335,8 @@ func captureAndSendScreenshot(c *gin.Context, domain string, fullSize bool, wait
 	}
 
 	if !result.Success {
-		return fmt.Errorf("screenshot failed: %s", result.Error)
+		log.Printf("Screenshot failed for %s: %s", domain, result.Error)
+		return fmt.Errorf("screenshot capture failed")
 	}
 
 	// Decode image
@@ -290,7 +353,8 @@ func captureAndSendScreenshot(c *gin.Context, domain string, fullSize bool, wait
 	// Store screenshot in database first
 	err = storeScreenshot(domain, imgData, contentType)
 	if err != nil {
-		return fmt.Errorf("failed to store screenshot: %v", err)
+		log.Printf("Failed to store screenshot for %s: %v", domain, err)
+		// Continue anyway - we can still return it to the client
 	}
 
 	if c == nil {
