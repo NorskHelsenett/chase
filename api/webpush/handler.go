@@ -329,9 +329,9 @@ func (h *Handler) SendTestNotification(c *gin.Context) {
 		Title: "Test Notification",
 		Body:  "This is a test notification from Chase",
 		Icon:  "/icon-192.png",
-		URL:   "/",
 		Data: map[string]interface{}{
 			"test": true,
+			"url":  "/",
 		},
 	}
 

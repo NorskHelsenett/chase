@@ -129,10 +129,10 @@ func (ns *NotificationSender) NotifyServerAdded(serverURL string) error {
 		Body:  fmt.Sprintf("Server %s has been added to monitoring", serverURL),
 		Icon:  "/icon-192.png",
 		Tag:   "server-added",
-		URL:   "/dashboard",
 		Data: map[string]interface{}{
 			"type":      string(EventServerAdded),
 			"serverUrl": serverURL,
+			"url":       "/dashboard",
 			"timestamp": time.Now().Unix(),
 		},
 	}
@@ -150,10 +150,10 @@ func (ns *NotificationSender) NotifyServerOffline(serverURL, serverName string) 
 		Icon:  "/icon-192.png",
 		Badge: "/badge-error.png",
 		Tag:   "server-offline-" + serverURL,
-		URL:   "/server/" + serverURL,
 		Data: map[string]interface{}{
 			"type":      string(EventServerOffline),
 			"serverUrl": serverURL,
+			"url":       "/server/" + serverURL,
 			"timestamp": time.Now().Unix(),
 		},
 	}
@@ -171,10 +171,10 @@ func (ns *NotificationSender) NotifyServerOnline(serverURL, serverName string) e
 		Icon:  "/icon-192.png",
 		Badge: "/badge-success.png",
 		Tag:   "server-online-" + serverURL,
-		URL:   "/server/" + serverURL,
 		Data: map[string]interface{}{
 			"type":      string(EventServerOnline),
 			"serverUrl": serverURL,
+			"url":       "/server/" + serverURL,
 			"timestamp": time.Now().Unix(),
 		},
 	}
@@ -191,10 +191,10 @@ func (ns *NotificationSender) NotifyServerDeleted(serverURL string) error {
 		Body:  fmt.Sprintf("Server %s has been removed from monitoring", serverURL),
 		Icon:  "/icon-192.png",
 		Tag:   "server-deleted",
-		URL:   "/dashboard",
 		Data: map[string]interface{}{
 			"type":      string(EventServerDeleted),
 			"serverUrl": serverURL,
+			"url":       "/dashboard",
 			"timestamp": time.Now().Unix(),
 		},
 	}
@@ -211,11 +211,11 @@ func (ns *NotificationSender) NotifyServerDeactivated(serverURL string, reason s
 		Body:  fmt.Sprintf("Server %s has been automatically deactivated: %s", serverURL, reason),
 		Icon:  "/icon-192.png",
 		Tag:   "server-deactivated",
-		URL:   "/dashboard",
 		Data: map[string]interface{}{
 			"type":      string(EventServerDeactivated),
 			"serverUrl": serverURL,
 			"reason":    reason,
+			"url":       "/dashboard",
 			"timestamp": time.Now().Unix(),
 		},
 	}
@@ -232,11 +232,11 @@ func (ns *NotificationSender) NotifyScanCompleted(serverURL string, findingsCoun
 		Body:  fmt.Sprintf("Scan of %s found %d findings", serverURL, findingsCount),
 		Icon:  "/icon-192.png",
 		Tag:   "scan-complete-" + serverURL,
-		URL:   "/server/" + serverURL,
 		Data: map[string]interface{}{
 			"type":          string(EventScanCompleted),
 			"serverUrl":     serverURL,
 			"findingsCount": findingsCount,
+			"url":           "/server/" + serverURL,
 			"timestamp":     time.Now().Unix(),
 		},
 	}
@@ -254,12 +254,12 @@ func (ns *NotificationSender) NotifyHighRiskFound(serverURL string, riskLevel, d
 		Icon:  "/icon-192.png",
 		Badge: "/badge-warning.png",
 		Tag:   "high-risk-" + serverURL,
-		URL:   "/server/" + serverURL,
 		Data: map[string]interface{}{
 			"type":        string(EventHighRiskFound),
 			"serverUrl":   serverURL,
 			"riskLevel":   riskLevel,
 			"description": description,
+			"url":         "/server/" + serverURL,
 			"timestamp":   time.Now().Unix(),
 		},
 		Actions: []NotificationAction{

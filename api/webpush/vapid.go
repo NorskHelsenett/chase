@@ -1,14 +1,13 @@
 package webpush
 
 import (
-	"crypto/ecdsa"
 	"crypto/elliptic"
-	"crypto/rand"
 	"encoding/base64"
 	"fmt"
 	"log"
 	"math/big"
 
+	webpush "github.com/SherClockHolmes/webpush-go"
 	"gorm.io/gorm"
 )
 
@@ -62,41 +61,9 @@ func ensureVAPIDKeys(db *gorm.DB) error {
 	return nil
 }
 
-// generateVAPIDKeys generates a new VAPID key pair
+// generateVAPIDKeys generates a new VAPID key pair using the webpush-go library
 func generateVAPIDKeys() (publicKey, privateKey string, err error) {
-	// Generate ECDSA P-256 key pair
-	curve := elliptic.P256()
-	key, err := ecdsa.GenerateKey(curve, rand.Reader)
-	if err != nil {
-		return "", "", err
-	}
-
-	// Extract private key (32 bytes)
-	privateKeyBytes := key.D.Bytes()
-	// Pad to 32 bytes if necessary
-	if len(privateKeyBytes) < 32 {
-		padded := make([]byte, 32)
-		copy(padded[32-len(privateKeyBytes):], privateKeyBytes)
-		privateKeyBytes = padded
-	}
-
-	// Extract public key (uncompressed: 0x04 + X + Y, 65 bytes total)
-	x := key.PublicKey.X.Bytes()
-	y := key.PublicKey.Y.Bytes()
-
-	// Pad X and Y to 32 bytes each
-	xPadded := make([]byte, 32)
-	yPadded := make([]byte, 32)
-	copy(xPadded[32-len(x):], x)
-	copy(yPadded[32-len(y):], y)
-
-	publicKeyBytes := append([]byte{0x04}, append(xPadded, yPadded...)...)
-
-	// Encode to base64 URL-safe format (without padding)
-	publicKey = base64.RawURLEncoding.EncodeToString(publicKeyBytes)
-	privateKey = base64.RawURLEncoding.EncodeToString(privateKeyBytes)
-
-	return publicKey, privateKey, nil
+	return webpush.GenerateVAPIDKeys()
 }
 
 // GetVAPIDKeys retrieves the current VAPID keys from the database

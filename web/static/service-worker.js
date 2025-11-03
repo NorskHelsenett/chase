@@ -1,129 +1,58 @@
-// Service Worker for Push Notifications
-
-// Install event
-self.addEventListener('install', (event) => {
+self.addEventListener('install', () => {
 	self.skipWaiting();
 });
 
-// Activate event
 self.addEventListener('activate', (event) => {
-	event.waitUntil(clients.claim());
+	event.waitUntil(self.clients.claim());
 });
 
-// Push event - handle incoming push notifications
 self.addEventListener('push', (event) => {
-	let notification = {
-		title: 'New Notification',
-		body: 'You have a new notification',
-		icon: '/icon-192.png',
-		badge: '/badge.png',
-		vibrate: [200, 100, 200],
-		requireInteraction: false,
-		data: {}
+	if (!event.data) {
+		return;
+	}
+
+	let payload;
+	try {
+		payload = event.data.json();
+	} catch {
+		payload = { title: 'Notification', body: event.data.text() };
+	}
+
+	const title = payload.title || 'Notification';
+
+	// Ensure URL is in the data object for the notification click handler
+	const notificationData = payload.data || {};
+	if (payload.url && !notificationData.url) {
+		notificationData.url = payload.url;
+	}
+
+	const options = {
+		body: payload.body,
+		icon: payload.icon || '/images/passkey-hero-aurora.svg',
+		badge: payload.badge || '/images/passkey-hero.svg',
+		image: payload.image,
+		tag: payload.tag,
+		data: notificationData
 	};
 
-	try {
-		if (event.data) {
-			const data = event.data.json();
-			notification = {
-				title: data.title || notification.title,
-				body: data.body || notification.body,
-				icon: data.icon || notification.icon,
-				badge: data.badge || notification.badge,
-				image: data.image,
-				tag: data.tag || 'notification',
-				requireInteraction: data.requireInteraction || false,
-				vibrate: data.vibrate || notification.vibrate,
-				data: data.data || {},
-				actions: data.actions || []
-			};
-		}
-	} catch (error) {
-		console.error('Error parsing push data:', error);
-	}
+	event.waitUntil(self.registration.showNotification(title, options));
+});
+
+self.addEventListener('notificationclick', (event) => {
+	event.notification.close();
+	const targetUrl = event.notification.data?.url || '/';
 
 	event.waitUntil(
-		self.registration.showNotification(notification.title, {
-			body: notification.body,
-			icon: notification.icon,
-			badge: notification.badge,
-			image: notification.image,
-			tag: notification.tag,
-			requireInteraction: notification.requireInteraction,
-			vibrate: notification.vibrate,
-			data: notification.data,
-			actions: notification.actions
+		self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
+			for (const client of clientList) {
+				if ('focus' in client) {
+					client.navigate(targetUrl);
+					return client.focus();
+				}
+			}
+			if (self.clients.openWindow) {
+				return self.clients.openWindow(targetUrl);
+			}
 		})
 	);
-});
-
-// Notification click event
-self.addEventListener('notificationclick', (event) => {
-	console.log('Notification clicked:', event);
-
-	event.notification.close();
-
-	// Handle action buttons
-	if (event.action) {
-		console.log('Action clicked:', event.action);
-		
-		if (event.action === 'dismiss') {
-			return;
-		}
-	}
-
-	// Get the URL to open
-	const urlToOpen = event.notification.data?.url || '/';
-
-	// Open or focus the app
-	const promiseChain = clients.matchAll({
-		type: 'window',
-		includeUncontrolled: true
-	}).then((windowClients) => {
-		// Check if there's already a window open
-		for (let i = 0; i < windowClients.length; i++) {
-			const client = windowClients[i];
-			if (client.url === urlToOpen && 'focus' in client) {
-				return client.focus();
-			}
-		}
-
-		// No window open, open a new one
-		if (clients.openWindow) {
-			return clients.openWindow(urlToOpen);
-		}
-	});
-
-	event.waitUntil(promiseChain);
-});
-
-// Notification close event
-self.addEventListener('notificationclose', (event) => {
-	console.log('Notification closed:', event);
-	
-	// You can track notification dismissals here if needed
-	// For example, send analytics to your server
-});
-
-// Background sync for failed notifications (optional)
-self.addEventListener('sync', (event) => {
-	console.log('Background sync:', event);
-	
-	if (event.tag === 'sync-notifications') {
-		event.waitUntil(syncNotifications());
-	}
-});
-
-async function syncNotifications() {
-	// Implement sync logic if needed
-	console.log('Syncing notifications...');
-}
-
-// Message event - for communication with the app
-self.addEventListener('message', (event) => {
-	console.log('Service Worker received message:', event.data);
-
-	if (event.data && event.data.type === 'SKIP_WAITING') {
-		self.skipWaiting();
-	}
 });
