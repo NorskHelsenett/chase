@@ -63,7 +63,15 @@ func ensureVAPIDKeys(db *gorm.DB) error {
 
 // generateVAPIDKeys generates a new VAPID key pair using the webpush-go library
 func generateVAPIDKeys() (publicKey, privateKey string, err error) {
-	return webpush.GenerateVAPIDKeys()
+	// NOTE: The webpush-go library returns keys in REVERSE order:
+	// First return value is actually the PRIVATE key (32 bytes)
+	// Second return value is actually the PUBLIC key (65 bytes)
+	priv, pub, err := webpush.GenerateVAPIDKeys()
+	if err != nil {
+		return "", "", err
+	}
+	// Return them in the correct order: public, private
+	return pub, priv, nil
 }
 
 // GetVAPIDKeys retrieves the current VAPID keys from the database
