@@ -395,6 +395,11 @@ func storeSecurityReport(report *SecurityReport) error {
 		go notifyHighRisk(reportRecord.ServerURL, string(reportRecord.RiskLevel), reportRecord.Description)
 	}
 
+	// Check for security.txt expiration and send notifications
+	if report.SecurityTxt.Exists && !report.SecurityTxt.Expiration.IsZero() {
+		go notifySecurityTxtExpiration(reportRecord.ServerURL, report.SecurityTxt.Expiration)
+	}
+
 	return nil
 }
 
@@ -423,6 +428,144 @@ func notifyHighRisk(serverURL, riskLevel, description string) {
 
 	if err := sender.NotifyHighRiskFound(server.ID, serverURL, riskLevel, description); err != nil {
 		log.Printf("Failed to send high risk notification: %v", err)
+	}
+}
+
+// notifySecurityTxtExpiration sends notifications based on security.txt expiration status
+func notifySecurityTxtExpiration(serverURL string, expiryDate time.Time) {
+	db := database.GetDB()
+
+	// Look up the server ID and name from the URL
+	var server struct {
+		ID   uint   `json:"id"`
+		URL  string `json:"url"`
+		Name string `json:"name"`
+	}
+	if err := db.Table("servers").Select("id, url, name").Where("url = ?", serverURL).First(&server).Error; err != nil {
+		log.Printf("Failed to find server for security.txt notification (URL: %s): %v", serverURL, err)
+		return
+	}
+
+	serverName := server.Name
+	if serverName == "" {
+		serverName = server.URL
+	}
+
+	daysUntilExpiry := time.Until(expiryDate).Hours() / 24
+	daysLeft := int(daysUntilExpiry)
+
+	// Check if we've already sent a notification for this expiration event
+	// We'll use the notification log to track this
+	var existingNotification struct {
+		ID uint
+	}
+
+	switch {
+	case daysUntilExpiry < 0:
+		// Already expired - send notification only once
+		if err := db.Table("notification_logs").
+			Select("id").
+			Where("server_id = ? AND event_type = ? AND success = true AND created_at > ?",
+				server.ID, "securitytxt_expired", expiryDate).
+			First(&existingNotification).Error; err == nil {
+			// Already notified
+			return
+		}
+
+		// Import the servers package function
+		log.Printf("Sending security.txt expired notification for %s", serverName)
+		notifySecurityTxtExpiredHelper(server.ID, server.URL, serverName, expiryDate)
+
+	case daysUntilExpiry < 7:
+		// Less than 7 days - send notification
+		if err := db.Table("notification_logs").
+			Select("id").
+			Where("server_id = ? AND event_type = ? AND success = true AND created_at > ?",
+				server.ID, "securitytxt_expiring_7days", time.Now().Add(-24*time.Hour)).
+			First(&existingNotification).Error; err == nil {
+			// Already notified in last 24 hours
+			return
+		}
+
+		log.Printf("Sending security.txt expiring (7 days) notification for %s", serverName)
+		notifySecurityTxtExpiring7DaysHelper(server.ID, server.URL, serverName, expiryDate, daysLeft)
+
+	case daysUntilExpiry < 30:
+		// Less than 30 days - send notification
+		if err := db.Table("notification_logs").
+			Select("id").
+			Where("server_id = ? AND event_type = ? AND success = true AND created_at > ?",
+				server.ID, "securitytxt_expiring_30days", time.Now().Add(-24*time.Hour)).
+			First(&existingNotification).Error; err == nil {
+			// Already notified in last 24 hours
+			return
+		}
+
+		log.Printf("Sending security.txt expiring (30 days) notification for %s", serverName)
+		notifySecurityTxtExpiring30DaysHelper(server.ID, server.URL, serverName, expiryDate, daysLeft)
+
+	case daysUntilExpiry < 90:
+		// Less than 90 days - send notification
+		if err := db.Table("notification_logs").
+			Select("id").
+			Where("server_id = ? AND event_type = ? AND success = true AND created_at > ?",
+				server.ID, "securitytxt_expiring_90days", time.Now().Add(-24*time.Hour)).
+			First(&existingNotification).Error; err == nil {
+			// Already notified in last 24 hours
+			return
+		}
+
+		log.Printf("Sending security.txt expiring (90 days) notification for %s", serverName)
+		notifySecurityTxtExpiring90DaysHelper(server.ID, server.URL, serverName, expiryDate, daysLeft)
+	}
+}
+
+// Helper functions to send notifications via servers package
+func notifySecurityTxtExpiredHelper(serverID uint, serverURL, serverName string, expiryDate time.Time) {
+	db := database.GetDB()
+	sender, err := webpush.NewNotificationSender(db)
+	if err != nil {
+		log.Printf("Failed to create notification sender: %v", err)
+		return
+	}
+	if err := sender.NotifySecurityTxtExpired(serverID, serverURL, serverName, expiryDate); err != nil {
+		log.Printf("Failed to send security.txt expired notification: %v", err)
+	}
+}
+
+func notifySecurityTxtExpiring7DaysHelper(serverID uint, serverURL, serverName string, expiryDate time.Time, daysLeft int) {
+	db := database.GetDB()
+	sender, err := webpush.NewNotificationSender(db)
+	if err != nil {
+		log.Printf("Failed to create notification sender: %v", err)
+		return
+	}
+	if err := sender.NotifySecurityTxtExpiring7Days(serverID, serverURL, serverName, expiryDate, daysLeft); err != nil {
+		log.Printf("Failed to send security.txt expiring (7 days) notification: %v", err)
+	}
+}
+
+func notifySecurityTxtExpiring30DaysHelper(serverID uint, serverURL, serverName string, expiryDate time.Time, daysLeft int) {
+	db := database.GetDB()
+	sender, err := webpush.NewNotificationSender(db)
+	if err != nil {
+		log.Printf("Failed to create notification sender: %v", err)
+		return
+	}
+	if err := sender.NotifySecurityTxtExpiring30Days(serverID, serverURL, serverName, expiryDate, daysLeft); err != nil {
+		log.Printf("Failed to send security.txt expiring (30 days) notification: %v", err)
+	}
+}
+
+func notifySecurityTxtExpiring90DaysHelper(serverID uint, serverURL, serverName string, expiryDate time.Time, daysLeft int) {
+	db := database.GetDB()
+	sender, err := webpush.NewNotificationSender(db)
+	if err != nil {
+		log.Printf("Failed to create notification sender: %v", err)
+		return
+	}
+	if err := sender.NotifySecurityTxtExpiring90Days(serverID, serverURL, serverName, expiryDate, daysLeft); err != nil {
+		log.Printf("Failed to send security.txt expiring (90 days) notification: %v", err)
 	}
 }
 

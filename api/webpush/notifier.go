@@ -350,6 +350,101 @@ func (ns *NotificationSender) NotifyHighRiskFound(serverID uint, serverURL strin
 	return err
 }
 
+// NotifySecurityTxtExpired sends a notification when security.txt has expired
+func (ns *NotificationSender) NotifySecurityTxtExpired(serverID uint, serverURL, serverName string, expiryDate time.Time) error {
+	notification := &Notification{
+		Title: "security.txt Expired",
+		Body:  fmt.Sprintf("security.txt for %s expired on %s", serverName, expiryDate.Format("2006-01-02")),
+		Icon:  "/icon-192.png",
+		Badge: "/badge-error.png",
+		Tag:   "securitytxt-expired-" + serverURL,
+		URL:   fmt.Sprintf("/server/%d", serverID),
+		Data: map[string]interface{}{
+			"type":       string(EventSecurityTxtExpired),
+			"serverUrl":  serverURL,
+			"serverId":   serverID,
+			"expiryDate": expiryDate.Format(time.RFC3339),
+			"url":        fmt.Sprintf("/server/%d", serverID),
+			"timestamp":  time.Now().Unix(),
+		},
+	}
+
+	_, err := ns.SendToAll(EventSecurityTxtExpired, notification, &serverID)
+	return err
+}
+
+// NotifySecurityTxtExpiring7Days sends a notification when security.txt expires in 7 days or less
+func (ns *NotificationSender) NotifySecurityTxtExpiring7Days(serverID uint, serverURL, serverName string, expiryDate time.Time, daysLeft int) error {
+	notification := &Notification{
+		Title: "security.txt Expiring Soon",
+		Body:  fmt.Sprintf("security.txt for %s expires in %d days (%s)", serverName, daysLeft, expiryDate.Format("2006-01-02")),
+		Icon:  "/icon-192.png",
+		Badge: "/badge-error.png",
+		Tag:   "securitytxt-expiring-7-" + serverURL,
+		URL:   fmt.Sprintf("/server/%d", serverID),
+		Data: map[string]interface{}{
+			"type":       string(EventSecurityTxtExpiring7Days),
+			"serverUrl":  serverURL,
+			"serverId":   serverID,
+			"expiryDate": expiryDate.Format(time.RFC3339),
+			"daysLeft":   daysLeft,
+			"url":        fmt.Sprintf("/server/%d", serverID),
+			"timestamp":  time.Now().Unix(),
+		},
+	}
+
+	_, err := ns.SendToAll(EventSecurityTxtExpiring7Days, notification, &serverID)
+	return err
+}
+
+// NotifySecurityTxtExpiring90Days sends a notification when security.txt expires in 90 days or less
+func (ns *NotificationSender) NotifySecurityTxtExpiring90Days(serverID uint, serverURL, serverName string, expiryDate time.Time, daysLeft int) error {
+	notification := &Notification{
+		Title: "security.txt Expiring Soon",
+		Body:  fmt.Sprintf("security.txt for %s expires in %d days (%s)", serverName, daysLeft, expiryDate.Format("2006-01-02")),
+		Icon:  "/icon-192.png",
+		Badge: "/badge-warning.png",
+		Tag:   "securitytxt-expiring-90-" + serverURL,
+		URL:   fmt.Sprintf("/server/%d", serverID),
+		Data: map[string]interface{}{
+			"type":       string(EventSecurityTxtExpiring90Days),
+			"serverUrl":  serverURL,
+			"serverId":   serverID,
+			"expiryDate": expiryDate.Format(time.RFC3339),
+			"daysLeft":   daysLeft,
+			"url":        fmt.Sprintf("/server/%d", serverID),
+			"timestamp":  time.Now().Unix(),
+		},
+	}
+
+	_, err := ns.SendToAll(EventSecurityTxtExpiring90Days, notification, &serverID)
+	return err
+}
+
+// NotifySecurityTxtExpiring30Days sends a notification when security.txt expires in 30 days or less
+func (ns *NotificationSender) NotifySecurityTxtExpiring30Days(serverID uint, serverURL, serverName string, expiryDate time.Time, daysLeft int) error {
+	notification := &Notification{
+		Title: "security.txt Expiring Soon",
+		Body:  fmt.Sprintf("security.txt for %s expires in %d days (%s)", serverName, daysLeft, expiryDate.Format("2006-01-02")),
+		Icon:  "/icon-192.png",
+		Badge: "/badge-warning.png",
+		Tag:   "securitytxt-expiring-30-" + serverURL,
+		URL:   fmt.Sprintf("/server/%d", serverID),
+		Data: map[string]interface{}{
+			"type":       string(EventSecurityTxtExpiring30Days),
+			"serverUrl":  serverURL,
+			"serverId":   serverID,
+			"expiryDate": expiryDate.Format(time.RFC3339),
+			"daysLeft":   daysLeft,
+			"url":        fmt.Sprintf("/server/%d", serverID),
+			"timestamp":  time.Now().Unix(),
+		},
+	}
+
+	_, err := ns.SendToAll(EventSecurityTxtExpiring30Days, notification, &serverID)
+	return err
+}
+
 // Helper functions
 
 func isSubscriptionExpiredError(err error) bool {

@@ -139,6 +139,7 @@ func (s *Scanner) checkSecurityTxt(domain string) (*SecurityTxtAnalysis, error) 
 
 	var wg sync.WaitGroup
 	var mu sync.Mutex
+	var found bool
 
 	for _, path := range securityPaths {
 		wg.Add(1)
@@ -162,6 +163,11 @@ func (s *Scanner) checkSecurityTxt(domain string) (*SecurityTxtAnalysis, error) 
 				mu.Lock()
 				defer mu.Unlock()
 
+				// Skip if we already found and processed the file (avoid duplicates)
+				if found {
+					return
+				}
+
 				// Validate that it's actually a text file
 				if !isValidTextFile(contentType, content) {
 					analysis.Risk = RiskHigh
@@ -174,6 +180,7 @@ func (s *Scanner) checkSecurityTxt(domain string) (*SecurityTxtAnalysis, error) 
 					return
 				}
 
+				found = true
 				analysis.Exists = true
 				analysis.ContentType = contentType
 				analysis.Content = content
@@ -192,25 +199,70 @@ func (s *Scanner) checkSecurityTxt(domain string) (*SecurityTxtAnalysis, error) 
 					case strings.HasPrefix(line, "Expires:"):
 						expiry := strings.TrimPrefix(line, "Expires:")
 						expiry = strings.TrimSpace(expiry)
-						if expiryTime, err := time.Parse(time.RFC3339, expiry); err == nil {
+
+						// Try multiple date formats
+						var expiryTime time.Time
+						var parseErr error
+
+						// Try RFC3339 format first
+						expiryTime, parseErr = time.Parse(time.RFC3339, expiry)
+						if parseErr != nil {
+							// Try date-only format (YYYY-MM-DD)
+							expiryTime, parseErr = time.Parse("2006-01-02", expiry)
+							if parseErr == nil {
+								// Set to end of day for date-only format
+								expiryTime = expiryTime.Add(23*time.Hour + 59*time.Minute + 59*time.Second)
+							}
+						}
+
+						if parseErr == nil {
 							analysis.Expiration = expiryTime
 
 							daysUntilExpiry := time.Until(expiryTime).Hours() / 24
 							switch {
-							case daysUntilExpiry < 30:
+							case daysUntilExpiry < 0:
+								// Already expired
+								analysis.Risk = RiskCritical
+								analysis.Findings = append(analysis.Findings, Finding{
+									Description: "security.txt has expired",
+									Risk:        RiskCritical,
+									Evidence:    fmt.Sprintf("Expired on: %s", expiryTime.Format("2006-01-02")),
+									Mitigation:  "Update security.txt with a future expiration date immediately",
+								})
+							case daysUntilExpiry < 7:
+								// Less than 7 days
+								analysis.Risk = RiskCritical
+								analysis.Findings = append(analysis.Findings, Finding{
+									Description: fmt.Sprintf("security.txt expires in %.0f days", daysUntilExpiry),
+									Risk:        RiskCritical,
+									Evidence:    fmt.Sprintf("Expires on: %s", expiryTime.Format("2006-01-02")),
+									Mitigation:  "Update security.txt with a future expiration date immediately",
+								})
+							case daysUntilExpiry < 14:
+								// Less than 14 days
 								analysis.Risk = RiskHigh
 								analysis.Findings = append(analysis.Findings, Finding{
-									Description: "security.txt expires in less than 30 days",
+									Description: fmt.Sprintf("security.txt expires in %.0f days", daysUntilExpiry),
 									Risk:        RiskHigh,
-									Evidence:    fmt.Sprintf("Expires on: %s", expiry),
+									Evidence:    fmt.Sprintf("Expires on: %s", expiryTime.Format("2006-01-02")),
+									Mitigation:  "Update security.txt with a future expiration date soon",
+								})
+							case daysUntilExpiry < 30:
+								// Less than 30 days
+								analysis.Risk = RiskHigh
+								analysis.Findings = append(analysis.Findings, Finding{
+									Description: fmt.Sprintf("security.txt expires in %.0f days", daysUntilExpiry),
+									Risk:        RiskHigh,
+									Evidence:    fmt.Sprintf("Expires on: %s", expiryTime.Format("2006-01-02")),
 									Mitigation:  "Update security.txt with a future expiration date",
 								})
 							case daysUntilExpiry < 90:
+								// Less than 90 days
 								analysis.Risk = RiskMedium
 								analysis.Findings = append(analysis.Findings, Finding{
-									Description: "security.txt expires in less than 90 days",
+									Description: fmt.Sprintf("security.txt expires in %.0f days", daysUntilExpiry),
 									Risk:        RiskMedium,
-									Evidence:    fmt.Sprintf("Expires on: %s", expiry),
+									Evidence:    fmt.Sprintf("Expires on: %s", expiryTime.Format("2006-01-02")),
 									Mitigation:  "Consider updating security.txt expiration date",
 								})
 							}

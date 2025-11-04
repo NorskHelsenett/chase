@@ -102,3 +102,59 @@ func NotifyCertificateExpiringSoon(serverID uint, serverURL, serverName string, 
 		log.Printf("Failed to send certificate expiring soon notification: %v", err)
 	}
 }
+
+// NotifySecurityTxtExpired sends a push notification when security.txt has expired
+func NotifySecurityTxtExpired(serverID uint, serverURL, serverName string, expiryDate time.Time) {
+	db := database.GetDB()
+	sender, err := webpush.NewNotificationSender(db)
+	if err != nil {
+		log.Printf("Failed to create notification sender: %v", err)
+		return
+	}
+
+	if err := sender.NotifySecurityTxtExpired(serverID, serverURL, serverName, expiryDate); err != nil {
+		log.Printf("Failed to send security.txt expired notification: %v", err)
+	}
+}
+
+// NotifySecurityTxtExpiring7Days sends a push notification when security.txt expires in 7 days or less
+func NotifySecurityTxtExpiring7Days(serverID uint, serverURL, serverName string, expiryDate time.Time, daysLeft int) {
+	db := database.GetDB()
+	sender, err := webpush.NewNotificationSender(db)
+	if err != nil {
+		log.Printf("Failed to create notification sender: %v", err)
+		return
+	}
+
+	if err := sender.NotifySecurityTxtExpiring7Days(serverID, serverURL, serverName, expiryDate, daysLeft); err != nil {
+		log.Printf("Failed to send security.txt expiring soon (7 days) notification: %v", err)
+	}
+}
+
+// NotifySecurityTxtExpiring90Days sends a push notification when security.txt expires in 90 days or less
+func NotifySecurityTxtExpiring90Days(serverID uint, serverURL, serverName string, expiryDate time.Time, daysLeft int) {
+	db := database.GetDB()
+	sender, err := webpush.NewNotificationSender(db)
+	if err != nil {
+		log.Printf("Failed to create notification sender: %v", err)
+		return
+	}
+
+	if err := sender.NotifySecurityTxtExpiring90Days(serverID, serverURL, serverName, expiryDate, daysLeft); err != nil {
+		log.Printf("Failed to send security.txt expiring soon (90 days) notification: %v", err)
+	}
+}
+
+// NotifySecurityTxtExpiring30Days sends a push notification when security.txt expires in 30 days or less
+func NotifySecurityTxtExpiring30Days(serverID uint, serverURL, serverName string, expiryDate time.Time, daysLeft int) {
+	db := database.GetDB()
+	sender, err := webpush.NewNotificationSender(db)
+	if err != nil {
+		log.Printf("Failed to create notification sender: %v", err)
+		return
+	}
+
+	if err := sender.NotifySecurityTxtExpiring30Days(serverID, serverURL, serverName, expiryDate, daysLeft); err != nil {
+		log.Printf("Failed to send security.txt expiring soon (30 days) notification: %v", err)
+	}
+}

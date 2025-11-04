@@ -224,7 +224,6 @@
 		{/if}
 	</section>
 
-	<div class="max-w-7xl mx-auto p-4 space-y-6">
 		<!-- Security Headers Section -->
 		<Headers {loading} {results} />
 
@@ -349,9 +348,8 @@
 				</div>
 			{/if}
 		</section>
-	</div>
 
-	<div class="min-h-screen w-full max-w-7xl mx-auto p-4 space-y-6">
+
 		{#if error}
 			<div
 				class="bg-red-500/10 border border-red-500/20 rounded-lg p-4 text-red-400"
@@ -772,7 +770,6 @@
 				</div>
 			</div>
 		{/if}
-	</div>
 {/if}
 
 <style>

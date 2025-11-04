@@ -37,15 +37,19 @@ type NotificationPreference struct {
 type NotificationEventType string
 
 const (
-	EventServerAdded             NotificationEventType = "server_added"
-	EventServerOffline           NotificationEventType = "server_offline"
-	EventServerOnline            NotificationEventType = "server_online"
-	EventServerDeleted           NotificationEventType = "server_deleted"
-	EventServerDeactivated       NotificationEventType = "server_deactivated"
-	EventScanCompleted           NotificationEventType = "scan_completed"
-	EventHighRiskFound           NotificationEventType = "high_risk_found"
-	EventCertificateExpired      NotificationEventType = "certificate_expired"
-	EventCertificateExpiringSoon NotificationEventType = "certificate_expiring_soon"
+	EventServerAdded               NotificationEventType = "server_added"
+	EventServerOffline             NotificationEventType = "server_offline"
+	EventServerOnline              NotificationEventType = "server_online"
+	EventServerDeleted             NotificationEventType = "server_deleted"
+	EventServerDeactivated         NotificationEventType = "server_deactivated"
+	EventScanCompleted             NotificationEventType = "scan_completed"
+	EventHighRiskFound             NotificationEventType = "high_risk_found"
+	EventCertificateExpired        NotificationEventType = "certificate_expired"
+	EventCertificateExpiringSoon   NotificationEventType = "certificate_expiring_soon"
+	EventSecurityTxtExpired        NotificationEventType = "securitytxt_expired"
+	EventSecurityTxtExpiring7Days  NotificationEventType = "securitytxt_expiring_7days"
+	EventSecurityTxtExpiring30Days NotificationEventType = "securitytxt_expiring_30days"
+	EventSecurityTxtExpiring90Days NotificationEventType = "securitytxt_expiring_90days"
 )
 
 // NotificationLog stores a history of sent notifications
@@ -99,6 +103,10 @@ func GetAllEventTypes() []NotificationEventType {
 		EventHighRiskFound,
 		EventCertificateExpired,
 		EventCertificateExpiringSoon,
+		EventSecurityTxtExpired,
+		EventSecurityTxtExpiring7Days,
+		EventSecurityTxtExpiring30Days,
+		EventSecurityTxtExpiring90Days,
 	}
 }
 
@@ -154,6 +162,42 @@ func GetEventMetadata() []EventTypeMetadata {
 			Name:        "High Risk Found",
 			Description: "Notify when a high or critical security risk is detected",
 			Icon:        "⚠️",
+		},
+		{
+			Type:        EventCertificateExpired,
+			Name:        "Certificate Expired",
+			Description: "Notify when an SSL certificate has expired",
+			Icon:        "🔒",
+		},
+		{
+			Type:        EventCertificateExpiringSoon,
+			Name:        "Certificate Expiring Soon",
+			Description: "Notify when an SSL certificate is expiring soon",
+			Icon:        "⏰",
+		},
+		{
+			Type:        EventSecurityTxtExpired,
+			Name:        "security.txt Expired",
+			Description: "Notify when security.txt file has expired",
+			Icon:        "📄",
+		},
+		{
+			Type:        EventSecurityTxtExpiring7Days,
+			Name:        "security.txt Expiring (7 days)",
+			Description: "Notify when security.txt file expires in 7 days or less",
+			Icon:        "📄",
+		},
+		{
+			Type:        EventSecurityTxtExpiring30Days,
+			Name:        "security.txt Expiring (30 days)",
+			Description: "Notify when security.txt file expires in 30 days or less",
+			Icon:        "📄",
+		},
+		{
+			Type:        EventSecurityTxtExpiring90Days,
+			Name:        "security.txt Expiring (90 days)",
+			Description: "Notify when security.txt file expires in 90 days or less",
+			Icon:        "📄",
 		},
 	}
 }
