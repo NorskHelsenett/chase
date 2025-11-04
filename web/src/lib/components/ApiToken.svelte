@@ -35,7 +35,7 @@
 	<div class="relative">
 		<input
 			type={visible ? 'text' : 'password'}
-			value={apiToken}
+			value={visible ? apiToken : '••••••••••••••••••••••'}
 			readonly
 			class="w-full px-4 py-2 text-foreground bg-background border border-input rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 pr-20"
 		/>

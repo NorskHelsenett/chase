@@ -1,6 +1,7 @@
 package webpush
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
@@ -154,7 +155,17 @@ func GetSubscribersForEvent(db *gorm.DB, eventType NotificationEventType) ([]Pus
 }
 
 // LogNotification creates a log entry for a sent notification
-func LogNotification(db *gorm.DB, userID uint, eventType NotificationEventType, title, body, url string, serverID *uint, success bool, errorMsg string) (uint, error) {
+func LogNotification(db *gorm.DB, userID uint, eventType NotificationEventType, title, body, url string, serverID *uint, success bool, errorMsg string, metadata map[string]interface{}) (uint, error) {
+	var metadataJSON string
+	if metadata != nil {
+		bytes, err := json.Marshal(metadata)
+		if err != nil {
+			log.Printf("failed to marshal notification metadata: %v", err)
+		} else {
+			metadataJSON = string(bytes)
+		}
+	}
+
 	log := NotificationLog{
 		UserID:    userID,
 		EventType: eventType,
@@ -162,6 +173,7 @@ func LogNotification(db *gorm.DB, userID uint, eventType NotificationEventType, 
 		Body:      body,
 		URL:       url,
 		ServerID:  serverID,
+		Metadata:  metadataJSON,
 		Success:   success,
 		ErrorMsg:  errorMsg,
 		SentAt:    time.Now(),
@@ -180,7 +192,8 @@ func GetNotificationHistory(db *gorm.DB, userID uint, limit int) ([]Notification
 	}
 
 	var logs []NotificationLog
-	err := db.Where("user_id = ?", userID).
+	err := db.Where("user_id = ? AND dismissed = ?", userID, false).
+		Order("read ASC").
 		Order("created_at DESC").
 		Limit(limit).
 		Find(&logs).Error

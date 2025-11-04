@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"strconv"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/norskhelsenett/chase/types"
@@ -68,6 +69,9 @@ func (h *Handler) RegisterRoutes(router *gin.RouterGroup) {
 
 		// Notification history
 		push.GET("/history", h.GetHistory)
+		push.POST("/history/:id/read", h.MarkNotificationRead)
+		push.POST("/history/:id/dismiss", h.DismissNotification)
+		push.POST("/history/dismiss-all", h.DismissAllNotifications)
 
 		// Stats (admin only - you may want to add admin middleware)
 		push.GET("/stats", h.GetStats)
@@ -313,6 +317,157 @@ func (h *Handler) GetHistory(c *gin.Context) {
 	c.JSON(200, gin.H{"history": history})
 }
 
+// MarkNotificationRead marks a single notification as read
+func (h *Handler) MarkNotificationRead(c *gin.Context) {
+	email, exists := c.Get("email")
+	if !exists {
+		c.JSON(401, gin.H{"error": "Authentication required"})
+		return
+	}
+
+	userID, err := h.getUserIDByEmail(email.(string))
+	if err != nil {
+		c.JSON(500, gin.H{"error": "Failed to get user information"})
+		return
+	}
+
+	idParam := c.Param("id")
+	notificationID, err := strconv.ParseUint(idParam, 10, 32)
+	if err != nil {
+		c.JSON(400, gin.H{"error": "Invalid notification ID"})
+		return
+	}
+
+	var logEntry NotificationLog
+	if err := h.db.Where("id = ? AND user_id = ?", notificationID, userID).First(&logEntry).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			c.JSON(404, gin.H{"error": "Notification not found"})
+			return
+		}
+		c.JSON(500, gin.H{"error": "Failed to load notification"})
+		return
+	}
+
+	if logEntry.Dismissed {
+		c.JSON(400, gin.H{"error": "Notification has been dismissed"})
+		return
+	}
+
+	if logEntry.Read {
+		c.JSON(200, gin.H{"success": true, "notification": logEntry})
+		return
+	}
+
+	now := time.Now()
+	if err := h.db.Model(&NotificationLog{}).
+		Where("id = ?", logEntry.ID).
+		Updates(map[string]interface{}{
+			"read":    true,
+			"read_at": now,
+		}).Error; err != nil {
+		c.JSON(500, gin.H{"error": "Failed to update notification"})
+		return
+	}
+
+	logEntry.Read = true
+	logEntry.ReadAt = &now
+
+	c.JSON(200, gin.H{"success": true, "notification": logEntry})
+}
+
+// DismissNotification marks a single notification as dismissed
+func (h *Handler) DismissNotification(c *gin.Context) {
+	email, exists := c.Get("email")
+	if !exists {
+		c.JSON(401, gin.H{"error": "Authentication required"})
+		return
+	}
+
+	userID, err := h.getUserIDByEmail(email.(string))
+	if err != nil {
+		c.JSON(500, gin.H{"error": "Failed to get user information"})
+		return
+	}
+
+	idParam := c.Param("id")
+	notificationID, err := strconv.ParseUint(idParam, 10, 32)
+	if err != nil {
+		c.JSON(400, gin.H{"error": "Invalid notification ID"})
+		return
+	}
+
+	var logEntry NotificationLog
+	if err := h.db.Where("id = ? AND user_id = ?", notificationID, userID).First(&logEntry).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			c.JSON(404, gin.H{"error": "Notification not found"})
+			return
+		}
+		c.JSON(500, gin.H{"error": "Failed to load notification"})
+		return
+	}
+
+	if logEntry.Dismissed {
+		c.JSON(200, gin.H{"success": true, "notification": logEntry})
+		return
+	}
+
+	now := time.Now()
+	updates := map[string]interface{}{
+		"dismissed":    true,
+		"dismissed_at": now,
+		"read":         true,
+		"read_at":      gorm.Expr("COALESCE(read_at, ?)", now),
+	}
+
+	if err := h.db.Model(&NotificationLog{}).
+		Where("id = ?", logEntry.ID).
+		Updates(updates).Error; err != nil {
+		c.JSON(500, gin.H{"error": "Failed to update notification"})
+		return
+	}
+
+	logEntry.Dismissed = true
+	logEntry.DismissedAt = &now
+	if logEntry.ReadAt == nil {
+		logEntry.ReadAt = &now
+	}
+	logEntry.Read = true
+
+	c.JSON(200, gin.H{"success": true, "notification": logEntry})
+}
+
+// DismissAllNotifications dismisses all notifications for the current user
+func (h *Handler) DismissAllNotifications(c *gin.Context) {
+	email, exists := c.Get("email")
+	if !exists {
+		c.JSON(401, gin.H{"error": "Authentication required"})
+		return
+	}
+
+	userID, err := h.getUserIDByEmail(email.(string))
+	if err != nil {
+		c.JSON(500, gin.H{"error": "Failed to get user information"})
+		return
+	}
+
+	now := time.Now()
+	result := h.db.Model(&NotificationLog{}).
+		Where("user_id = ? AND dismissed = ?", userID, false).
+		Updates(map[string]interface{}{
+			"dismissed":    true,
+			"dismissed_at": now,
+			"read":         true,
+			"read_at":      gorm.Expr("COALESCE(read_at, ?)", now),
+		})
+
+	if result.Error != nil {
+		c.JSON(500, gin.H{"error": "Failed to dismiss notifications"})
+		return
+	}
+
+	c.JSON(200, gin.H{"success": true, "updated": result.RowsAffected})
+}
+
 // GetStats returns statistics about push notifications
 func (h *Handler) GetStats(c *gin.Context) {
 	stats, err := GetSubscriptionStats(h.db)
@@ -471,6 +626,21 @@ func (h *Handler) NotificationRedirect(c *gin.Context) {
 	} else {
 		// Default to dashboard
 		redirectURL = "/dashboard"
+	}
+
+	if !notificationLog.Read {
+		now := time.Now()
+		if err := h.db.Model(&NotificationLog{}).
+			Where("id = ?", notificationLog.ID).
+			Updates(map[string]interface{}{
+				"read":    true,
+				"read_at": now,
+			}).Error; err != nil {
+			log.Printf("Failed to mark notification %d as read: %v", notificationLog.ID, err)
+		} else {
+			notificationLog.Read = true
+			notificationLog.ReadAt = &now
+		}
 	}
 
 	// Return the redirect info as JSON (for SPA navigation)

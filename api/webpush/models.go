@@ -48,18 +48,24 @@ const (
 
 // NotificationLog stores a history of sent notifications
 type NotificationLog struct {
-	gorm.Model
-	UserID    uint                  `gorm:"index" json:"user_id"`
-	EventType NotificationEventType `gorm:"type:varchar(50);index" json:"event_type"`
-	Title     string                `gorm:"type:varchar(255)" json:"title"`
-	Body      string                `gorm:"type:text" json:"body"`
-	URL       string                `gorm:"type:text" json:"url"`
-	ServerID  *uint                 `gorm:"index" json:"server_id,omitempty"`    // Associated server ID if applicable
-	Metadata  string                `gorm:"type:text" json:"metadata,omitempty"` // JSON encoded metadata
-	Success   bool                  `gorm:"default:false" json:"sent"`
-	ErrorMsg  string                `gorm:"type:text" json:"error_msg,omitempty"`
-	SentAt    time.Time             `json:"sent_at"`
-	CreatedAt time.Time             `json:"created_at"`
+	ID          uint                  `gorm:"primaryKey" json:"id"`
+	UserID      uint                  `gorm:"index" json:"user_id"`
+	EventType   NotificationEventType `gorm:"type:varchar(50);index" json:"event_type"`
+	Title       string                `gorm:"type:varchar(255)" json:"title"`
+	Body        string                `gorm:"type:text" json:"body"`
+	URL         string                `gorm:"type:text" json:"url"`
+	ServerID    *uint                 `gorm:"index" json:"server_id,omitempty"`    // Associated server ID if applicable
+	Metadata    string                `gorm:"type:text" json:"metadata,omitempty"` // JSON encoded metadata
+	Success     bool                  `gorm:"default:false" json:"sent"`
+	ErrorMsg    string                `gorm:"type:text" json:"error_msg,omitempty"`
+	SentAt      time.Time             `json:"sent_at"`
+	Read        bool                  `gorm:"default:false" json:"read"`
+	ReadAt      *time.Time            `json:"read_at,omitempty"`
+	Dismissed   bool                  `gorm:"default:false" json:"dismissed"`
+	DismissedAt *time.Time            `json:"dismissed_at,omitempty"`
+	CreatedAt   time.Time             `json:"created_at"`
+	UpdatedAt   time.Time             `json:"updated_at"`
+	DeletedAt   *time.Time            `gorm:"index" json:"deleted_at,omitempty"`
 }
 
 // TableName overrides for consistent naming

@@ -104,6 +104,7 @@ func (ns *NotificationSender) SendToAll(eventType NotificationEventType, notific
 			serverID,
 			false, // Will update after send attempt
 			"",
+			notification.Data,
 		)
 
 		// Update notification to use the log ID in the URL
@@ -147,6 +148,7 @@ func (ns *NotificationSender) NotifyServerAdded(serverID uint, serverURL string)
 		Body:  fmt.Sprintf("Server %s has been added to monitoring", serverURL),
 		Icon:  "/icon-192.png",
 		Tag:   "server-added",
+		URL:   fmt.Sprintf("/server/%d", serverID),
 		Data: map[string]interface{}{
 			"type":      string(EventServerAdded),
 			"serverUrl": serverURL,
@@ -168,6 +170,7 @@ func (ns *NotificationSender) NotifyServerOffline(serverID uint, serverURL, serv
 		Icon:  "/icon-192.png",
 		Badge: "/badge-error.png",
 		Tag:   "server-offline-" + serverURL,
+		URL:   fmt.Sprintf("/server/%d", serverID),
 		Data: map[string]interface{}{
 			"type":      string(EventServerOffline),
 			"serverUrl": serverURL,
@@ -189,6 +192,7 @@ func (ns *NotificationSender) NotifyServerOnline(serverID uint, serverURL, serve
 		Icon:  "/icon-192.png",
 		Badge: "/badge-success.png",
 		Tag:   "server-online-" + serverURL,
+		URL:   fmt.Sprintf("/server/%d", serverID),
 		Data: map[string]interface{}{
 			"type":      string(EventServerOnline),
 			"serverUrl": serverURL,
@@ -209,6 +213,7 @@ func (ns *NotificationSender) NotifyServerDeleted(serverID uint, serverURL strin
 		Body:  fmt.Sprintf("Server %s has been removed from monitoring", serverURL),
 		Icon:  "/icon-192.png",
 		Tag:   "server-deleted",
+		URL:   fmt.Sprintf("/server/%d", serverID),
 		Data: map[string]interface{}{
 			"type":      string(EventServerDeleted),
 			"serverUrl": serverURL,
@@ -228,6 +233,7 @@ func (ns *NotificationSender) NotifyServerDeactivated(serverID uint, serverURL s
 		Body:  fmt.Sprintf("Server %s has been automatically deactivated: %s", serverURL, reason),
 		Icon:  "/icon-192.png",
 		Tag:   "server-deactivated",
+		URL:   fmt.Sprintf("/server/%d", serverID),
 		Data: map[string]interface{}{
 			"type":      string(EventServerDeactivated),
 			"serverUrl": serverURL,
@@ -248,6 +254,7 @@ func (ns *NotificationSender) NotifyScanCompleted(serverID uint, serverURL strin
 		Body:  fmt.Sprintf("Scan of %s found %d findings", serverURL, findingsCount),
 		Icon:  "/icon-192.png",
 		Tag:   "scan-complete-" + serverURL,
+		URL:   fmt.Sprintf("/server/%d", serverID),
 		Data: map[string]interface{}{
 			"type":          string(EventScanCompleted),
 			"serverUrl":     serverURL,
@@ -270,6 +277,7 @@ func (ns *NotificationSender) NotifyHighRiskFound(serverID uint, serverURL strin
 		Icon:  "/icon-192.png",
 		Badge: "/badge-warning.png",
 		Tag:   "high-risk-" + serverURL,
+		URL:   fmt.Sprintf("/server/%d", serverID),
 		Data: map[string]interface{}{
 			"type":        string(EventHighRiskFound),
 			"serverUrl":   serverURL,

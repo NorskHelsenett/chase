@@ -270,6 +270,78 @@ export async function getNotificationHistory(limit = 50) {
 }
 
 /**
+ * Mark a notification as read
+ */
+export async function markNotificationRead(id) {
+	try {
+		const response = await fetch(`/api/push/history/${id}/read`, {
+			method: 'POST',
+			headers: {
+				'Content-Type': 'application/json'
+			}
+		});
+
+		if (!response.ok) {
+			const error = await response.json().catch(() => ({}));
+			throw new Error(error.error || 'Failed to mark notification as read');
+		}
+
+		return await response.json();
+	} catch (error) {
+		console.error('Error marking notification as read:', error);
+		throw error;
+	}
+}
+
+/**
+ * Dismiss a notification
+ */
+export async function dismissNotification(id) {
+	try {
+		const response = await fetch(`/api/push/history/${id}/dismiss`, {
+			method: 'POST',
+			headers: {
+				'Content-Type': 'application/json'
+			}
+		});
+
+		if (!response.ok) {
+			const error = await response.json().catch(() => ({}));
+			throw new Error(error.error || 'Failed to dismiss notification');
+		}
+
+		return await response.json();
+	} catch (error) {
+		console.error('Error dismissing notification:', error);
+		throw error;
+	}
+}
+
+/**
+ * Dismiss all notifications
+ */
+export async function dismissAllNotifications() {
+	try {
+		const response = await fetch('/api/push/history/dismiss-all', {
+			method: 'POST',
+			headers: {
+				'Content-Type': 'application/json'
+			}
+		});
+
+		if (!response.ok) {
+			const error = await response.json().catch(() => ({}));
+			throw new Error(error.error || 'Failed to dismiss notifications');
+		}
+
+		return await response.json();
+	} catch (error) {
+		console.error('Error dismissing notifications:', error);
+		throw error;
+	}
+}
+
+/**
  * Send a test notification
  */
 export async function sendTestNotification() {

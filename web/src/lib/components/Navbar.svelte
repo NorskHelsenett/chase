@@ -1,4 +1,5 @@
 <script>
+	import { onMount } from 'svelte';
 	import {
 		Home,
 		Settings,
@@ -14,6 +15,7 @@
 	import { page } from '$app/stores';
 	import { isLoggedIn } from '$lib/auth';
 	import { tooltip } from '$lib/actions/tooltip';
+	import { unreadCount, loadNotifications, resetNotifications } from '$lib/push/notificationStore';
 
 	function submenu(node) {
 		function updateSubmenuPosition(event) {
@@ -67,6 +69,22 @@
 		await goto('/profile');
 	}
 
+	onMount(() => {
+		const unsubscribe = isLoggedIn.subscribe((loggedIn) => {
+			if (loggedIn) {
+				loadNotifications().catch((error) => {
+					console.error('Failed to load notifications:', error);
+				});
+			} else {
+				resetNotifications();
+			}
+		});
+
+		return () => {
+			unsubscribe();
+		};
+	});
+
 	function handleMouseEnter(route) {
 		if (route.submenu) {
 			activeSubmenu = route;
@@ -75,6 +93,13 @@
 
 	function handleMouseLeave() {
 		activeSubmenu = null;
+	}
+
+	function formatUnread(count) {
+		if (!count) {
+			return '';
+		}
+		return count > 99 ? '99+' : `${count}`;
 	}
 </script>
 
@@ -133,11 +158,18 @@
 		<div class="mt-8">
 			<button
 				on:click={toProfile}
-				class="text-gray-300 hover:text-white tooltip"
+				class="relative inline-flex text-gray-300 hover:text-white tooltip"
 				use:tooltip
 				data-tooltip="Profile"
 			>
 				<Avatar />
+				{#if $unreadCount > 0}
+					<span
+						class="absolute -top-1 -right-1 min-w-[1.5rem] rounded-full bg-green-700 px-1.5 py-0.5 text-center text-[0.65rem] font-semibold text-green-400 border border-green-500/30 shadow"
+					>
+						{formatUnread($unreadCount)}
+					</span>
+				{/if}
 			</button>
 		</div>
 	{:else}
