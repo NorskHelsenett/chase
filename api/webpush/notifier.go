@@ -247,6 +247,53 @@ func (ns *NotificationSender) NotifyServerDeactivated(serverID uint, serverURL s
 	return err
 }
 
+// NotifyCertificateExpired sends a notification when a server's certificate has expired
+func (ns *NotificationSender) NotifyCertificateExpired(serverID uint, serverURL, serverName string, expiryDate time.Time) error {
+	notification := &Notification{
+		Title: "Certificate Expired",
+		Body:  fmt.Sprintf("SSL certificate for %s expired on %s", serverName, expiryDate.Format("2006-01-02")),
+		Icon:  "/icon-192.png",
+		Badge: "/badge-error.png",
+		Tag:   "cert-expired-" + serverURL,
+		URL:   fmt.Sprintf("/server/%d", serverID),
+		Data: map[string]interface{}{
+			"type":       string(EventCertificateExpired),
+			"serverUrl":  serverURL,
+			"serverId":   serverID,
+			"expiryDate": expiryDate.Format(time.RFC3339),
+			"url":        fmt.Sprintf("/server/%d", serverID),
+			"timestamp":  time.Now().Unix(),
+		},
+	}
+
+	_, err := ns.SendToAll(EventCertificateExpired, notification, &serverID)
+	return err
+}
+
+// NotifyCertificateExpiringSoon sends a notification when a certificate is expiring soon
+func (ns *NotificationSender) NotifyCertificateExpiringSoon(serverID uint, serverURL, serverName string, expiryDate time.Time, daysLeft int) error {
+	notification := &Notification{
+		Title: "Certificate Expiring Soon",
+		Body:  fmt.Sprintf("SSL certificate for %s expires in %d days (%s)", serverName, daysLeft, expiryDate.Format("2006-01-02")),
+		Icon:  "/icon-192.png",
+		Badge: "/badge-warning.png",
+		Tag:   "cert-expiring-" + serverURL,
+		URL:   fmt.Sprintf("/server/%d", serverID),
+		Data: map[string]interface{}{
+			"type":       string(EventCertificateExpiringSoon),
+			"serverUrl":  serverURL,
+			"serverId":   serverID,
+			"expiryDate": expiryDate.Format(time.RFC3339),
+			"daysLeft":   daysLeft,
+			"url":        fmt.Sprintf("/server/%d", serverID),
+			"timestamp":  time.Now().Unix(),
+		},
+	}
+
+	_, err := ns.SendToAll(EventCertificateExpiringSoon, notification, &serverID)
+	return err
+}
+
 // NotifyScanCompleted sends a notification when a security scan completes
 func (ns *NotificationSender) NotifyScanCompleted(serverID uint, serverURL string, findingsCount int) error {
 	notification := &Notification{

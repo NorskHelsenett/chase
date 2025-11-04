@@ -123,10 +123,52 @@ func pingServer(server Server) PingResult {
 		result.ResponseTime = float64(time.Since(startTime).Milliseconds())
 		result.StatusCode = resp.StatusCode
 
+		// Extract certificate and connection details if HTTPS
+		if scheme == "https://" && resp.TLS != nil && len(resp.TLS.PeerCertificates) > 0 {
+			result.PingDetail = extractConnectionDetails(resp, fullURL)
+		}
+
 		return result
 	}
 
 	// If we get here, both HTTPS and HTTP failed
 	result.Error = lastErr.Error()
 	return result
+}
+
+// extractConnectionDetails extracts certificate and connection information from HTTP response
+func extractConnectionDetails(resp *http.Response, url string) *PingDetail {
+	detail := &PingDetail{
+		RedirectCount: 0, // TODO: track redirects if needed
+	}
+
+	if resp.TLS != nil && len(resp.TLS.PeerCertificates) > 0 {
+		cert := resp.TLS.PeerCertificates[0]
+
+		// Certificate validation
+		detail.TLSValid = true
+		detail.CertExpiryDate = cert.NotAfter
+		detail.CertIssuer = cert.Issuer.CommonName
+		detail.CertCommonName = cert.Subject.CommonName
+
+		// Organization name
+		if len(cert.Subject.Organization) > 0 {
+			detail.OrganizationName = cert.Subject.Organization[0]
+		}
+
+		// Check if certificate is expired or expiring soon
+		if time.Now().After(cert.NotAfter) {
+			detail.TLSValid = false
+		}
+	}
+
+	// Extract IP address from remote address
+	if resp.Request != nil && resp.Request.RemoteAddr != "" {
+		host, _, err := net.SplitHostPort(resp.Request.RemoteAddr)
+		if err == nil {
+			detail.IP = host
+		}
+	}
+
+	return detail
 }

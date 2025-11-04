@@ -67,6 +67,9 @@ func runMonitoring() {
 		// Get the previous online status before pinging
 		wasOnline := isServerOnline(server)
 
+		// Get the previous certificate expiry status
+		wasCertExpired, prevCertExpiry := getCertificateStatus(server)
+
 		result := pingServer(server)
 
 		interval, shouldRemainActive := calculateNextCheckInterval(server)
@@ -84,6 +87,16 @@ func runMonitoring() {
 			tx.Rollback()
 			log.Printf("Error saving server %s: %v", server.URL, err)
 			continue
+		}
+
+		// Save PingDetail first if it exists
+		if result.PingDetail != nil {
+			if err := tx.Create(result.PingDetail).Error; err != nil {
+				tx.Rollback()
+				log.Printf("Error saving ping detail for %s: %v", server.URL, err)
+				continue
+			}
+			result.DetailID = &result.PingDetail.ID
 		}
 
 		if err := tx.Create(&result).Error; err != nil {
@@ -108,6 +121,30 @@ func runMonitoring() {
 			}
 			go NotifyServerStatusChange(server.ID, server.URL, serverName, wasOnline, isOnline)
 		}
+
+		// Check certificate expiry status and send notification
+		if result.PingDetail != nil {
+			isCertExpired := !result.PingDetail.CertExpiryDate.IsZero() && time.Now().After(result.PingDetail.CertExpiryDate)
+			daysUntilExpiry := int(time.Until(result.PingDetail.CertExpiryDate).Hours() / 24)
+
+			// Notify if certificate just expired
+			if isCertExpired && !wasCertExpired {
+				serverName := server.URL
+				if server.Comment != "" && len(server.Comment) < 100 {
+					serverName = server.Comment
+				}
+				go NotifyCertificateExpired(server.ID, server.URL, serverName, result.PingDetail.CertExpiryDate)
+			} else if !isCertExpired && daysUntilExpiry <= 30 && daysUntilExpiry > 0 {
+				// Notify for certificates expiring soon (only if we haven't notified before or if the expiry date changed)
+				if prevCertExpiry.IsZero() || !prevCertExpiry.Equal(result.PingDetail.CertExpiryDate) {
+					serverName := server.URL
+					if server.Comment != "" && len(server.Comment) < 100 {
+						serverName = server.Comment
+					}
+					go NotifyCertificateExpiringSoon(server.ID, server.URL, serverName, result.PingDetail.CertExpiryDate, daysUntilExpiry)
+				}
+			}
+		}
 	}
 }
 
@@ -126,4 +163,22 @@ func isServerOnline(server Server) bool {
 	}
 
 	return mostRecent.Error == ""
+}
+
+// getCertificateStatus checks the previous certificate expiry status
+// Returns (isExpired, expiryDate)
+func getCertificateStatus(server Server) (bool, time.Time) {
+	if len(server.PingResults) == 0 {
+		return false, time.Time{}
+	}
+
+	// Get the most recent result with detail
+	for _, result := range server.PingResults {
+		if result.PingDetail != nil && !result.PingDetail.CertExpiryDate.IsZero() {
+			isExpired := time.Now().After(result.PingDetail.CertExpiryDate)
+			return isExpired, result.PingDetail.CertExpiryDate
+		}
+	}
+
+	return false, time.Time{}
 }

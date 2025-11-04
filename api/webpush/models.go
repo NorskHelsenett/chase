@@ -37,13 +37,15 @@ type NotificationPreference struct {
 type NotificationEventType string
 
 const (
-	EventServerAdded       NotificationEventType = "server_added"
-	EventServerOffline     NotificationEventType = "server_offline"
-	EventServerOnline      NotificationEventType = "server_online"
-	EventServerDeleted     NotificationEventType = "server_deleted"
-	EventServerDeactivated NotificationEventType = "server_deactivated"
-	EventScanCompleted     NotificationEventType = "scan_completed"
-	EventHighRiskFound     NotificationEventType = "high_risk_found"
+	EventServerAdded             NotificationEventType = "server_added"
+	EventServerOffline           NotificationEventType = "server_offline"
+	EventServerOnline            NotificationEventType = "server_online"
+	EventServerDeleted           NotificationEventType = "server_deleted"
+	EventServerDeactivated       NotificationEventType = "server_deactivated"
+	EventScanCompleted           NotificationEventType = "scan_completed"
+	EventHighRiskFound           NotificationEventType = "high_risk_found"
+	EventCertificateExpired      NotificationEventType = "certificate_expired"
+	EventCertificateExpiringSoon NotificationEventType = "certificate_expiring_soon"
 )
 
 // NotificationLog stores a history of sent notifications
@@ -95,6 +97,8 @@ func GetAllEventTypes() []NotificationEventType {
 		EventServerDeactivated,
 		EventScanCompleted,
 		EventHighRiskFound,
+		EventCertificateExpired,
+		EventCertificateExpiringSoon,
 	}
 }
 
