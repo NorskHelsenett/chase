@@ -224,7 +224,7 @@
 		{/if}
 	</section>
 
-	<div class="max-w-3xl mx-auto p-4 space-y-6">
+	<div class="max-w-7xl mx-auto p-4 space-y-6">
 		<!-- Security Headers Section -->
 		<Headers {loading} {results} />
 
