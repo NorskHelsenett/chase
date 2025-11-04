@@ -50,18 +50,13 @@
 </script>
 
 <div class="min-h-screen w-full text-gray-100">
-	<div class="border-b border-[#2a2a2a]">
+	<div class="">
 		<!-- Title Bar -->
 		<div class="pb-2">
 			<div class="flex justify-between gap-4 text-gray-400">
 				<div class="flex items-center gap-1">
 					<Clock class="w-4 h-4" />
 					<span class="text-sm">{relativeTime}</span>
-				</div>
-				<span class="text-xl text-gray-500 truncate max-w-[25em]">{data.query}</span>
-				<div class="flex items-center gap-2">
-					<Share class="w-4 h-4" />
-					<Trash2 class="w-4 h-4 mr-2 alert" />
 				</div>
 			</div>
 		</div>
