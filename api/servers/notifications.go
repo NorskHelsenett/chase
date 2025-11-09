@@ -8,6 +8,8 @@ import (
 	"github.com/norskhelsenett/chase/webpush"
 )
 
+const certificateNotificationCooldown = 24 * time.Hour
+
 // NotifyServerAdded sends a push notification when a new server is added
 func NotifyServerAdded(serverID uint, serverURL string) {
 	db := database.GetDB()
@@ -78,6 +80,14 @@ func NotifyServerDeactivated(serverID uint, serverURL, reason string) {
 // NotifyCertificateExpired sends a push notification when a certificate has expired
 func NotifyCertificateExpired(serverID uint, serverURL, serverName string, expiryDate time.Time) {
 	db := database.GetDB()
+
+	if alreadySent, err := webpush.HasNotificationSince(db, serverID, webpush.EventCertificateExpired, expiryDate); err != nil {
+		log.Printf("Failed to check certificate expired notification history for %s: %v", serverURL, err)
+	} else if alreadySent {
+		log.Printf("Skipping certificate expired notification for %s (already sent after %s)", serverURL, expiryDate.Format(time.RFC3339))
+		return
+	}
+
 	sender, err := webpush.NewNotificationSender(db)
 	if err != nil {
 		log.Printf("Failed to create notification sender: %v", err)
@@ -92,6 +102,14 @@ func NotifyCertificateExpired(serverID uint, serverURL, serverName string, expir
 // NotifyCertificateExpiringSoon sends a push notification when a certificate is expiring soon
 func NotifyCertificateExpiringSoon(serverID uint, serverURL, serverName string, expiryDate time.Time, daysLeft int) {
 	db := database.GetDB()
+
+	if throttled, err := webpush.ShouldThrottleNotification(db, serverID, webpush.EventCertificateExpiringSoon, certificateNotificationCooldown); err != nil {
+		log.Printf("Failed to check certificate expiring notification history for %s: %v", serverURL, err)
+	} else if throttled {
+		log.Printf("Skipping certificate expiring soon notification for %s (cooldown active)", serverURL)
+		return
+	}
+
 	sender, err := webpush.NewNotificationSender(db)
 	if err != nil {
 		log.Printf("Failed to create notification sender: %v", err)

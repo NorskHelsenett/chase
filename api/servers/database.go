@@ -5,11 +5,14 @@ import (
 	"log"
 	"os"
 	"strconv"
+	"sync/atomic"
 	"time"
 
 	"github.com/norskhelsenett/chase/database"
 	"gorm.io/gorm"
 )
+
+var monitoringInProgress atomic.Bool
 
 func AutoMigrate(db *gorm.DB) error {
 	// Migrate the schemas
@@ -50,13 +53,23 @@ func getMonitoringInterval() int {
 }
 
 func runMonitoring() {
+	if !monitoringInProgress.CompareAndSwap(false, true) {
+		log.Printf("Monitoring run already in progress, skipping")
+		return
+	}
+	defer monitoringInProgress.Store(false)
+
 	db := database.GetDB()
 	var servers []Server
 
 	now := time.Now()
 
 	weekAgo := now.Add(-7 * 24 * time.Hour)
-	if err := db.Preload("PingResults", "timestamp > ?", weekAgo).
+	if err := db.
+		Preload("PingResults", func(db *gorm.DB) *gorm.DB {
+			return db.Where("timestamp > ?", weekAgo).Order("timestamp DESC")
+		}).
+		Preload("PingResults.PingDetail").
 		Where("active = ? AND next_check <= ?", true, now).
 		Find(&servers).Error; err != nil {
 		log.Printf("Error fetching servers: %v", err)
@@ -134,7 +147,7 @@ func runMonitoring() {
 					serverName = server.Comment
 				}
 				go NotifyCertificateExpired(server.ID, server.URL, serverName, result.PingDetail.CertExpiryDate)
-			} else if !isCertExpired && daysUntilExpiry <= 30 && daysUntilExpiry > 0 {
+			} else if !isCertExpired && daysUntilExpiry <= 14 && daysUntilExpiry > 0 {
 				// Notify for certificates expiring soon (only if we haven't notified before or if the expiry date changed)
 				if prevCertExpiry.IsZero() || !prevCertExpiry.Equal(result.PingDetail.CertExpiryDate) {
 					serverName := server.URL
@@ -172,12 +185,20 @@ func getCertificateStatus(server Server) (bool, time.Time) {
 		return false, time.Time{}
 	}
 
-	// Get the most recent result with detail
-	for _, result := range server.PingResults {
-		if result.PingDetail != nil && !result.PingDetail.CertExpiryDate.IsZero() {
-			isExpired := time.Now().After(result.PingDetail.CertExpiryDate)
-			return isExpired, result.PingDetail.CertExpiryDate
+	var latest *PingResult
+	for i := range server.PingResults {
+		result := &server.PingResults[i]
+		if result.PingDetail == nil || result.PingDetail.CertExpiryDate.IsZero() {
+			continue
 		}
+		if latest == nil || result.Timestamp.After(latest.Timestamp) {
+			latest = result
+		}
+	}
+
+	if latest != nil {
+		isExpired := time.Now().After(latest.PingDetail.CertExpiryDate)
+		return isExpired, latest.PingDetail.CertExpiryDate
 	}
 
 	return false, time.Time{}

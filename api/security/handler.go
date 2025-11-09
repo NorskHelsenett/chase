@@ -434,6 +434,7 @@ func notifyHighRisk(serverURL, riskLevel, description string) {
 // notifySecurityTxtExpiration sends notifications based on security.txt expiration status
 func notifySecurityTxtExpiration(serverURL string, expiryDate time.Time) {
 	db := database.GetDB()
+	const securityTxtCooldown = 24 * time.Hour
 
 	// Look up the server ID and name from the URL
 	var server struct {
@@ -454,36 +455,25 @@ func notifySecurityTxtExpiration(serverURL string, expiryDate time.Time) {
 	daysUntilExpiry := time.Until(expiryDate).Hours() / 24
 	daysLeft := int(daysUntilExpiry)
 
-	// Check if we've already sent a notification for this expiration event
-	// We'll use the notification log to track this
-	var existingNotification struct {
-		ID uint
-	}
-
 	switch {
 	case daysUntilExpiry < 0:
-		// Already expired - send notification only once
-		if err := db.Table("notification_logs").
-			Select("id").
-			Where("server_id = ? AND event_type = ? AND success = true AND created_at > ?",
-				server.ID, "securitytxt_expired", expiryDate).
-			First(&existingNotification).Error; err == nil {
-			// Already notified
+		alreadySent, err := webpush.HasNotificationSince(db, server.ID, webpush.EventSecurityTxtExpired, expiryDate)
+		if err != nil {
+			log.Printf("Failed to check security.txt expired notification history for %s: %v", serverName, err)
+		} else if alreadySent {
+			log.Printf("Skipping security.txt expired notification for %s (already sent)", serverName)
 			return
 		}
 
-		// Import the servers package function
 		log.Printf("Sending security.txt expired notification for %s", serverName)
 		notifySecurityTxtExpiredHelper(server.ID, server.URL, serverName, expiryDate)
 
 	case daysUntilExpiry < 7:
-		// Less than 7 days - send notification
-		if err := db.Table("notification_logs").
-			Select("id").
-			Where("server_id = ? AND event_type = ? AND success = true AND created_at > ?",
-				server.ID, "securitytxt_expiring_7days", time.Now().Add(-24*time.Hour)).
-			First(&existingNotification).Error; err == nil {
-			// Already notified in last 24 hours
+		throttled, err := webpush.ShouldThrottleNotification(db, server.ID, webpush.EventSecurityTxtExpiring7Days, securityTxtCooldown)
+		if err != nil {
+			log.Printf("Failed to check security.txt (7 days) notification history for %s: %v", serverName, err)
+		} else if throttled {
+			log.Printf("Skipping security.txt expiring (7 days) notification for %s (cooldown active)", serverName)
 			return
 		}
 
@@ -491,13 +481,11 @@ func notifySecurityTxtExpiration(serverURL string, expiryDate time.Time) {
 		notifySecurityTxtExpiring7DaysHelper(server.ID, server.URL, serverName, expiryDate, daysLeft)
 
 	case daysUntilExpiry < 30:
-		// Less than 30 days - send notification
-		if err := db.Table("notification_logs").
-			Select("id").
-			Where("server_id = ? AND event_type = ? AND success = true AND created_at > ?",
-				server.ID, "securitytxt_expiring_30days", time.Now().Add(-24*time.Hour)).
-			First(&existingNotification).Error; err == nil {
-			// Already notified in last 24 hours
+		throttled, err := webpush.ShouldThrottleNotification(db, server.ID, webpush.EventSecurityTxtExpiring30Days, securityTxtCooldown)
+		if err != nil {
+			log.Printf("Failed to check security.txt (30 days) notification history for %s: %v", serverName, err)
+		} else if throttled {
+			log.Printf("Skipping security.txt expiring (30 days) notification for %s (cooldown active)", serverName)
 			return
 		}
 
@@ -505,13 +493,11 @@ func notifySecurityTxtExpiration(serverURL string, expiryDate time.Time) {
 		notifySecurityTxtExpiring30DaysHelper(server.ID, server.URL, serverName, expiryDate, daysLeft)
 
 	case daysUntilExpiry < 90:
-		// Less than 90 days - send notification
-		if err := db.Table("notification_logs").
-			Select("id").
-			Where("server_id = ? AND event_type = ? AND success = true AND created_at > ?",
-				server.ID, "securitytxt_expiring_90days", time.Now().Add(-24*time.Hour)).
-			First(&existingNotification).Error; err == nil {
-			// Already notified in last 24 hours
+		throttled, err := webpush.ShouldThrottleNotification(db, server.ID, webpush.EventSecurityTxtExpiring90Days, securityTxtCooldown)
+		if err != nil {
+			log.Printf("Failed to check security.txt (90 days) notification history for %s: %v", serverName, err)
+		} else if throttled {
+			log.Printf("Skipping security.txt expiring (90 days) notification for %s (cooldown active)", serverName)
 			return
 		}
 
