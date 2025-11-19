@@ -2,6 +2,7 @@
 package servers
 
 import (
+	"errors"
 	"net/url"
 	"strings"
 	"time"
@@ -9,6 +10,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/norskhelsenett/chase/database"
 	"github.com/norskhelsenett/chase/utils"
+	"gorm.io/gorm"
 )
 
 // BatchImportRequest represents the data sent in a batch import request
@@ -41,7 +43,6 @@ func BatchImportServers(c *gin.Context) {
 
 	db := database.GetDB()
 
-	// Start a database transaction
 	tx := db.Begin()
 	if tx.Error != nil {
 		c.JSON(500, gin.H{"error": "Failed to start transaction"})
@@ -54,55 +55,50 @@ func BatchImportServers(c *gin.Context) {
 
 	// Default settings
 	if request.Settings.UpdateInterval <= 0 {
-		request.Settings.UpdateInterval = 15 // Default to 15 minutes
+		request.Settings.UpdateInterval = 15
 	}
 
-	// Process each URL
+	// Collect IDs to schedule after commit
+	var serversToCheck []uint
+
 	for _, site := range request.Sites {
-		var err error
-		var parsedURL *url.URL
-		var formattedURL string
-
-		// Process URL format
-		if formattedURL, err = utils.EnsureHTTPS(site); err != nil {
-			response.Failed++
-			response.Errors = append(response.Errors, "Invalid URL format: "+site)
-			continue
-		}
-
-		parsedURL, err = url.Parse(formattedURL)
+		formattedURL, err := utils.EnsureHTTPS(site)
 		if err != nil {
 			response.Failed++
 			response.Errors = append(response.Errors, "Invalid URL format: "+site)
 			continue
 		}
 
-		// Check if host is present
-		if parsedURL.Host == "" {
+		parsedURL, err := url.Parse(formattedURL)
+		if err != nil || parsedURL.Host == "" {
 			response.Failed++
-			response.Errors = append(response.Errors, "URL must contain a valid host: "+site)
+			response.Errors = append(response.Errors, "Invalid URL format: "+site)
 			continue
 		}
 
-		// Remove scheme (http/https) from URL for storage
 		cleanURL := strings.TrimPrefix(strings.TrimPrefix(formattedURL, "https://"), "http://")
 
-		// Check if server already exists (including soft-deleted ones)
-		var existingServer Server
-		if tx.Unscoped().Where("url = ?", cleanURL).First(&existingServer).RowsAffected > 0 {
-			// Server already exists
+		// Try to fetch existing server (safe, returns only one row)
+		var existing Server
+		lookupErr := tx.Unscoped().
+			Where("url = ?", cleanURL).
+			Take(&existing).
+			Error
+
+		// If exists
+		if lookupErr == nil {
 			if request.UpdateExisting {
-				// Check if server was soft-deleted and restore if needed
-				if existingServer.DeletedAt.Valid {
-					// Undelete the server by setting DeletedAt to NULL
-					if err := tx.Unscoped().Model(&existingServer).Update("deleted_at", nil).Error; err != nil {
+				// Undelete if soft deleted
+				if existing.DeletedAt.Valid {
+					if err := tx.Unscoped().
+						Model(&existing).
+						Update("deleted_at", nil).Error; err != nil {
 						response.Failed++
-						response.Errors = append(response.Errors, "Failed to restore deleted server: "+cleanURL+" - "+err.Error())
+						response.Errors = append(response.Errors, "Failed to restore deleted: "+cleanURL)
 						continue
 					}
 				}
 
-				// Update existing server with new settings
 				updates := map[string]interface{}{
 					"follow_redirect": request.Settings.FollowRedirect,
 					"allow_insecure":  request.Settings.AllowInsecure,
@@ -111,50 +107,52 @@ func BatchImportServers(c *gin.Context) {
 					"next_check":      time.Now().Add(time.Duration(request.Settings.UpdateInterval) * time.Minute),
 				}
 
-				if err := tx.Model(&existingServer).Updates(updates).Error; err != nil {
+				if err := tx.Model(&existing).Updates(updates).Error; err != nil {
 					response.Failed++
-					response.Errors = append(response.Errors, "Failed to update server: "+cleanURL+" - "+err.Error())
+					response.Errors = append(response.Errors, "Failed to update server: "+cleanURL)
 					continue
 				}
 
-				// Queue the updated server for checking
-				go checkServer(existingServer.ID, nil)
-
-				response.Imported++ // Count updates as successful imports
+				response.Imported++
+				serversToCheck = append(serversToCheck, existing.ID)
 			} else {
-				// Skip existing servers when update_existing is false
 				response.Failed++
-				response.Errors = append(response.Errors, "Server URL already exists: "+cleanURL)
-				continue
-			}
-		} else {
-			// Create a new server
-			server := Server{
-				URL:                cleanURL,
-				Active:             request.Settings.Active,
-				FollowRedirect:     request.Settings.FollowRedirect,
-				AllowInsecure:      request.Settings.AllowInsecure,
-				ExpectedStatusCode: 200,
-				UpdateInterval:     request.Settings.UpdateInterval,
-				NextCheck:          time.Now().Add(time.Duration(request.Settings.UpdateInterval) * time.Minute),
+				response.Errors = append(response.Errors, "Server already exists: "+cleanURL)
 			}
 
-			// Attempt to create the server in the transaction
-			if err := tx.Create(&server).Error; err != nil {
-				response.Failed++
-				response.Errors = append(response.Errors, "Failed to create server: "+cleanURL+" - "+err.Error())
-				continue
-			}
-
-			// Queue the new server for checking
-			go checkServer(server.ID, nil)
-
-			response.Imported++
+			continue
 		}
 
+		// If record not found → create new server
+		if !errors.Is(lookupErr, gorm.ErrRecordNotFound) {
+			// unexpected DB error
+			response.Failed++
+			response.Errors = append(response.Errors, "DB error checking server: "+cleanURL)
+			continue
+		}
+
+		// Create new server
+		server := Server{
+			URL:                cleanURL,
+			Active:             request.Settings.Active,
+			FollowRedirect:     request.Settings.FollowRedirect,
+			AllowInsecure:      request.Settings.AllowInsecure,
+			ExpectedStatusCode: 200,
+			UpdateInterval:     request.Settings.UpdateInterval,
+			NextCheck:          time.Now().Add(time.Duration(request.Settings.UpdateInterval) * time.Minute),
+		}
+
+		if err := tx.Create(&server).Error; err != nil {
+			response.Failed++
+			response.Errors = append(response.Errors, "Failed to create server: "+cleanURL)
+			continue
+		}
+
+		response.Imported++
+		serversToCheck = append(serversToCheck, server.ID)
 	}
 
-	// Commit the transaction if we imported at least one server
+	// Commit if anything changed
 	if response.Imported > 0 {
 		if err := tx.Commit().Error; err != nil {
 			tx.Rollback()
@@ -162,8 +160,12 @@ func BatchImportServers(c *gin.Context) {
 			return
 		}
 	} else {
-		// If nothing was imported, rollback
 		tx.Rollback()
+	}
+
+	// Schedule checks *after* commit (never inside transaction)
+	for _, id := range serversToCheck {
+		go checkServer(id, nil)
 	}
 
 	c.JSON(200, response)
