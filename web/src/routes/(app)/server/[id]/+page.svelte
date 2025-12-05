@@ -220,10 +220,5 @@
 		</div>
 	{:else}
 		<SecurityScan {searchResults} />
-		{#if searchResults?.healthProbes}
-			<div class="mt-6">
-				<HealthProbes probes={searchResults.healthProbes} />
-			</div>
-		{/if}
 	{/if}
 </div>

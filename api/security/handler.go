@@ -198,7 +198,7 @@ func LastSecurityScanHandler(c *gin.Context) {
 	}
 
 	// Check if security scan exists
-	var securityReport types.SecurityReportRecord
+	var securityReport SecurityReportRecord
 	err := db.Where("server_url = ?", server.URL).
 		Order("created_at DESC").
 		First(&securityReport).Error
@@ -216,7 +216,7 @@ func LastSecurityScanHandler(c *gin.Context) {
 	}
 
 	// Return existing security report
-	var report types.SecurityReport
+	var report SecurityReport
 	if err := json.Unmarshal(securityReport.ReportData, &report); err != nil {
 		c.JSON(500, gin.H{"error": "Failed to parse security report"})
 		return
