@@ -336,10 +336,20 @@
 		network = new vis.Network(container, { nodes: nodeDataSet, edges: edgeDataSet }, options);
 
 		// Optional: show rough progress while physics runs
+		let lastFitTime = 0;
 		network.on &&
 			network.on('stabilizationProgress', (p: any) => {
 				if (!p?.total) return;
 				loadPct = Math.min(100, Math.round((p.iterations / p.total) * 100));
+
+				// Auto-fit every 100ms to keep nodes visible during positioning
+				const now = Date.now();
+				if (now - lastFitTime > 100) {
+					lastFitTime = now;
+					try {
+						network.fit?.({ animation: false });
+					} catch {}
+				}
 			});
 
 		// Hide the loader only after the graph is laid out *and* a frame has been painted
