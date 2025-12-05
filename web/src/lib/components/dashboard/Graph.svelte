@@ -366,7 +366,7 @@
 
 						// Dynamic zoom: zoom out more with many nodes
 						const nodeCount = nodeDataSet.length;
-						const scale = nodeCount > 3000 ? 0.05 : nodeCount > 2000 ? 0.07 : nodeCount > 1000 ? 0.1 : nodeCount > 500 ? 0.15 : nodeCount > 200 ? 0.2 : nodeCount > 100 ? 0.3 : nodeCount > 50 ? 0.4 : nodeCount > 20 ? 0.6 : 1.0;
+						const scale = nodeCount > 3000 ? 0.08 : nodeCount > 2000 ? 0.10 : nodeCount > 1000 ? 0.13 : nodeCount > 500 ? 0.18 : nodeCount > 200 ? 0.23 : nodeCount > 100 ? 0.33 : nodeCount > 50 ? 0.43 : nodeCount > 20 ? 0.63 : 1.0;
 						network.fit?.({ animation: false });
 						network.moveTo?.({ scale, animation: false });
 					} catch {}
@@ -449,7 +449,7 @@ try {
 
   // Dynamic zoom: zoom out more with many nodes
   const nodeCount = nodeDataSet.length;
-  const scale = nodeCount > 3000 ? 0.05 : nodeCount > 2000 ? 0.07 : nodeCount > 1000 ? 0.1 : nodeCount > 500 ? 0.15 : nodeCount > 200 ? 0.2 : nodeCount > 100 ? 0.3 : nodeCount > 50 ? 0.4 : nodeCount > 20 ? 0.6 : 1.0;
+  const scale = nodeCount > 3000 ? 0.08 : nodeCount > 2000 ? 0.10 : nodeCount > 1000 ? 0.13 : nodeCount > 500 ? 0.18 : nodeCount > 200 ? 0.23 : nodeCount > 100 ? 0.33 : nodeCount > 50 ? 0.43 : nodeCount > 20 ? 0.63 : 1.0;
   network.fit?.({ animation: false });
   network.moveTo?.({ scale, animation: false });
 } catch {}
