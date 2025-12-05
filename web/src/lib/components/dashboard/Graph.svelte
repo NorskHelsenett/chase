@@ -328,7 +328,7 @@
 					damping: 0.6,
 					avoidOverlap: 0.3 // a touch more spacing between blobs
 				},
-				stabilization: { enabled: true, iterations: 300, fit: true },
+				stabilization: { enabled: true, iterations: 200, fit: true },
 				adaptiveTimestep: true
 			}
 		} as any;
@@ -364,8 +364,11 @@
 						// const cur = get(graphData);
 						// updateData(cur.nodes, cur.edges);
 
-						// Optional: keep the initial framing nice without selecting
+						// Dynamic zoom: zoom out more with many nodes
+						const nodeCount = nodeDataSet.length;
+						const scale = nodeCount > 1000 ? 0.1 : nodeCount > 500 ? 0.15 : nodeCount > 200 ? 0.2 : nodeCount > 100 ? 0.3 : nodeCount > 50 ? 0.4 : nodeCount > 20 ? 0.6 : 1.0;
 						network.fit?.({ animation: false });
+						network.moveTo?.({ scale, animation: false });
 					} catch {}
 				});
 
@@ -382,7 +385,7 @@
 							damping: 0.75,
 							avoidOverlap: 0.2
 						},
-						stabilization: { enabled: true, iterations: 120, fit: true },
+						stabilization: { enabled: true, iterations: 60, fit: true },
 						adaptiveTimestep: true
 					}
 				});
@@ -401,7 +404,7 @@
 								damping: 0.95, // Very high damping for smooth slowdown
 								avoidOverlap: 0.15
 							},
-							stabilization: { enabled: true, iterations: 80, fit: false },
+							stabilization: { enabled: true, iterations: 40, fit: false },
 							adaptiveTimestep: true
 						}
 					});
@@ -444,8 +447,11 @@ try {
   // const cur = get(graphData);
   // updateData(cur.nodes, cur.edges);
 
-  // Optional: keep the initial framing nice without selecting
+  // Dynamic zoom: zoom out more with many nodes
+  const nodeCount = nodeDataSet.length;
+  const scale = nodeCount > 1000 ? 0.1 : nodeCount > 500 ? 0.15 : nodeCount > 200 ? 0.2 : nodeCount > 100 ? 0.3 : nodeCount > 50 ? 0.4 : nodeCount > 20 ? 0.6 : 1.0;
   network.fit?.({ animation: false });
+  network.moveTo?.({ scale, animation: false });
 } catch {}
 
 					});
