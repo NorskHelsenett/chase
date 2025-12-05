@@ -2,6 +2,7 @@ package security
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net"
 	"strings"
@@ -95,8 +96,15 @@ func (s *Scanner) evaluateDMARC(ctx context.Context, resolver *net.Resolver, hos
 }
 
 func (s *Scanner) evaluateCAA(ctx context.Context, resolver *net.Resolver, host string, analysis *DNSAnalysis) {
-	records, err := resolver.LookupCAA(ctx, host)
+	records, err := lookupCAARecords(ctx, host)
 	if err != nil {
+		if errors.Is(err, errCAAUnsupported) {
+			analysis.Findings = append(analysis.Findings,
+				"CAA lookup unavailable in current runtime")
+		} else {
+			analysis.Findings = append(analysis.Findings,
+				fmt.Sprintf("CAA lookup failed: %v", err))
+		}
 		return
 	}
 
@@ -109,4 +117,16 @@ func (s *Scanner) evaluateCAA(ctx context.Context, resolver *net.Resolver, host 
 		analysis.Findings = append(analysis.Findings,
 			fmt.Sprintf("CAA policy: %s (tag=%s flag=%d)", record.Value, record.Tag, record.Flag))
 	}
+}
+
+var errCAAUnsupported = errors.New("CAA lookup unsupported")
+
+type caaRecord struct {
+	Flag  uint8
+	Tag   string
+	Value string
+}
+
+func lookupCAARecords(ctx context.Context, host string) ([]caaRecord, error) {
+	return nil, errCAAUnsupported
 }

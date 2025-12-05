@@ -143,7 +143,10 @@ func (s *Scanner) checkHealthProbes(ctx context.Context, domain string) (*Health
 		}
 
 		analysis.Paths[path] = resp.StatusCode
-		if resp.StatusCode >= 500 {
+		if resp.StatusCode >= 400 {
+			if isLikelySoft404(body) {
+				continue
+			}
 			continue
 		}
 
@@ -184,4 +187,32 @@ func truncateEvidence(body []byte) string {
 		return string(body[:200]) + "..."
 	}
 	return string(body)
+}
+
+func isLikelySoft404(body []byte) bool {
+	lower := strings.ToLower(string(body))
+	if len(body) > 8192 {
+		return true
+	}
+
+	keywords := []string{
+		"404 not found",
+		"page not found",
+		"siden finnes ikke",
+		"seite nicht gefunden",
+		"pagina no encontrada",
+		"pagina não encontrada",
+		"pagina non trovata",
+		"страница не найдена",
+		"页面未找到",
+		"خطأ 404",
+	}
+
+	for _, keyword := range keywords {
+		if strings.Contains(lower, keyword) {
+			return true
+		}
+	}
+
+	return false
 }

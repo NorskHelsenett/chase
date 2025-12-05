@@ -3,18 +3,24 @@ package security
 
 import (
 	"context"
+	"crypto/sha256"
 	"crypto/tls"
 	"crypto/x509"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"net"
 	"net/http"
+	"sort"
 	"strings"
 	"sync"
 	"time"
 )
 
-const defaultScannerTimeout = 10 * time.Second
+const (
+	defaultScannerTimeout        = 10 * time.Second
+	defaultMaxConcurrentRequests = 8
+)
 
 type Scanner struct {
 	timeout           time.Duration
@@ -23,6 +29,10 @@ type Scanner struct {
 
 	tlsMu     sync.Mutex
 	tlsIssues []string
+	tasks     []ScanTask
+	version   string
+
+	requestLimiter chan struct{}
 }
 
 type requestOptions struct {
@@ -34,11 +44,16 @@ func NewScanner(timeout time.Duration) *Scanner {
 		timeout = defaultScannerTimeout
 	}
 
-	return &Scanner{
+	scanner := &Scanner{
 		timeout:           timeout,
 		strictTransport:   newTransport(false),
 		insecureTransport: newTransport(true),
 	}
+
+	scanner.tasks = defaultScanTasks()
+	scanner.requestLimiter = make(chan struct{}, defaultMaxConcurrentRequests)
+	scanner.recalculateVersion()
+	return scanner
 }
 
 func newTransport(insecure bool) *http.Transport {
@@ -58,6 +73,32 @@ func boolPtr(b bool) *bool {
 	return &b
 }
 
+func (s *Scanner) RegisterTask(task ScanTask) {
+	s.tasks = append(s.tasks, task)
+	s.recalculateVersion()
+}
+
+func (s *Scanner) Tasks() []ScanTask {
+	return append([]ScanTask(nil), s.tasks...)
+}
+
+func (s *Scanner) SetMaxConcurrentRequests(n int) {
+	if n <= 0 {
+		n = 1
+	}
+	s.requestLimiter = make(chan struct{}, n)
+}
+
+func (s *Scanner) recalculateVersion() {
+	names := make([]string, 0, len(s.tasks))
+	for _, task := range s.tasks {
+		names = append(names, task.Name())
+	}
+	sort.Strings(names)
+	sum := sha256.Sum256([]byte(strings.Join(names, "|")))
+	s.version = hex.EncodeToString(sum[:8])
+}
+
 func (s *Scanner) client(followRedirects bool, insecure bool) *http.Client {
 	client := &http.Client{
 		Transport: s.strictTransport,
@@ -72,6 +113,15 @@ func (s *Scanner) client(followRedirects bool, insecure bool) *http.Client {
 		}
 	}
 	return client
+}
+
+func (s *Scanner) doRequest(client *http.Client, req *http.Request) (*http.Response, error) {
+	if s.requestLimiter == nil {
+		s.requestLimiter = make(chan struct{}, defaultMaxConcurrentRequests)
+	}
+	s.requestLimiter <- struct{}{}
+	defer func() { <-s.requestLimiter }()
+	return client.Do(req)
 }
 
 func (s *Scanner) recordTLSIssue(url string, err error) {
@@ -154,107 +204,20 @@ func (s *Scanner) ScanWebsite(ctx context.Context, domain string) (*SecurityRepo
 		TargetURL:     domain,
 		ScanErrors:    make([]ScanError, 0),
 	}
+	report.ScannerVersion = s.version
 
-	wg.Add(11)
+	req := ScanRequest{Domain: domain}
 
-	go func() {
-		defer wg.Done()
-		if robotsTxt, err := s.checkRobotsTxt(ctx, domain); err != nil {
-			report.addError("headers", err)
-		} else {
-			report.RobotsTxt = *robotsTxt
-		}
-	}()
-
-	go func() {
-		defer wg.Done()
-		if securityTxt, err := s.checkSecurityTxt(ctx, domain); err != nil {
-			report.addError("headers", err)
-		} else {
-			report.SecurityTxt = *securityTxt
-		}
-	}()
-
-	go func() {
-		defer wg.Done()
-		if headers, err := s.checkSecurityHeaders(ctx, domain); err != nil {
-			report.addError("headers", err)
-		} else {
-			report.Headers = *headers
-		}
-	}()
-
-	go func() {
-		defer wg.Done()
-		if cert, err := s.checkCertificate(ctx, domain); err != nil {
-			report.addError("certificate", err)
-		} else {
-			report.Certificate = *cert
-		}
-	}()
-
-	go func() {
-		defer wg.Done()
-		if admin, err := s.checkAdminPages(ctx, domain); err != nil {
-			report.addError("adminPages", err)
-		} else {
-			report.AdminPages = *admin
-		}
-	}()
-
-	go func() {
-		defer wg.Done()
-		if swagger, err := s.checkSwaggerDocs(ctx, domain); err != nil {
-			report.addError("swagger", err)
-		} else {
-			report.Swagger = *swagger
-		}
-	}()
-
-	go func() {
-		defer wg.Done()
-		if infra, err := s.checkInfrastructure(ctx, domain); err != nil {
-			report.addError("infrastructure", err)
-		} else {
-			report.Infrastructure = *infra
-		}
-	}()
-
-	go func() {
-		defer wg.Done()
-		if dns, err := s.checkDNS(ctx, domain); err != nil {
-			report.addError("dns", err)
-		} else {
-			report.DNSRecords = *dns
-		}
-	}()
-
-	go func() {
-		defer wg.Done()
-		if files, err := s.checkFileExposure(ctx, domain); err != nil {
-			report.addError("files", err)
-		} else {
-			report.FileExposure = *files
-		}
-	}()
-
-	go func() {
-		defer wg.Done()
-		if apis, err := s.checkAPIExposures(ctx, domain); err != nil {
-			report.addError("api", err)
-		} else {
-			report.APIExposure = *apis
-		}
-	}()
-
-	go func() {
-		defer wg.Done()
-		if health, err := s.checkHealthProbes(ctx, domain); err != nil {
-			report.addError("health", err)
-		} else {
-			report.HealthProbes = *health
-		}
-	}()
+	for _, task := range s.tasks {
+		task := task
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if err := task.Run(ctx, s, req, report); err != nil {
+				report.addError(task.Name(), err)
+			}
+		}()
+	}
 
 	wg.Wait()
 	s.appendTLSIssues(report)

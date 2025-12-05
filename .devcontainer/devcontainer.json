@@ -32,10 +32,6 @@
 	// "features": {},
 	// Use 'forwardPorts' to make a list of ports inside the container available locally.
 	// "forwardPorts": [],
-	// Add network host mode for accessing host's localhost
-	"runArgs": [
-		"--network=host"
-	],
 	// Use 'postCreateCommand' to run commands after the container is created.
 	"postCreateCommand": "mkdir -p .debug/data && touch api/.env && cd web && npm install"
 	// Configure tool-specific properties.

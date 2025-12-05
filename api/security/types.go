@@ -5,6 +5,7 @@ import "time"
 type SecurityReport struct {
 	ScanTimestamp  time.Time              `json:"scanTimestamp"`
 	TargetURL      string                 `json:"targetUrl"`
+	ScannerVersion string                 `json:"scannerVersion"`
 	Headers        HeadersAnalysis        `json:"headers"`
 	Certificate    CertificateAnalysis    `json:"certificate"`
 	AdminPages     AdminPagesAnalysis     `json:"adminPages"`
