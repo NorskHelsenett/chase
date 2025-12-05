@@ -4,13 +4,15 @@
 	import type { Server } from '$lib/models';
 	import ScreenshotGrid from '$lib/components/grid/ScreenshotGrid.svelte';
 	import CustomSelect from '$lib/components/ui/CustomSelect.svelte';
-	import { Search, Grid, Server as ServerIcon, Filter } from 'lucide-svelte';
+	import { Search, Grid, Filter } from 'lucide-svelte';
+	import { servers, isLoading, serverStoreActions } from '$lib/stores/serverStore';
 
-	let servers: Server[] = [];
 	let filteredServers: Server[] = [];
-	let loading = true;
 	let searchTerm = '';
-	let filterStatus = 'all'; // 'all', 'online', 'issues', 'new'
+	let filterStatus = 'all';
+	let hasMounted = false;
+	let lastActiveFilter: string | null | undefined = undefined;
+	let activeFilter: string | null = null;
 
 	function isSuccessfulStatus(status: number): boolean {
 		return status >= 200 && status < 400;
@@ -33,11 +35,17 @@
 	$: activeFilter = $page.url.searchParams.get('active');
 
 	$: {
-		if (servers && servers.length > 0) {
-			// First filter by active status
-			let result = servers.filter((server: Server) => server.active);
+		const allServers = $servers || [];
+		if (allServers.length === 0) {
+			filteredServers = [];
+		} else {
+			let result = allServers;
+			if (activeFilter === 'true') {
+				result = result.filter((server: Server) => server.active);
+			} else if (activeFilter === 'false') {
+				result = result.filter((server: Server) => !server.active);
+			}
 
-			// Then filter by search term if it exists
 			if (searchTerm) {
 				const term = searchTerm.toLowerCase();
 				result = result.filter(
@@ -48,7 +56,6 @@
 				);
 			}
 
-			// Then apply status filter
 			if (filterStatus !== 'all') {
 				if (filterStatus === 'online') {
 					result = result.filter(
@@ -69,26 +76,18 @@
 		}
 	}
 
-	async function fetchServers() {
-		loading = true;
-		try {
-			const url = new URL('/api/servers', window.location.origin);
-			if (activeFilter !== null) {
-				url.searchParams.set('active', activeFilter);
-			}
-
-			const response = await fetch(url);
-			servers = await response.json();
-
-			// Initial filtering happens in the reactive statement above
-		} catch (error) {
-			console.error('Failed to fetch server data:', error);
-		} finally {
-			loading = false;
-		}
+	async function loadData(force = false) {
+		await serverStoreActions.loadServers(activeFilter ?? null, force);
 	}
 
-	onMount(fetchServers);
+	onMount(async () => {
+		hasMounted = true;
+	});
+
+	$: if (hasMounted && activeFilter !== undefined && activeFilter !== lastActiveFilter) {
+		lastActiveFilter = activeFilter;
+		loadData();
+	}
 </script>
 
 <div class="p-4 min-h-screen w-full">
@@ -176,7 +175,7 @@
 		</div>
 	</div>
 
-	{#if loading}
+	{#if $isLoading && filteredServers.length === 0}
 		<div class="flex flex-col items-center justify-center py-16">
 			<div class="relative">
 				<div

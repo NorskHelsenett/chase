@@ -11,6 +11,35 @@ import (
 	"github.com/norskhelsenett/chase/database"
 )
 
+type pingSummary struct {
+	StatusCode   int       `json:"status_code"`
+	ResponseTime float64   `json:"response_time_ms"`
+	Error        string    `json:"error,omitempty"`
+	Timestamp    time.Time `json:"timestamp"`
+	Detail       *PingDetail `json:"detail,omitempty"`
+}
+
+type serverSummary struct {
+	ID                  uint          `json:"ID"`
+	URL                 string        `json:"url"`
+	Active              bool          `json:"active"`
+	FollowRedirect      bool          `json:"follow_redirect"`
+	NextCheck           time.Time     `json:"next_check"`
+	AllowInsecure       bool          `json:"allow_insecure"`
+	ExpectedStatusCode  int           `json:"expected_status"`
+	Comment             string        `json:"comment"`
+	UpdateInterval      int           `json:"update_interval"`
+	CreatedAt           time.Time     `json:"CreatedAt"`
+	PingResults         []pingSummary `json:"ping_results"`
+	SecurityRiskLevel   string        `json:"security_risk_level,omitempty"`
+	SecurityDescription string        `json:"security_description,omitempty"`
+	SecurityScanTime    time.Time     `json:"security_scan_time,omitempty"`
+	HeaderScore         string        `json:"header_score,omitempty"`
+	CertScore           string        `json:"cert_score,omitempty"`
+	AdminRisk           string        `json:"admin_risk,omitempty"`
+	APIRisk             string        `json:"api_risk,omitempty"`
+}
+
 // GetServerResults handles the request to retrieve ping results for a specific server.
 //
 // It extracts the server ID from the URL parameters and validates it exists in the database.
@@ -117,8 +146,6 @@ func GetServerResults(c *gin.Context) {
 	c.JSON(http.StatusOK, results)
 }
 
-
-
 // GetServersWithSecurityStatus fetches all servers with their latest ping result but without detailed ping history
 // This makes the initial load much faster
 func GetServersWithSecurityStatus(c *gin.Context) {
@@ -143,17 +170,44 @@ func GetServersWithSecurityStatus(c *gin.Context) {
 		return
 	}
 
-	// For each server, get only the latest 20 ping result
+	summaries := make([]serverSummary, len(servers))
+
+	// For each server, get only a trimmed set of recent ping results
 	for i := range servers {
-		var latestPings []PingResult
-		if err := db.Where("server_id = ?", servers[i].ID).
+		summaries[i] = serverSummary{
+			ID:                 servers[i].ID,
+			URL:                servers[i].URL,
+			Active:             servers[i].Active,
+			FollowRedirect:     servers[i].FollowRedirect,
+			NextCheck:          servers[i].NextCheck,
+			AllowInsecure:      servers[i].AllowInsecure,
+			ExpectedStatusCode: servers[i].ExpectedStatusCode,
+			Comment:            servers[i].Comment,
+			UpdateInterval:     servers[i].UpdateInterval,
+			CreatedAt:          servers[i].CreatedAt,
+			PingResults:        []pingSummary{},
+		}
+
+		var latestModels []PingResult
+		if err := db.Model(&PingResult{}).
+			Select("status_code, response_time, error, timestamp").
+			Where("server_id = ?", servers[i].ID).
 			Order("timestamp DESC").
-			Limit(10).
-			Find(&latestPings).Error; err == nil {
-			servers[i].PingResults = latestPings
-		} else {
-			// If no ping results, initialize empty array
-			servers[i].PingResults = []PingResult{}
+			Limit(5).
+			Find(&latestModels).Error; err == nil {
+			summaries[i].PingResults = make([]pingSummary, len(latestModels))
+			for idx, pr := range latestModels {
+				status := pr.StatusCode
+				if pr.Error != "" {
+					status = 0
+				}
+				summaries[i].PingResults[idx] = pingSummary{
+					StatusCode:   status,
+					ResponseTime: pr.ResponseTime,
+					Error:        pr.Error,
+					Timestamp:    pr.Timestamp,
+				}
+			}
 		}
 	}
 
@@ -174,9 +228,9 @@ func GetServersWithSecurityStatus(c *gin.Context) {
 			Order("created_at DESC").
 			First(&securityReport).Error; err == nil {
 			// Add security report metadata to server
-			servers[i].SecurityRiskLevel = securityReport.RiskLevel
-			servers[i].SecurityDescription = securityReport.Description
-			servers[i].SecurityScanTime = securityReport.CreatedAt
+			summaries[i].SecurityRiskLevel = securityReport.RiskLevel
+			summaries[i].SecurityDescription = securityReport.Description
+			summaries[i].SecurityScanTime = securityReport.CreatedAt
 
 			// Extract additional security details from report data if available
 			if len(securityReport.ReportData) > 0 {
@@ -199,14 +253,14 @@ func GetServersWithSecurityStatus(c *gin.Context) {
 
 				if err := json.Unmarshal(securityReport.ReportData, &fullReport); err == nil {
 					// Populate additional security details
-					servers[i].HeaderScore = fullReport.Headers.Score
-					servers[i].CertScore = fullReport.Certificate.Grade
-					servers[i].AdminRisk = string(fullReport.AdminPages.Risk)
-					servers[i].APIRisk = string(fullReport.Swagger.Risk)
+					summaries[i].HeaderScore = fullReport.Headers.Score
+					summaries[i].CertScore = fullReport.Certificate.Grade
+					summaries[i].AdminRisk = string(fullReport.AdminPages.Risk)
+					summaries[i].APIRisk = string(fullReport.Swagger.Risk)
 				}
 			}
 		}
 	}
 
-	c.JSON(http.StatusOK, servers)
+	c.JSON(http.StatusOK, summaries)
 }

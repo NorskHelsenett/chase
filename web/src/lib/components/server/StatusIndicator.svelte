@@ -3,7 +3,7 @@
 	import { computePosition, autoPlacement, offset, shift, arrow } from '@floating-ui/dom';
 	import type { PingResult } from '$lib/models';
 
-	export let pingResults: PingResult[] = [];
+export let pingResults: PingResult[] = [];
 
 	let status: 'up' | 'down' = 'down';
 	let tooltipElement: HTMLDivElement;
@@ -18,7 +18,9 @@
 		timestamp: number;
 	};
 
-	let aggregatedDays: AggregatedDay[] = [];
+let aggregatedDays: AggregatedDay[] = [];
+
+const pingSuccessful = (ping: PingResult) => ping.status_code > 0 && ping.status_code < 400;
 
 	$: {
 		// Only perform aggregation if we have more than 50 pings
@@ -35,7 +37,7 @@
 						};
 					}
 					acc[date].totalPings++;
-					if (!ping.error && ping.status_code < 400) {
+					if (pingSuccessful(ping)) {
 						acc[date].successfulPings++;
 					}
 					return acc;
@@ -55,9 +57,9 @@
 			aggregatedDays = pingResults
 				.map((ping) => ({
 					date: new Date(ping.timestamp).toISOString().split('T')[0],
-					uptime: !ping.error && ping.status_code < 400 ? 100 : 0,
+					uptime: pingSuccessful(ping) ? 100 : 0,
 					totalPings: 1,
-					successfulPings: !ping.error && ping.status_code < 400 ? 1 : 0,
+					successfulPings: pingSuccessful(ping) ? 1 : 0,
 					timestamp: ping.timestamp
 				}))
 				.sort((a, b) => a.timestamp - b.timestamp); // Sort ascending by date

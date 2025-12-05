@@ -181,12 +181,34 @@ func AddServer(c *gin.Context) {
 	c.JSON(201, server)
 }
 
+type serverDetailResponse struct {
+	ID                  uint          `json:"ID"`
+	CreatedAt           time.Time     `json:"CreatedAt"`
+	UpdatedAt           time.Time     `json:"UpdatedAt"`
+	DeletedAt           *time.Time    `json:"DeletedAt"`
+	URL                 string        `json:"url"`
+	Active              bool          `json:"active"`
+	FollowRedirect      bool          `json:"follow_redirect"`
+	NextCheck           time.Time     `json:"next_check"`
+	AllowInsecure       bool          `json:"allow_insecure"`
+	ExpectedStatusCode  int           `json:"expected_status"`
+	Comment             string        `json:"comment"`
+	UpdateInterval      int           `json:"update_interval"`
+	PingResults         []pingSummary `json:"ping_results"`
+	SecurityRiskLevel   string        `json:"security_risk_level,omitempty"`
+	SecurityDescription string        `json:"security_description,omitempty"`
+	SecurityScanTime    time.Time     `json:"security_scan_time,omitempty"`
+	HeaderScore         string        `json:"header_score,omitempty"`
+	CertScore           string        `json:"cert_score,omitempty"`
+	AdminRisk           string        `json:"admin_risk,omitempty"`
+	APIRisk             string        `json:"api_risk,omitempty"`
+}
+
 func GetServer(c *gin.Context) {
 	db := database.GetDB()
 	id := c.Param("id")
 	var server Server
 
-	// Get the limit from query parameter, default to 30 days in seconds
 	limitDays := c.DefaultQuery("limit", "30")
 	days, err := strconv.Atoi(limitDays)
 	if err != nil {
@@ -194,19 +216,25 @@ func GetServer(c *gin.Context) {
 		return
 	}
 
-	// Calculate the cutoff time
+	const defaultMaxResults = 2000
+	const absoluteMaxResults = 5000
+
+	maxResults := defaultMaxResults
+	if maxParam := c.Query("max"); maxParam != "" {
+		if parsedMax, convErr := strconv.Atoi(maxParam); convErr == nil && parsedMax > 0 {
+			if parsedMax > absoluteMaxResults {
+				maxResults = absoluteMaxResults
+			} else {
+				maxResults = parsedMax
+			}
+		}
+	}
+
+	includeDetail := strings.ToLower(c.Query("includeDetail")) == "true"
+
 	cutoffTime := time.Now().AddDate(0, 0, -days)
 
-	// Create a subquery to get ping results within the time limit
-	subQuery := db.Table("ping_results").
-		Where("server_id = ? AND created_at >= ?", id, cutoffTime).
-		Order("created_at DESC")
-
-	err = db.Preload("PingResults", func(db *gorm.DB) *gorm.DB {
-		return db.Select("*").Table("(?) as ping_results", subQuery)
-	}).First(&server, id).Error
-
-	if err != nil {
+	if err := db.First(&server, id).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			c.JSON(404, gin.H{"error": "Server not found"})
 			return
@@ -215,7 +243,70 @@ func GetServer(c *gin.Context) {
 		return
 	}
 
-	c.JSON(200, server)
+	var pingResults []PingResult
+	pingQuery := db.Model(&PingResult{}).
+		Where("server_id = ? AND timestamp >= ?", id, cutoffTime).
+		Order("timestamp DESC").
+		Limit(maxResults)
+
+	if includeDetail {
+		pingQuery = pingQuery.Preload("PingDetail")
+	} else {
+		pingQuery = pingQuery.Select("status_code, response_time, error, timestamp")
+	}
+
+	if err := pingQuery.Find(&pingResults).Error; err != nil {
+		c.JSON(500, gin.H{"error": err.Error()})
+		return
+	}
+
+	pingSummaries := make([]pingSummary, len(pingResults))
+	for i, pr := range pingResults {
+		status := pr.StatusCode
+		if pr.Error != "" {
+			status = 0
+		}
+		pingSummaries[i] = pingSummary{
+			StatusCode:   status,
+			ResponseTime: pr.ResponseTime,
+			Error:        pr.Error,
+			Timestamp:    pr.Timestamp,
+		}
+		if includeDetail {
+			pingSummaries[i].Detail = pr.PingDetail
+		}
+	}
+
+	var deletedAt *time.Time
+	if server.DeletedAt.Valid {
+		t := server.DeletedAt.Time
+		deletedAt = &t
+	}
+
+	response := serverDetailResponse{
+		ID:                  server.ID,
+		CreatedAt:           server.CreatedAt,
+		UpdatedAt:           server.UpdatedAt,
+		DeletedAt:           deletedAt,
+		URL:                 server.URL,
+		Active:              server.Active,
+		FollowRedirect:      server.FollowRedirect,
+		NextCheck:           server.NextCheck,
+		AllowInsecure:       server.AllowInsecure,
+		ExpectedStatusCode:  server.ExpectedStatusCode,
+		Comment:             server.Comment,
+		UpdateInterval:      server.UpdateInterval,
+		PingResults:         pingSummaries,
+		SecurityRiskLevel:   server.SecurityRiskLevel,
+		SecurityDescription: server.SecurityDescription,
+		SecurityScanTime:    server.SecurityScanTime,
+		HeaderScore:         server.HeaderScore,
+		CertScore:           server.CertScore,
+		AdminRisk:           server.AdminRisk,
+		APIRisk:             server.APIRisk,
+	}
+
+	c.JSON(200, response)
 }
 
 func GetServers(c *gin.Context) {

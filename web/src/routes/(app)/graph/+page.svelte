@@ -1,14 +1,18 @@
 
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import CustomSelect from '$lib/components/ui/CustomSelect.svelte';
-	import { servers, serverStoreActions } from '$lib/stores/serverStore';
-	import { writable } from 'svelte/store';
-	import type { Server } from '$lib/models';
-	import Graph from '$lib/components/dashboard/Graph.svelte';
-	import { Share2 } from 'lucide-svelte';
+	import { page } from '$app/stores';
+import CustomSelect from '$lib/components/ui/CustomSelect.svelte';
+import { servers, serverStoreActions } from '$lib/stores/serverStore';
+import { writable } from 'svelte/store';
+import Graph from '$lib/components/dashboard/Graph.svelte';
+import { Share2 } from 'lucide-svelte';
+import type { Server, PingResult } from '$lib/models';
 
-	let statusFilter = 'all';
+let statusFilter = 'all';
+let hasMounted = false;
+let lastActiveFilter: string | null | undefined = undefined;
+let activeFilter: string | null = null;
 
 	function isSuccessfulStatus(status: number): boolean {
 		return status >= 200 && status < 400;
@@ -67,36 +71,18 @@
 		return levels;
 	}
 
-	async function loadServersFromCacheOrFetch() {
-		let cached = localStorage.getItem('servers');
-		let serverList: Server[] = [];
-		if (cached) {
-			try {
-				serverList = JSON.parse(cached);
-			} catch (e) {
-				serverList = [];
-			}
-		}
-		if (!serverList.length) {
-			await serverStoreActions.loadServers();
-			serverList = $servers;
-			localStorage.setItem('servers', JSON.stringify(serverList));
-		}
-		return serverList;
-	}
-
-	// --- Graph util (core logic for buildGraphData) ---
-	function buildGraphData(servers) {
-		const nodes = [];
-		const edges = [];
+// --- Graph util (core logic for buildGraphData) ---
+function buildGraphData(serverList: Server[]) {
+	const nodes: GraphNode[] = [];
+	const edges: GraphEdge[] = [];
 
 		const addedNodeIds = new Set();
 		const groupHostnames = new Set();
 		// Removed unused parentMap declaration
 
 		// 1. Count all groupings
-		const levelCounts = new Map();
-		servers.forEach((server) => {
+	const levelCounts = new Map<string, number>();
+	serverList.forEach((server) => {
 			try {
 				const hostname = new URL(normalizeUrl(server.url)).hostname;
 				getAllDomainLevels(hostname).forEach((level) => {
@@ -136,7 +122,7 @@
 		}
 
 		// 4. Add site and instance nodes, never adding site nodes that match groupHostnames
-		servers.forEach((server, idx) => {
+	serverList.forEach((server, idx) => {
 			try {
 				const serverUrl = normalizeUrl(server.url);
 				const url = new URL(serverUrl);
@@ -162,7 +148,8 @@
 						const latestPing =
 							server.ping_results && server.ping_results.length > 0
 								? server.ping_results.sort(
-										(a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+										(a: PingResult, b: PingResult) =>
+											new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
 									)[0]
 								: null;
 						// Calculate isDown for backwards compatibility
@@ -186,7 +173,8 @@
 				const latestPing =
 					server.ping_results && server.ping_results.length > 0
 						? server.ping_results.sort(
-								(a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+								(a: PingResult, b: PingResult) =>
+									new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
 							)[0]
 						: null;
 				// Calculate isDown for backwards compatibility, but we'll use statusText to determine the actual state
@@ -219,24 +207,40 @@
 		return { nodes, edges };
 	}
 
-	onMount(async () => {
-		isLoading.set(true);
-		await serverStoreActions.loadServers(null, true);
-		updateGraph();
-		isLoading.set(false);
+	$: activeFilter = $page.url.searchParams.get('active') ?? 'true';
+
+	onMount(() => {
+		hasMounted = true;
 	});
 
-	function updateGraph() {
-		let serverList = $servers;
+async function loadGraphData(force = false) {
+	isLoading.set(true);
+	try {
+		await serverStoreActions.loadServers(activeFilter ?? null, force);
+		updateGraph();
+	} finally {
+		isLoading.set(false);
+	}
+}
+
+	$: if (hasMounted && activeFilter !== lastActiveFilter) {
+		lastActiveFilter = activeFilter;
+		loadGraphData();
+	}
+
+function updateGraph() {
+	let serverList: Server[] = $servers;
 		if (statusFilter !== 'all') {
 			if (statusFilter === 'online') {
-				serverList = serverList.filter((server) => hasGoodPingHistory(server));
+				serverList = serverList.filter((server: Server) => hasGoodPingHistory(server));
 			} else if (statusFilter === 'issues' || statusFilter === 'offline') {
-				serverList = serverList.filter((server) => !hasGoodPingHistory(server));
+				serverList = serverList.filter((server: Server) => !hasGoodPingHistory(server));
 			} else if (statusFilter === 'new') {
 				const thirtyDaysAgo = new Date();
 				thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-				serverList = serverList.filter((server) => new Date(server.CreatedAt) >= thirtyDaysAgo);
+				serverList = serverList.filter(
+					(server: Server) => new Date(server.CreatedAt) >= thirtyDaysAgo
+				);
 			}
 		}
 		graphData.set(buildGraphData(serverList));

@@ -14,9 +14,12 @@
 	export let server: Server;
 	export let hover = false;
 
-	let rowData: ServerRowData;
+let rowData: ServerRowData;
 
-	$: rowData = mapServerToRowData(server);
+$: rowData = mapServerToRowData(server);
+
+const pingSuccessful = (ping: { status_code: number }) =>
+	ping.status_code > 0 && ping.status_code < 400;
 
 	function mapServerToRowData(server: Server): ServerRowData {
 		const sortedPings = [...(server.ping_results || [])].sort(
@@ -24,20 +27,14 @@
 		);
 
 		return {
-			status:
-				!sortedPings.length || sortedPings[0]?.error || sortedPings[0]?.status_code >= 400
-					? 'down'
-					: 'up',
+			status: !sortedPings.length || !pingSuccessful(sortedPings[0]) ? 'down' : 'up',
 			title: server.url,
 			// Prefer new fields from the server endpoint, fall back to security object if not available
 			headerScore: server.header_score || server.security?.headerRisk || '',
 			certScore: server.cert_score || server.security?.certRisk || '',
 			adminRisk: server.admin_risk?.toLowerCase() || server.security?.adminRisk || '',
 			apiRisk: server.api_risk?.toLowerCase() || server.security?.apiRisk || '',
-			uptime: (server.ping_results || [])
-				.slice(0, 10)
-				.reverse()
-				.map((ping) => (ping.error || ping.status_code >= 400 ? -1 : 1))
+			uptime: (server.ping_results || []).slice(0, 10).reverse().map((ping) => (pingSuccessful(ping) ? 1 : -1))
 		};
 	}
 

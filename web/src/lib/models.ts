@@ -14,6 +14,8 @@ export interface Server extends BaseModel {
 	allow_insecure: boolean;
 	expected_status: number;
 	comment: string;
+	name?: string;
+	description?: string;
 	ping_results: PingResult[];
 	security?: SecurityReport; // Make optional for backward compatibility
 	update_interval: number;

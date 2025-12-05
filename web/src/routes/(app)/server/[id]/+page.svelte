@@ -131,6 +131,10 @@
 		return server.ping_results[0] || null;
 	}
 
+	function isPingSuccessful(ping: { status_code: number }) {
+		return ping.status_code > 0 && ping.status_code < 400;
+	}
+
 	function calculateMetrics(server: Server) {
 		const decimals = 3;
 		const latestPing = getLatestPing(server);
@@ -144,8 +148,7 @@
 
 		const uptimeDay = Number(
 			(
-				(last24hPings.filter((ping) => !ping.error && ping.status_code < 400).length /
-					last24hPings.length) *
+				(last24hPings.filter((ping) => isPingSuccessful(ping)).length / last24hPings.length) *
 				100
 			).toFixed(decimals)
 		);
@@ -156,8 +159,7 @@
 
 		const uptimeMonth = Number(
 			(
-				(last30DayPings.filter((ping) => !ping.error && ping.status_code < 400).length /
-					last30DayPings.length) *
+				(last30DayPings.filter((ping) => isPingSuccessful(ping)).length / last30DayPings.length) *
 				100
 			).toFixed(decimals)
 		);

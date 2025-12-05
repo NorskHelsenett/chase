@@ -1,20 +1,40 @@
 import { writable, derived } from 'svelte/store';
 import { browser } from '$app/environment';
 
+const memoryCache = new Map();
+
+function getFilterKey(filter) {
+	if (filter === undefined || filter === null || filter === '') {
+		return 'all';
+	}
+	return String(filter);
+}
+
 // Initialize store with cached data from localStorage if available
 const initialData =
 	browser && localStorage.getItem('servers') ? JSON.parse(localStorage.getItem('servers')) : [];
+const initialLastUpdated =
+	browser && localStorage.getItem('serversLastUpdated')
+		? new Date(localStorage.getItem('serversLastUpdated'))
+		: null;
+const storedFilter = browser && localStorage.getItem('serversFilter');
+const initialFilter = storedFilter && storedFilter !== 'null' ? storedFilter : 'all';
 
 // Main server data store
 const serverStore = writable({
 	servers: initialData,
 	isLoading: false,
-	lastUpdated:
-		browser && localStorage.getItem('serversLastUpdated')
-			? new Date(localStorage.getItem('serversLastUpdated'))
-			: null,
-	error: null
+	lastUpdated: initialLastUpdated,
+	error: null,
+	currentFilter: initialFilter
 });
+
+if (initialData.length > 0 && initialLastUpdated) {
+	memoryCache.set(initialFilter, {
+		data: initialData,
+		lastUpdated: initialLastUpdated
+	});
+}
 
 // Derived store for statistics
 export const serverStats = derived(serverStore, ($store) => {
@@ -87,6 +107,7 @@ serverStore.subscribe((state) => {
 				'serversLastUpdated',
 				state.lastUpdated ? state.lastUpdated.toISOString() : new Date().toISOString()
 			);
+			localStorage.setItem('serversFilter', state.currentFilter || 'all');
 		} catch (error) {
 			console.warn('Failed to save servers to localStorage:', error);
 		}
@@ -97,6 +118,8 @@ serverStore.subscribe((state) => {
 export const serverStoreActions = {
 	// Load servers from API with optional filter
 	async loadServers(filter = null, force = false) {
+		const filterKey = getFilterKey(filter);
+
 		// Get current state
 		let currentState;
 		serverStore.update((state) => {
@@ -104,10 +127,12 @@ export const serverStoreActions = {
 			return { ...state, isLoading: true, error: null };
 		});
 
-		// If we have cached data and it's recent (less than 5 minutes old) and not forced refresh
 		const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
-		if (!force && currentState.lastUpdated && new Date(currentState.lastUpdated) > fiveMinutesAgo) {
-			// Just mark as not loading and return cached data
+		const hasFreshData =
+			currentState.lastUpdated && new Date(currentState.lastUpdated) > fiveMinutesAgo;
+		const isSameFilter = currentState.currentFilter === filterKey;
+
+		if (!force && hasFreshData && isSameFilter && currentState.servers.length > 0) {
 			serverStore.update((state) => ({
 				...state,
 				isLoading: false
@@ -115,10 +140,22 @@ export const serverStoreActions = {
 			return currentState.servers;
 		}
 
+		const cachedEntry = memoryCache.get(filterKey);
+		if (!force && cachedEntry && cachedEntry.lastUpdated > fiveMinutesAgo) {
+			serverStore.update((state) => ({
+				...state,
+				servers: cachedEntry.data,
+				isLoading: false,
+				lastUpdated: cachedEntry.lastUpdated,
+				currentFilter: filterKey
+			}));
+			return cachedEntry.data;
+		}
+
 		try {
 			// Build URL with query parameters
 			const url = new URL('/api/servers', window.location.origin);
-			if (filter !== null) {
+			if (filter !== null && filter !== undefined && filter !== '') {
 				url.searchParams.set('active', filter);
 			}
 
@@ -161,11 +198,18 @@ export const serverStoreActions = {
 				return nameA.localeCompare(nameB);
 			});
 
+			const updatedAt = new Date();
+			memoryCache.set(filterKey, {
+				data: mergedServers,
+				lastUpdated: updatedAt
+			});
+
 			serverStore.update((state) => ({
 				...state,
 				servers: mergedServers,
 				isLoading: false,
-				lastUpdated: new Date()
+				lastUpdated: updatedAt,
+				currentFilter: filterKey
 			}));
 
 			return mergedServers;

@@ -30,6 +30,9 @@
 	}
 	let searchQuery = '';
 	let statusFilter = 'all';
+	let hasMounted = false;
+	let lastActiveFilter: string | null | undefined = undefined;
+	let activeFilter: string | null = null;
 
 	// Subscribe to page store to get URL parameters
 	$: activeFilter = $page.url.searchParams.get('active');
@@ -67,7 +70,7 @@
 	$: filteredServers = $filteredStore;
 
 	async function fetchServers(forceRefresh = false) {
-		await serverStoreActions.loadServers(activeFilter, forceRefresh);
+		await serverStoreActions.loadServers(activeFilter ?? null, forceRefresh);
 	}
 
 	function handleSearch(event: CustomEvent) {
@@ -94,15 +97,16 @@
 		exportServersToCSV(filteredServers, filename);
 	}
 
-	// Watch for changes in activeFilter and refetch data
-	$: if (activeFilter !== undefined) {
+onMount(() => {
+	hasMounted = true;
+	// Always refresh data in background when visiting the dashboard
+	fetchServers(true);
+});
+
+	$: if (hasMounted && activeFilter !== undefined && activeFilter !== lastActiveFilter) {
+		lastActiveFilter = activeFilter;
 		fetchServers();
 	}
-
-	onMount(async () => {
-		// Initial fetch from cache or API (server data with ping_results included)
-		await fetchServers(true);
-	});
 </script>
 
 <div class="p-4 w-full">

@@ -348,10 +348,6 @@
 				try {
 					network.stopSimulation?.();
 				} catch {}
-				// Keep physics disabled for performance after layout
-				try {
-					network.setOptions({ physics: { enabled: false } });
-				} catch {}
 
 				// Wait a tick so the canvas draws before removing the overlay
 				requestAnimationFrame(() => {
@@ -372,9 +368,64 @@
 						network.fit?.({ animation: false });
 					} catch {}
 				});
+
+				// Phase 2: brief FA2 refine, then freeze — yields compact clusters
+				network.setOptions({
+					physics: {
+						enabled: true,
+						solver: 'forceAtlas2Based',
+						forceAtlas2Based: {
+							gravitationalConstant: -90,
+							centralGravity: 0.008, // tiny pull so clusters don't merge
+							springLength: 70, // shorter = tighter clusters
+							springConstant: 0.12, // stronger = tighter clusters
+							damping: 0.75,
+							avoidOverlap: 0.2
+						},
+						stabilization: { enabled: true, iterations: 120, fit: true },
+						adaptiveTimestep: true
+					}
+				});
+
+				network.once('stabilizationIterationsDone', () => {
+					// Phase 3: Smooth cooldown with high damping for a nice ease-out effect
+					network.setOptions({
+						physics: {
+							enabled: true,
+							solver: 'forceAtlas2Based',
+							forceAtlas2Based: {
+								gravitationalConstant: -50,
+								centralGravity: 0.005,
+								springLength: 70,
+								springConstant: 0.08,
+								damping: 0.95, // Very high damping for smooth slowdown
+								avoidOverlap: 0.15
+							},
+							stabilization: { enabled: true, iterations: 80, fit: false },
+							adaptiveTimestep: true
+						}
+					});
+
+					network.once('stabilizationIterationsDone', () => {
+						// Now completely stop the physics simulation
+						try {
+							network.stopSimulation?.();
+						} catch {}
+
+						// Disable physics completely to prevent any wobbling
+						try {
+							network.setOptions({ physics: false });
+						} catch {}
+
+						// Store final positions to lock them in place
+						try {
+							network.storePositions();
+						} catch {}
+					});
+				});
 			});
 
-		// Safety: if there are very few nodes and stabilization doesn’t fire,
+		// Safety: if there are very few nodes and stabilization doesn't fire,
 		// fall back to first draw event and auto-start as well
 		network.once &&
 			network.once('afterDrawing', () => {
@@ -399,35 +450,6 @@ try {
 
 					});
 			});
-
-		// Phase 2: brief FA2 refine, then freeze — yields compact clusters
-		network.once('stabilizationIterationsDone', () => {
-			network.setOptions({
-				physics: {
-					enabled: true,
-					solver: 'forceAtlas2Based',
-					forceAtlas2Based: {
-						gravitationalConstant: -90,
-						centralGravity: 0.008, // tiny pull so clusters don't merge
-						springLength: 70, // shorter = tighter clusters
-						springConstant: 0.12, // stronger = tighter clusters
-						damping: 0.75,
-						avoidOverlap: 0.2
-					},
-					stabilization: { enabled: true, iterations: 120, fit: true },
-					adaptiveTimestep: true
-				}
-			});
-
-			network.once('stabilizationIterationsDone', () => {
-				// Stop the physics engine so any residual rotation/motion halts,
-				// but keep physics enabled in the options (so interactions can restart it).
-				try {
-					network.stopSimulation?.();
-				} catch {}
-				network.setOptions({ physics: { enabled: false } }); // <- keep it off
-			});
-		});
 
 		// --- Interactions ---
 		// Click: background clears; node click highlights whole subtree and opens site URLs
