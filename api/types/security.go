@@ -5,6 +5,7 @@ import "time"
 type SecurityReport struct {
 	ScanTimestamp  time.Time              `json:"scanTimestamp"`
 	TargetURL      string                 `json:"targetUrl"`
+	ScannerVersion string                 `json:"scannerVersion"`
 	Headers        HeadersAnalysis        `json:"headers"`
 	Certificate    CertificateAnalysis    `json:"certificate"`
 	AdminPages     AdminPagesAnalysis     `json:"adminPages"`
@@ -17,6 +18,8 @@ type SecurityReport struct {
 	DNSRecords     DNSAnalysis            `json:"dnsRecords"`
 	FileExposure   FileExposureAnalysis   `json:"fileExposure"`
 	ScanErrors     []ScanError            `json:"scanErrors"`
+	APIExposure    APIExposureAnalysis    `json:"apiExposure"`
+	HealthProbes   HealthProbeAnalysis    `json:"healthProbes"`
 }
 
 type SecurityReportRecord struct {
@@ -62,6 +65,7 @@ type DNSAnalysis struct {
 	TXTRecords   []string `json:"txtRecords"`
 	NSRecords    []string `json:"nsRecords"`
 	CNAMERecords []string `json:"cnameRecords"`
+	CAARecords   []string `json:"caaRecords"`
 	Findings     []string `json:"findings"`
 }
 
@@ -105,12 +109,15 @@ type WhoisInfo struct {
 
 // Existing types updated with RiskLevel
 type InfrastructureAnalysis struct {
-	IPAddress  string               `json:"ip"`
-	HTTPStatus string               `json:"status"`
-	Server     string               `json:"server"`
-	Technology []TechnologyAnalysis `json:"tech"`
-	Risk       RiskLevel            `json:"risk"`
-	Findings   []Finding            `json:"findings"`
+	IPAddress     string               `json:"ip"`
+	IPv6Addresses []string             `json:"ipv6,omitempty"`
+	HTTPStatus    string               `json:"status"`
+	HTTPVersion   string               `json:"httpVersion"`
+	Server        string               `json:"server"`
+	CDNProvider   string               `json:"cdnProvider,omitempty"`
+	Technology    []TechnologyAnalysis `json:"tech"`
+	Risk          RiskLevel            `json:"risk"`
+	Findings      []Finding            `json:"findings"`
 }
 
 type TechnologyAnalysis struct {
@@ -119,25 +126,34 @@ type TechnologyAnalysis struct {
 }
 
 type HeadersAnalysis struct {
-	Score  string    `json:"score"`
-	Title  string    `json:"title"`
-	Issues []Finding `json:"issues"` // Changed to Finding type
-	Passed []string  `json:"passed"`
-	Risk   RiskLevel `json:"risk"`
+	Score          string    `json:"score"`
+	Title          string    `json:"title"`
+	Issues         []Finding `json:"issues"`
+	CookieFindings []Finding `json:"cookieFindings,omitempty"`
+	Passed         []string  `json:"passed"`
+	Risk           RiskLevel `json:"risk"`
 }
 
 type CertificateAnalysis struct {
-	Grade            string    `json:"grade"`
-	ValidUntil       time.Time `json:"validUntil"`
-	Issuer           string    `json:"issuer"`
-	Organization     string    `json:"organization"`
-	Findings         []Finding `json:"findings"`
-	Warnings         []Finding `json:"warnings"`
-	Risk             RiskLevel `json:"risk"`
-	TLSVersions      []string  `json:"tlsVersions"`
-	SupportedCiphers []Cipher  `json:"supportedCiphers"`
-	CTEnabled        bool      `json:"ctEnabled"`
-	RevocationStatus string    `json:"revocationStatus"`
+	Grade              string    `json:"grade"`
+	ValidFrom          time.Time `json:"validFrom"`
+	ValidUntil         time.Time `json:"validUntil"`
+	Issuer             string    `json:"issuer"`
+	Organization       string    `json:"organization"`
+	SubjectDNS         []string  `json:"subjectDNS"`
+	SerialNumber       string    `json:"serialNumber"`
+	SignatureAlg       string    `json:"signatureAlgorithm"`
+	PublicKeyType      string    `json:"publicKeyType"`
+	PublicKeyBits      int       `json:"publicKeyBits"`
+	Findings           []Finding `json:"findings"`
+	Warnings           []Finding `json:"warnings"`
+	Risk               RiskLevel `json:"risk"`
+	TLSVersions        []string  `json:"tlsVersions"`
+	SupportedCiphers   []Cipher  `json:"supportedCiphers"`
+	CTEnabled          bool      `json:"ctEnabled"`
+	RevocationStatus   string    `json:"revocationStatus"`
+	NegotiatedProtocol string    `json:"alpnProtocol"`
+	PreferredCipher    string    `json:"preferredCipher"`
 }
 
 type Cipher struct {
@@ -162,4 +178,16 @@ type SwaggerAnalysis struct {
 	Risk            RiskLevel `json:"risk"`
 	Findings        []Finding `json:"findings"`
 	Recommendations []string  `json:"recommendations"`
+}
+
+type APIExposureAnalysis struct {
+	Endpoints []string  `json:"endpoints"`
+	Risk      RiskLevel `json:"risk"`
+	Findings  []Finding `json:"findings"`
+}
+
+type HealthProbeAnalysis struct {
+	Paths    map[string]int `json:"paths"`
+	Risk     RiskLevel      `json:"risk"`
+	Findings []Finding      `json:"findings"`
 }

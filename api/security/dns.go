@@ -72,6 +72,7 @@ func (s *Scanner) checkDNS(ctx context.Context, domain string) (*DNSAnalysis, er
 		TXTRecords:   make([]string, 0),
 		NSRecords:    make([]string, 0),
 		CNAMERecords: make([]string, 0),
+		CAARecords:   make([]string, 0),
 		Findings:     make([]string, 0),
 	}
 
@@ -169,8 +170,8 @@ func (s *Scanner) evaluateCAA(ctx context.Context, host string, analysis *DNSAna
 	}
 
 	for _, record := range records {
-		analysis.Findings = append(analysis.Findings,
-			fmt.Sprintf("CAA policy: %s (tag=%s flag=%d)", record.Value, record.Tag, record.Flag))
+		analysis.CAARecords = append(analysis.CAARecords,
+			fmt.Sprintf("%s (tag=%s flag=%d)", record.Value, record.Tag, record.Flag))
 	}
 }
 

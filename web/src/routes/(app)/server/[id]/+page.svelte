@@ -7,6 +7,7 @@
 	import ResponseTimeGraph from '$lib/components/server/ResponseTimeGraph.svelte';
 	import ServerInfoCard from '$lib/components/server/ServerInfoCard.svelte';
 	import SecurityScan from '$lib/components/SecurityScan.svelte';
+	import HealthProbes from '$lib/components/scan/HealthProbes.svelte';
 	import ServerControls from '$lib/components/server/ServerControls.svelte';
 
 	/** @type {import('./$types').PageData} */
@@ -219,5 +220,10 @@
 		</div>
 	{:else}
 		<SecurityScan {searchResults} />
+		{#if searchResults?.healthProbes}
+			<div class="mt-6">
+				<HealthProbes probes={searchResults.healthProbes} />
+			</div>
+		{/if}
 	{/if}
 </div>
