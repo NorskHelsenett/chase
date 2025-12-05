@@ -14,6 +14,8 @@ import (
 
 var monitoringInProgress atomic.Bool
 
+const serverBatchSize = 100
+
 func AutoMigrate(db *gorm.DB) error {
 	// Migrate the schemas
 	if err := db.AutoMigrate(&Server{}, &PingResult{}); err != nil {
@@ -60,104 +62,109 @@ func runMonitoring() {
 	defer monitoringInProgress.Store(false)
 
 	db := database.GetDB()
-	var servers []Server
-
 	now := time.Now()
-
 	weekAgo := now.Add(-7 * 24 * time.Hour)
+
+	var servers []Server
 	if err := db.
-		Preload("PingResults", func(db *gorm.DB) *gorm.DB {
-			return db.Where("timestamp > ?", weekAgo).Order("timestamp DESC")
-		}).
-		Preload("PingResults.PingDetail").
 		Where("active = ? AND next_check <= ?", true, now).
-		Find(&servers).Error; err != nil {
-		log.Printf("Error fetching servers: %v", err)
-		return
-	}
-
-	for _, server := range servers {
-		// Get the previous online status before pinging
-		wasOnline := isServerOnline(server)
-
-		// Get the previous certificate expiry status
-		wasCertExpired, prevCertExpiry := getCertificateStatus(server)
-
-		result := pingServer(server)
-
-		interval, shouldRemainActive := calculateNextCheckInterval(server)
-
-		server.NextCheck = now.Add(interval)
-		wasActive := server.Active
-		if !shouldRemainActive {
-			server.Comment = fmt.Sprintf("WARNING: Server %s has had >95%% failures in past week. Automatically deactivated.", server.URL)
-			server.Active = false
-		}
-
-		// Use a transaction for atomicity
-		tx := db.Begin()
-		if err := tx.Save(&server).Error; err != nil {
-			tx.Rollback()
-			log.Printf("Error saving server %s: %v", server.URL, err)
-			continue
-		}
-
-		// Save PingDetail first if it exists
-		if result.PingDetail != nil {
-			if err := tx.Create(result.PingDetail).Error; err != nil {
-				tx.Rollback()
-				log.Printf("Error saving ping detail for %s: %v", server.URL, err)
-				continue
-			}
-			result.DetailID = &result.PingDetail.ID
-		}
-
-		if err := tx.Create(&result).Error; err != nil {
-			tx.Rollback()
-			log.Printf("Error saving ping result for %s: %v", server.URL, err)
-			continue
-		}
-
-		tx.Commit()
-
-		// Send notification if server was deactivated
-		if wasActive && !server.Active {
-			NotifyServerDeactivated(server.ID, server.URL, ">95% failures in past week")
-		}
-
-		// Check if status changed and send notification
-		isOnline := result.Error == ""
-		if wasOnline != isOnline {
-			serverName := server.URL
-			if server.Comment != "" && len(server.Comment) < 100 {
-				serverName = server.Comment
-			}
-			go NotifyServerStatusChange(server.ID, server.URL, serverName, wasOnline, isOnline)
-		}
-
-		// Check certificate expiry status and send notification
-		if result.PingDetail != nil {
-			isCertExpired := !result.PingDetail.CertExpiryDate.IsZero() && time.Now().After(result.PingDetail.CertExpiryDate)
-			daysUntilExpiry := int(time.Until(result.PingDetail.CertExpiryDate).Hours() / 24)
-
-			// Notify if certificate just expired
-			if isCertExpired && !wasCertExpired {
-				serverName := server.URL
-				if server.Comment != "" && len(server.Comment) < 100 {
-					serverName = server.Comment
+		FindInBatches(&servers, serverBatchSize, func(tx *gorm.DB, batch int) error {
+			for _, server := range servers {
+				var recentResults []PingResult
+				if err := db.Where("server_id = ? AND timestamp > ?", server.ID, weekAgo).
+					Order("timestamp DESC").
+					Find(&recentResults).Error; err != nil {
+					log.Printf("Error fetching ping history for %s: %v", server.URL, err)
+					recentResults = nil
 				}
-				go NotifyCertificateExpired(server.ID, server.URL, serverName, result.PingDetail.CertExpiryDate)
-			} else if !isCertExpired && daysUntilExpiry <= 14 && daysUntilExpiry > 0 {
-				// Notify for certificates expiring soon (only if we haven't notified before or if the expiry date changed)
-				if prevCertExpiry.IsZero() || !prevCertExpiry.Equal(result.PingDetail.CertExpiryDate) {
+				server.PingResults = recentResults
+
+				// Get the previous online status before pinging
+				wasOnline := isServerOnline(server)
+
+				// Get the previous certificate expiry status
+				wasCertExpired, prevCertExpiry := getCertificateStatus(db, server.ID)
+
+				result := pingServer(server)
+
+				interval, shouldRemainActive := calculateNextCheckInterval(server)
+
+				server.NextCheck = now.Add(interval)
+				wasActive := server.Active
+				if !shouldRemainActive {
+					server.Comment = fmt.Sprintf("WARNING: Server %s has had >95%% failures in past week. Automatically deactivated.", server.URL)
+					server.Active = false
+				}
+
+				// Use a transaction for atomicity
+				txn := db.Begin()
+				if err := txn.Save(&server).Error; err != nil {
+					txn.Rollback()
+					log.Printf("Error saving server %s: %v", server.URL, err)
+					continue
+				}
+
+				// Save PingDetail first if it exists
+				if result.PingDetail != nil {
+					if err := txn.Create(result.PingDetail).Error; err != nil {
+						txn.Rollback()
+						log.Printf("Error saving ping detail for %s: %v", server.URL, err)
+						continue
+					}
+					result.DetailID = &result.PingDetail.ID
+				}
+
+				if err := txn.Create(&result).Error; err != nil {
+					txn.Rollback()
+					log.Printf("Error saving ping result for %s: %v", server.URL, err)
+					continue
+				}
+
+				txn.Commit()
+
+				// Send notification if server was deactivated
+				if wasActive && !server.Active {
+					NotifyServerDeactivated(server.ID, server.URL, ">95% failures in past week")
+				}
+
+				// Check if status changed and send notification
+				isOnline := result.Error == ""
+				if wasOnline != isOnline {
 					serverName := server.URL
 					if server.Comment != "" && len(server.Comment) < 100 {
 						serverName = server.Comment
 					}
-					go NotifyCertificateExpiringSoon(server.ID, server.URL, serverName, result.PingDetail.CertExpiryDate, daysUntilExpiry)
+					go NotifyServerStatusChange(server.ID, server.URL, serverName, wasOnline, isOnline)
+				}
+
+				// Check certificate expiry status and send notification
+				if result.PingDetail != nil {
+					isCertExpired := !result.PingDetail.CertExpiryDate.IsZero() && time.Now().After(result.PingDetail.CertExpiryDate)
+					daysUntilExpiry := int(time.Until(result.PingDetail.CertExpiryDate).Hours() / 24)
+
+					// Notify if certificate just expired
+					if isCertExpired && !wasCertExpired {
+						serverName := server.URL
+						if server.Comment != "" && len(server.Comment) < 100 {
+							serverName = server.Comment
+						}
+						go NotifyCertificateExpired(server.ID, server.URL, serverName, result.PingDetail.CertExpiryDate)
+					} else if !isCertExpired && daysUntilExpiry <= 14 && daysUntilExpiry > 0 {
+						// Notify for certificates expiring soon (only if we haven't notified before or if the expiry date changed)
+						if prevCertExpiry.IsZero() || !prevCertExpiry.Equal(result.PingDetail.CertExpiryDate) {
+							serverName := server.URL
+							if server.Comment != "" && len(server.Comment) < 100 {
+								serverName = server.Comment
+							}
+							go NotifyCertificateExpiringSoon(server.ID, server.URL, serverName, result.PingDetail.CertExpiryDate, daysUntilExpiry)
+						}
+					}
 				}
 			}
-		}
+			return nil
+		}).Error; err != nil {
+		log.Printf("Error fetching servers: %v", err)
+		return
 	}
 }
 
@@ -180,26 +187,16 @@ func isServerOnline(server Server) bool {
 
 // getCertificateStatus checks the previous certificate expiry status
 // Returns (isExpired, expiryDate)
-func getCertificateStatus(server Server) (bool, time.Time) {
-	if len(server.PingResults) == 0 {
+func getCertificateStatus(db *gorm.DB, serverID uint) (bool, time.Time) {
+	var latest PingResult
+	if err := db.
+		Where("server_id = ? AND detail_id IS NOT NULL", serverID).
+		Preload("PingDetail").
+		Order("timestamp DESC").
+		First(&latest).Error; err != nil || latest.PingDetail == nil {
 		return false, time.Time{}
 	}
 
-	var latest *PingResult
-	for i := range server.PingResults {
-		result := &server.PingResults[i]
-		if result.PingDetail == nil || result.PingDetail.CertExpiryDate.IsZero() {
-			continue
-		}
-		if latest == nil || result.Timestamp.After(latest.Timestamp) {
-			latest = result
-		}
-	}
-
-	if latest != nil {
-		isExpired := time.Now().After(latest.PingDetail.CertExpiryDate)
-		return isExpired, latest.PingDetail.CertExpiryDate
-	}
-
-	return false, time.Time{}
+	isExpired := time.Now().After(latest.PingDetail.CertExpiryDate)
+	return isExpired, latest.PingDetail.CertExpiryDate
 }
