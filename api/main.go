@@ -5,6 +5,7 @@ import (
 	"log"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/norskhelsenett/chase/auth"
 	"github.com/norskhelsenett/chase/database"
@@ -22,6 +23,7 @@ import (
 )
 
 var db *gorm.DB
+var appStart = time.Now()
 
 func loadEnv() error {
 	// Try to load from .env file
@@ -138,6 +140,7 @@ func main() {
 	}
 
 	db = database.GetDB()
+	handlers.InitHealth(appStart)
 	servers.AutoMigrate(db)
 	db.AutoMigrate(&security.BatchJobStore{}, &security.BatchResultStore{})
 	security.InitDatabase()
@@ -165,6 +168,10 @@ func main() {
 	r := gin.Default()
 	r.Use(gin.Recovery())
 	r.Use(securityHeaders())
+
+	r.GET("/livez", handlers.LivenessProbe)
+	r.GET("/readyz", handlers.ReadinessProbe)
+	r.GET("/healthz", handlers.HealthProbe)
 
 	setupRoutes(r)
 

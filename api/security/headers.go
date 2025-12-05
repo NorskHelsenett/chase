@@ -1,7 +1,9 @@
 package security
 
 import (
+	"context"
 	"fmt"
+	"net/http"
 	"sort"
 	"strconv"
 	"strings"
@@ -42,8 +44,8 @@ func sortIssuesByRisk(issues []Finding) {
 	})
 }
 
-func (s *Scanner) checkSecurityHeaders(domain string) (*HeadersAnalysis, error) {
-	resp, err := s.client.Get(domain)
+func (s *Scanner) checkSecurityHeaders(ctx context.Context, domain string) (*HeadersAnalysis, error) {
+	resp, err := s.fetch(ctx, domain, requestOptions{})
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch domain: %w", err)
 	}
@@ -71,10 +73,11 @@ func (s *Scanner) checkSecurityHeaders(domain string) (*HeadersAnalysis, error) 
 	findTitle(doc)
 
 	analysis := &HeadersAnalysis{
-		Issues: make([]Finding, 0),
-		Passed: make([]string, 0),
-		Risk:   RiskLow,
-		Title:  title,
+		Issues:         make([]Finding, 0),
+		CookieFindings: make([]Finding, 0),
+		Passed:         make([]string, 0),
+		Risk:           RiskLow,
+		Title:          title,
 	}
 
 	headerChecks := map[string]HeaderRequirement{
@@ -204,41 +207,85 @@ func (s *Scanner) checkSecurityHeaders(domain string) (*HeadersAnalysis, error) 
 				return StatusGood, "", ""
 			},
 		},
+		"Referrer-Policy": {
+			name:        "Referrer Policy",
+			description: "Controls how much referrer data is shared",
+			risk:        RiskMedium,
+			required:    true,
+			validator: func(value string) (HeaderStatus, string, string) {
+				if value == "" {
+					return StatusMissing, "Header is missing", "Set Referrer-Policy to strict-origin-when-cross-origin"
+				}
+				val := strings.ToLower(strings.TrimSpace(value))
+				switch val {
+				case "no-referrer", "strict-origin", "strict-origin-when-cross-origin", "same-origin":
+					return StatusGood, "", ""
+				case "unsafe-url":
+					return StatusMisconfigured, "unsafe-url leaks full URLs", "Use strict-origin-when-cross-origin or no-referrer"
+				default:
+					return StatusSuboptimal, fmt.Sprintf("Policy %s is permissive", value), "Tighten the policy to strict-origin-when-cross-origin"
+				}
+			},
+		},
 		"Permissions-Policy": {
 			name:        "Permissions Policy",
-			description: "Browser features control",
+			description: "Restricts advanced browser features",
 			risk:        RiskMedium,
 			required:    false,
 			validator: func(value string) (HeaderStatus, string, string) {
 				if value == "" {
-					return StatusMissing,
-						"Header is missing",
-						"Consider implementing Permissions-Policy to restrict browser features"
+					return StatusMissing, "Header is missing", "Add Permissions-Policy to disable unused sensors/APIs"
 				}
-
-				recommendedPolicies := map[string]bool{
-					"geolocation": true,
-					"microphone":  true,
-					"camera":      true,
-					"payment":     true,
+				if strings.Contains(value, "*") {
+					return StatusMisconfigured, "Wildcard permissions detected", "Enumerate explicit origins for each feature"
 				}
-
-				policies := strings.Split(value, ",")
-				for policy := range recommendedPolicies {
-					found := false
-					for _, p := range policies {
-						if strings.Contains(p, policy) {
-							found = true
-							break
-						}
-					}
-					if !found {
-						return StatusSuboptimal,
-							fmt.Sprintf("Missing recommended policy for %s", policy),
-							fmt.Sprintf("Consider adding policy for %s", policy)
-					}
+				return StatusGood, "", ""
+			},
+		},
+		"Cross-Origin-Opener-Policy": {
+			name:        "Cross-Origin-Opener-Policy (COOP)",
+			description: "Defends against cross-origin attacks",
+			risk:        RiskMedium,
+			required:    false,
+			validator: func(value string) (HeaderStatus, string, string) {
+				if value == "" {
+					return StatusMissing, "Header is missing", "Set COOP to same-origin"
 				}
-
+				val := strings.ToLower(value)
+				if val == "same-origin" || val == "same-origin-allow-popups" {
+					return StatusGood, "", ""
+				}
+				return StatusMisconfigured, "Unexpected COOP policy", "Prefer same-origin for isolation"
+			},
+		},
+		"Cross-Origin-Embedder-Policy": {
+			name:        "Cross-Origin-Embedder-Policy (COEP)",
+			description: "Prevents loading untrusted cross-origin resources",
+			risk:        RiskHigh,
+			required:    false,
+			validator: func(value string) (HeaderStatus, string, string) {
+				if value == "" {
+					return StatusMissing, "Header is missing", "Set COEP: require-corp to enable full site isolation"
+				}
+				if strings.ToLower(value) != "require-corp" {
+					return StatusMisconfigured, "COEP must be set to require-corp", "Use 'Cross-Origin-Embedder-Policy: require-corp'"
+				}
+				return StatusGood, "", ""
+			},
+		},
+		"Cross-Origin-Resource-Policy": {
+			name:        "Cross-Origin-Resource-Policy (CORP)",
+			description: "Restricts how other origins load resources",
+			risk:        RiskMedium,
+			required:    false,
+			validator: func(value string) (HeaderStatus, string, string) {
+				if value == "" {
+					return StatusMissing, "Header is missing", "Set CORP to same-origin or same-site"
+				}
+				val := strings.ToLower(value)
+				if val == "cross-origin" {
+					return StatusSuboptimal, "CORP allows cross-origin consumption", "Use same-origin or at least same-site"
+				}
 				return StatusGood, "", ""
 			},
 		},
@@ -289,7 +336,11 @@ func (s *Scanner) checkSecurityHeaders(domain string) (*HeadersAnalysis, error) 
 		}
 	}
 
+	analyzeCORS(resp.Header, analysis)
+	analyzeCookies(resp.Cookies(), analysis)
+
 	sortIssuesByRisk(analysis.Issues)
+	sortIssuesByRisk(analysis.CookieFindings)
 
 	analysis.Score = calculateGrade(score)
 	analysis.Risk = highestRisk
@@ -317,6 +368,57 @@ func parseDirective(value string) map[string]string {
 	}
 
 	return directives
+}
+
+func analyzeCORS(headers http.Header, analysis *HeadersAnalysis) {
+	origin := headers.Get("Access-Control-Allow-Origin")
+	if origin == "" || origin == "null" {
+		return
+	}
+
+	credentials := strings.ToLower(headers.Get("Access-Control-Allow-Credentials"))
+	if origin == "*" && strings.Contains(credentials, "true") {
+		analysis.Issues = append(analysis.Issues, Finding{
+			Description: "CORS allows any origin with credentials",
+			Risk:        RiskHigh,
+			Evidence:    "Access-Control-Allow-Origin: * with credentials",
+			Mitigation:  "Return specific origins or disable credentialed requests",
+		})
+	}
+}
+
+func analyzeCookies(cookies []*http.Cookie, analysis *HeadersAnalysis) {
+	if len(cookies) == 0 {
+		analysis.Passed = append(analysis.Passed, "No cookies observed – authentication may require login to validate session settings")
+		return
+	}
+
+	for _, cookie := range cookies {
+		if !cookie.Secure {
+			analysis.CookieFindings = append(analysis.CookieFindings, Finding{
+				Description: fmt.Sprintf("Cookie %s missing Secure flag", cookie.Name),
+				Risk:        RiskHigh,
+				Evidence:    "Cookie transmitted over HTTP",
+				Mitigation:  "Set Secure on all session cookies",
+			})
+		}
+		if !cookie.HttpOnly {
+			analysis.CookieFindings = append(analysis.CookieFindings, Finding{
+				Description: fmt.Sprintf("Cookie %s missing HttpOnly flag", cookie.Name),
+				Risk:        RiskHigh,
+				Evidence:    "Cookie accessible to JavaScript",
+				Mitigation:  "Set HttpOnly to defend against XSS",
+			})
+		}
+		if cookie.SameSite == http.SameSiteDefaultMode {
+			analysis.CookieFindings = append(analysis.CookieFindings, Finding{
+				Description: fmt.Sprintf("Cookie %s missing explicit SameSite", cookie.Name),
+				Risk:        RiskMedium,
+				Evidence:    "SameSite default can be lax on older browsers",
+				Mitigation:  "Set SameSite=Strict or Lax explicitly",
+			})
+		}
+	}
 }
 
 // Helper function to decrease risk level for suboptimal configurations

@@ -2,6 +2,7 @@ package security
 
 import (
 	"bytes"
+	"context"
 	"io"
 	"net/http"
 	"strings"
@@ -10,7 +11,7 @@ import (
 
 // Configuration thresholds for false positive detection
 const (
-	MaxExposedFiles  = 5      // Maximum reasonable number of exposed files
+	MaxExposedFiles  = 5       // Maximum reasonable number of exposed files
 	SuspiciousRatio  = 0.8     // Threshold for suspicious detection rate
 	MaxContentLength = 1 << 20 // 1MB max content size to check
 )
@@ -27,7 +28,7 @@ type FileSignature struct {
 	validate    FileValidator
 }
 
-func (s *Scanner) checkFileExposure(domain string) (*FileExposureAnalysis, error) {
+func (s *Scanner) checkFileExposure(ctx context.Context, domain string) (*FileExposureAnalysis, error) {
 	analysis := &FileExposureAnalysis{
 		ExposedFiles: make([]ExposedFile, 0),
 		Risk:         RiskLow,
@@ -81,7 +82,173 @@ func (s *Scanner) checkFileExposure(domain string) (*FileExposureAnalysis, error
 				return envVarCount > 0
 			},
 		},
-		// Add more file signatures with specific validators...
+		{
+			path:        "/.git/config",
+			fileType:    "VCS",
+			description: "Git config disclosure",
+			risk:        RiskCritical,
+			validate: func(content []byte) bool {
+				return bytes.Contains(content, []byte("[core]")) && bytes.Contains(content, []byte("[remote"))
+			},
+		},
+		{
+			path:        "/.gitignore",
+			fileType:    "Config",
+			description: "Git ignore rules exposed",
+			risk:        RiskMedium,
+			validate: func(content []byte) bool {
+				return len(content) > 0
+			},
+		},
+		{
+			path:        "/.svn/entries",
+			fileType:    "VCS",
+			description: "Subversion metadata exposed",
+			risk:        RiskHigh,
+			validate: func(content []byte) bool {
+				return bytes.Contains(content, []byte("svn")) || bytes.Contains(content, []byte("dir"))
+			},
+		},
+		{
+			path:        "/.hg/store/00manifest.i",
+			fileType:    "VCS",
+			description: "Mercurial repository exposed",
+			risk:        RiskHigh,
+			validate: func(content []byte) bool {
+				return len(content) > 0
+			},
+		},
+		{
+			path:        "/.DS_Store",
+			fileType:    "Metadata",
+			description: "macOS Finder metadata exposed",
+			risk:        RiskLow,
+			validate: func(content []byte) bool {
+				return len(content) > 0
+			},
+		},
+		{
+			path:        "/.bash_history",
+			fileType:    "Secrets",
+			description: "Shell history exposed",
+			risk:        RiskCritical,
+			validate: func(content []byte) bool {
+				return bytes.Contains(content, []byte("\n"))
+			},
+		},
+		{
+			path:        "/.ssh/id_rsa",
+			fileType:    "Secrets",
+			description: "Private SSH key exposed",
+			risk:        RiskCritical,
+			validate: func(content []byte) bool {
+				return bytes.Contains(content, []byte("BEGIN OPENSSH PRIVATE KEY")) ||
+					bytes.Contains(content, []byte("BEGIN RSA PRIVATE KEY"))
+			},
+		},
+		{
+			path:        "/config.php",
+			fileType:    "Config",
+			description: "PHP configuration file exposed",
+			risk:        RiskHigh,
+			validate: func(content []byte) bool {
+				return bytes.Contains(content, []byte("<?php"))
+			},
+		},
+		{
+			path:        "/web.config",
+			fileType:    "Config",
+			description: "IIS web.config exposed",
+			risk:        RiskHigh,
+			validate: func(content []byte) bool {
+				return bytes.Contains(content, []byte("<configuration"))
+			},
+		},
+		{
+			path:        "/backup.zip",
+			fileType:    "Backup",
+			description: "Backup archive exposed",
+			risk:        RiskCritical,
+			validate: func(content []byte) bool {
+				return len(content) > 4 && bytes.Equal(content[:4], []byte("PK\x03\x04"))
+			},
+		},
+		{
+			path:        "/database.sql",
+			fileType:    "Backup",
+			description: "Database dump exposed",
+			risk:        RiskCritical,
+			validate: func(content []byte) bool {
+				return bytes.Contains(bytes.ToLower(content), []byte("insert into"))
+			},
+		},
+		{
+			path:        "/package-lock.json",
+			fileType:    "Config",
+			description: "Node lockfile exposed",
+			risk:        RiskMedium,
+			validate: func(content []byte) bool {
+				return bytes.Contains(content, []byte("\"lockfileVersion\""))
+			},
+		},
+		{
+			path:        "/yarn.lock",
+			fileType:    "Config",
+			description: "Yarn lockfile exposed",
+			risk:        RiskMedium,
+			validate: func(content []byte) bool {
+				return bytes.Contains(content, []byte("yarn lockfile v"))
+			},
+		},
+		{
+			path:        "/npm-shrinkwrap.json",
+			fileType:    "Config",
+			description: "npm shrinkwrap exposed",
+			risk:        RiskMedium,
+			validate: func(content []byte) bool {
+				return bytes.Contains(content, []byte("\"dependencies\""))
+			},
+		},
+		{
+			path:        "/composer.json",
+			fileType:    "Config",
+			description: "Composer manifest exposed",
+			risk:        RiskLow,
+			validate: func(content []byte) bool {
+				return bytes.Contains(content, []byte("\"require\""))
+			},
+		},
+		{
+			path:        "/.docker/config.json",
+			fileType:    "Secrets",
+			description: "Docker credentials exposed",
+			risk:        RiskCritical,
+			validate: func(content []byte) bool {
+				return bytes.Contains(content, []byte("\"auths\""))
+			},
+		},
+		{
+			path:        "/node_modules/",
+			fileType:    "Directory",
+			description: "node_modules directory listing exposed",
+			risk:        RiskMedium,
+			validate: func(content []byte) bool {
+				contentLower := strings.ToLower(string(content))
+				return strings.Contains(contentLower, "index of /node_modules") ||
+					strings.Contains(contentLower, "<title>index of")
+			},
+		},
+		{
+			path:        "/vendor/",
+			fileType:    "Directory",
+			description: "PHP vendor directory exposed",
+			risk:        RiskMedium,
+			validate: func(content []byte) bool {
+				contentLower := strings.ToLower(string(content))
+				return strings.Contains(contentLower, "index of /vendor") ||
+					strings.Contains(contentLower, "<title>index of")
+			},
+		},
 	}
 
 	var wg sync.WaitGroup
@@ -94,7 +261,7 @@ func (s *Scanner) checkFileExposure(domain string) (*FileExposureAnalysis, error
 		go func(f FileSignature) {
 			defer wg.Done()
 
-			exposed, evidence := s.validateFile(domain, f)
+			exposed, evidence := s.validateFile(ctx, domain, f)
 			if exposed {
 				mu.Lock()
 				analysis.ExposedFiles = append(analysis.ExposedFiles, ExposedFile{
@@ -128,8 +295,8 @@ func (s *Scanner) checkFileExposure(domain string) (*FileExposureAnalysis, error
 	return analysis, nil
 }
 
-func (s *Scanner) validateFile(domain string, file FileSignature) (bool, string) {
-	resp, err := s.client.Get(domain + file.path)
+func (s *Scanner) validateFile(ctx context.Context, domain string, file FileSignature) (bool, string) {
+	resp, err := s.fetch(ctx, domain+file.path, requestOptions{})
 	if err != nil {
 		return false, ""
 	}

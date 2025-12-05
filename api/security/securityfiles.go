@@ -1,6 +1,7 @@
 package security
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"mime"
@@ -38,7 +39,7 @@ func isValidTextFile(contentType string, content string) bool {
 	return true
 }
 
-func (s *Scanner) checkRobotsTxt(domain string) (*RobotsAnalysis, error) {
+func (s *Scanner) checkRobotsTxt(ctx context.Context, domain string) (*RobotsAnalysis, error) {
 	robotsPaths := []string{
 		"/robots.txt",
 	}
@@ -58,7 +59,7 @@ func (s *Scanner) checkRobotsTxt(domain string) (*RobotsAnalysis, error) {
 		wg.Add(1)
 		go func(p string) {
 			defer wg.Done()
-			resp, err := s.client.Get(domain + p)
+			resp, err := s.fetch(ctx, domain+p, requestOptions{})
 			if err != nil {
 				return
 			}
@@ -118,7 +119,7 @@ func (s *Scanner) checkRobotsTxt(domain string) (*RobotsAnalysis, error) {
 	return analysis, nil
 }
 
-func (s *Scanner) checkSecurityTxt(domain string) (*SecurityTxtAnalysis, error) {
+func (s *Scanner) checkSecurityTxt(ctx context.Context, domain string) (*SecurityTxtAnalysis, error) {
 	securityPaths := []string{
 		"/.well-known/security.txt",
 		"/security.txt",
@@ -145,7 +146,7 @@ func (s *Scanner) checkSecurityTxt(domain string) (*SecurityTxtAnalysis, error) 
 		wg.Add(1)
 		go func(p string) {
 			defer wg.Done()
-			resp, err := s.client.Get(domain + p)
+			resp, err := s.fetch(ctx, domain+p, requestOptions{})
 			if err != nil {
 				return
 			}

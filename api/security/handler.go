@@ -61,7 +61,7 @@ func SecurityScanHandler(c *gin.Context) {
 	}
 
 	// Initialize scanner with timeout and error handling
-	scanner := NewScanner()
+	scanner := NewScanner(0)
 
 	// Create a channel for results with timeout
 	resultChan := make(chan *SecurityReport)
@@ -69,7 +69,7 @@ func SecurityScanHandler(c *gin.Context) {
 
 	// Perform scan in goroutine with timeout
 	go func() {
-		report, err := scanner.ScanWebsite(domain)
+		report, err := scanner.ScanWebsite(c.Request.Context(), domain)
 		if err != nil {
 			errChan <- err
 			return
@@ -91,7 +91,7 @@ func SecurityScanHandler(c *gin.Context) {
 				fmt.Sprintf("Domain %s implements basic security measures", domain))
 		}
 
-		if len(report.Certificate.Findings) > 0 {
+		if len(report.Certificate.Findings) == 0 {
 			report.Certificate.Findings = append(report.Certificate.Findings, Finding{
 				Description: fmt.Sprintf("%s uses modern encryption standards", domain),
 				Risk:        RiskLow,

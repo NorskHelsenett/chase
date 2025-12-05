@@ -1,6 +1,7 @@
 package security
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -66,7 +67,7 @@ func validateSwaggerResponse(resp *http.Response) (bool, string) {
 	return false, ""
 }
 
-func (s *Scanner) checkSwaggerDocs(domain string) (*SwaggerAnalysis, error) {
+func (s *Scanner) checkSwaggerDocs(ctx context.Context, domain string) (*SwaggerAnalysis, error) {
 	swaggerPaths := []string{
 		"/swagger",
 		"/swagger-ui.html",
@@ -102,7 +103,7 @@ func (s *Scanner) checkSwaggerDocs(domain string) (*SwaggerAnalysis, error) {
 		go func(p string) {
 			defer wg.Done()
 
-			resp, err := s.client.Get(domain + p)
+			resp, err := s.fetch(ctx, domain+p, requestOptions{})
 			if err != nil {
 				return
 			}
