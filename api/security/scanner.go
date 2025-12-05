@@ -11,7 +11,9 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"os"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -33,13 +35,45 @@ type Scanner struct {
 	version   string
 
 	requestLimiter chan struct{}
+	options        ScannerOptions
 }
 
 type requestOptions struct {
 	followRedirects *bool
 }
 
+type ScannerOptions struct {
+	EnabledTasks          []string
+	MaxConcurrentRequests int
+}
+
+func ScannerOptionsFromEnv() ScannerOptions {
+	opts := ScannerOptions{}
+
+	if raw := os.Getenv("SCANNER_TASKS"); raw != "" {
+		parts := strings.Split(raw, ",")
+		for _, part := range parts {
+			part = strings.TrimSpace(part)
+			if part != "" {
+				opts.EnabledTasks = append(opts.EnabledTasks, part)
+			}
+		}
+	}
+
+	if raw := os.Getenv("SCANNER_MAX_CONCURRENCY"); raw != "" {
+		if value, err := strconv.Atoi(strings.TrimSpace(raw)); err == nil && value > 0 {
+			opts.MaxConcurrentRequests = value
+		}
+	}
+
+	return opts
+}
+
 func NewScanner(timeout time.Duration) *Scanner {
+	return NewScannerWithOptions(timeout, ScannerOptionsFromEnv())
+}
+
+func NewScannerWithOptions(timeout time.Duration, opts ScannerOptions) *Scanner {
 	if timeout <= 0 {
 		timeout = defaultScannerTimeout
 	}
@@ -48,10 +82,11 @@ func NewScanner(timeout time.Duration) *Scanner {
 		timeout:           timeout,
 		strictTransport:   newTransport(false),
 		insecureTransport: newTransport(true),
+		options:           opts,
 	}
 
-	scanner.tasks = defaultScanTasks()
 	scanner.requestLimiter = make(chan struct{}, defaultMaxConcurrentRequests)
+	scanner.applyOptions()
 	scanner.recalculateVersion()
 	return scanner
 }
@@ -74,6 +109,11 @@ func boolPtr(b bool) *bool {
 }
 
 func (s *Scanner) RegisterTask(task ScanTask) {
+	for _, existing := range s.tasks {
+		if existing.Name() == task.Name() {
+			return
+		}
+	}
 	s.tasks = append(s.tasks, task)
 	s.recalculateVersion()
 }
@@ -87,6 +127,35 @@ func (s *Scanner) SetMaxConcurrentRequests(n int) {
 		n = 1
 	}
 	s.requestLimiter = make(chan struct{}, n)
+}
+
+func (s *Scanner) applyOptions() {
+	catalog := defaultScanTasks()
+	selected := make([]ScanTask, 0, len(catalog))
+
+	if len(s.options.EnabledTasks) > 0 {
+		allowed := make(map[string]struct{}, len(s.options.EnabledTasks))
+		for _, name := range s.options.EnabledTasks {
+			allowed[strings.TrimSpace(name)] = struct{}{}
+		}
+		for _, task := range catalog {
+			if _, ok := allowed[task.Name()]; ok {
+				selected = append(selected, task)
+			}
+		}
+	}
+
+	if len(selected) == 0 {
+		selected = catalog
+	}
+
+	for _, task := range selected {
+		s.RegisterTask(task)
+	}
+
+	if s.options.MaxConcurrentRequests > 0 {
+		s.SetMaxConcurrentRequests(s.options.MaxConcurrentRequests)
+	}
 }
 
 func (s *Scanner) recalculateVersion() {

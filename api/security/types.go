@@ -56,6 +56,7 @@ type DNSAnalysis struct {
 	TXTRecords   []string `json:"txtRecords"`
 	NSRecords    []string `json:"nsRecords"`
 	CNAMERecords []string `json:"cnameRecords"`
+	CAARecords   []string `json:"caaRecords"`
 	Findings     []string `json:"findings"`
 }
 

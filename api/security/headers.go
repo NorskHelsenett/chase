@@ -44,6 +44,25 @@ func sortIssuesByRisk(issues []Finding) {
 	})
 }
 
+type headersTask struct{}
+
+func newHeadersTask() ScanTask {
+	return headersTask{}
+}
+
+func (headersTask) Name() string {
+	return "headers"
+}
+
+func (headersTask) Run(ctx context.Context, scanner *Scanner, req ScanRequest, report *SecurityReport) error {
+	analysis, err := scanner.checkSecurityHeaders(ctx, req.Domain)
+	if err != nil {
+		return err
+	}
+	report.Headers = *analysis
+	return nil
+}
+
 func (s *Scanner) checkSecurityHeaders(ctx context.Context, domain string) (*HeadersAnalysis, error) {
 	resp, err := s.fetch(ctx, domain, requestOptions{})
 	if err != nil {

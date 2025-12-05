@@ -6,7 +6,62 @@ import (
 	"fmt"
 	"net"
 	"strings"
+	"time"
 )
+
+type dnsTask struct{}
+
+func newDNSTask() ScanTask {
+	return dnsTask{}
+}
+
+func (dnsTask) Name() string {
+	return "dns"
+}
+
+func (dnsTask) Run(ctx context.Context, scanner *Scanner, req ScanRequest, report *SecurityReport) error {
+	analysis, err := scanner.checkDNS(ctx, req.Domain)
+	if err != nil {
+		return err
+	}
+	report.DNSRecords = *analysis
+	return nil
+}
+
+type dnsResolver interface {
+	LookupIPAddr(ctx context.Context, host string) ([]net.IPAddr, error)
+	LookupMX(ctx context.Context, host string) ([]*net.MX, error)
+	LookupTXT(ctx context.Context, host string) ([]string, error)
+	LookupNS(ctx context.Context, host string) ([]*net.NS, error)
+	LookupCNAME(ctx context.Context, host string) (string, error)
+}
+
+type netResolver struct{}
+
+func (netResolver) LookupIPAddr(ctx context.Context, host string) ([]net.IPAddr, error) {
+	resolver := &net.Resolver{}
+	return resolver.LookupIPAddr(ctx, host)
+}
+
+func (netResolver) LookupMX(ctx context.Context, host string) ([]*net.MX, error) {
+	resolver := &net.Resolver{}
+	return resolver.LookupMX(ctx, host)
+}
+
+func (netResolver) LookupTXT(ctx context.Context, host string) ([]string, error) {
+	resolver := &net.Resolver{}
+	return resolver.LookupTXT(ctx, host)
+}
+
+func (netResolver) LookupNS(ctx context.Context, host string) ([]*net.NS, error) {
+	resolver := &net.Resolver{}
+	return resolver.LookupNS(ctx, host)
+}
+
+func (netResolver) LookupCNAME(ctx context.Context, host string) (string, error) {
+	resolver := &net.Resolver{}
+	return resolver.LookupCNAME(ctx, host)
+}
 
 func (s *Scanner) checkDNS(ctx context.Context, domain string) (*DNSAnalysis, error) {
 	host := strings.TrimPrefix(strings.TrimPrefix(domain, "https://"), "http://")
@@ -20,7 +75,7 @@ func (s *Scanner) checkDNS(ctx context.Context, domain string) (*DNSAnalysis, er
 		Findings:     make([]string, 0),
 	}
 
-	resolver := &net.Resolver{}
+	resolver := netResolver{}
 
 	if ips, err := resolver.LookupIPAddr(ctx, host); err == nil {
 		for _, ip := range ips {
@@ -52,7 +107,7 @@ func (s *Scanner) checkDNS(ctx context.Context, domain string) (*DNSAnalysis, er
 
 	s.evaluateSPF(analysis)
 	s.evaluateDMARC(ctx, resolver, host, analysis)
-	s.evaluateCAA(ctx, resolver, host, analysis)
+	s.evaluateCAA(ctx, host, analysis)
 
 	return analysis, nil
 }
@@ -75,7 +130,7 @@ func (s *Scanner) evaluateSPF(analysis *DNSAnalysis) {
 	}
 }
 
-func (s *Scanner) evaluateDMARC(ctx context.Context, resolver *net.Resolver, host string, analysis *DNSAnalysis) {
+func (s *Scanner) evaluateDMARC(ctx context.Context, resolver dnsResolver, host string, analysis *DNSAnalysis) {
 	records, err := resolver.LookupTXT(ctx, "_dmarc."+host)
 	if err != nil || len(records) == 0 {
 		analysis.Findings = append(analysis.Findings, "Missing DMARC record")
@@ -95,7 +150,7 @@ func (s *Scanner) evaluateDMARC(ctx context.Context, resolver *net.Resolver, hos
 	}
 }
 
-func (s *Scanner) evaluateCAA(ctx context.Context, resolver *net.Resolver, host string, analysis *DNSAnalysis) {
+func (s *Scanner) evaluateCAA(ctx context.Context, host string, analysis *DNSAnalysis) {
 	records, err := lookupCAARecords(ctx, host)
 	if err != nil {
 		if errors.Is(err, errCAAUnsupported) {
@@ -128,5 +183,132 @@ type caaRecord struct {
 }
 
 func lookupCAARecords(ctx context.Context, host string) ([]caaRecord, error) {
-	return nil, errCAAUnsupported
+	conn, err := net.DialTimeout("udp", "1.1.1.1:53", 2*time.Second)
+	if err != nil {
+		return nil, err
+	}
+	defer conn.Close()
+
+	id := uint16(time.Now().UnixNano())
+	question, err := buildCAAQuery(host, id)
+	if err != nil {
+		return nil, err
+	}
+
+	if deadline, ok := ctx.Deadline(); ok {
+		conn.SetDeadline(deadline)
+	} else {
+		conn.SetDeadline(time.Now().Add(3 * time.Second))
+	}
+
+	if _, err := conn.Write(question); err != nil {
+		return nil, err
+	}
+
+	buf := make([]byte, 1500)
+	n, err := conn.Read(buf)
+	if err != nil {
+		return nil, err
+	}
+
+	return parseCAAResponse(buf[:n], id)
+}
+
+func buildCAAQuery(host string, id uint16) ([]byte, error) {
+	host = dnsName(host)
+	var buf []byte
+	buf = append(buf, byte(id>>8), byte(id))
+	buf = append(buf, 0x01, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00)
+	labels := strings.Split(host, ".")
+	for _, label := range labels {
+		if label == "" {
+			continue
+		}
+		if len(label) > 63 {
+			return nil, fmt.Errorf("label %s too long", label)
+		}
+		buf = append(buf, byte(len(label)))
+		buf = append(buf, label...)
+	}
+	buf = append(buf, 0)
+	buf = append(buf, 0x01, 0x01, 0x00, 0x01)
+	return buf, nil
+}
+
+func dnsName(host string) string {
+	host = strings.TrimSuffix(host, ".")
+	if host == "" {
+		return ""
+	}
+	return host
+}
+
+func parseCAAResponse(resp []byte, id uint16) ([]caaRecord, error) {
+	if len(resp) < 12 {
+		return nil, fmt.Errorf("invalid DNS response")
+	}
+	if uint16(resp[0])<<8|uint16(resp[1]) != id {
+		return nil, fmt.Errorf("mismatched DNS ID")
+	}
+	qdCount := int(resp[4])<<8 | int(resp[5])
+	ansCount := int(resp[6])<<8 | int(resp[7])
+	idx := 12
+	for i := 0; i < qdCount; i++ {
+		var err error
+		idx, err = skipName(resp, idx)
+		if err != nil {
+			return nil, err
+		}
+		idx += 4
+	}
+	records := make([]caaRecord, 0, ansCount)
+	for i := 0; i < ansCount && idx < len(resp); i++ {
+		var err error
+		idx, err = skipName(resp, idx)
+		if err != nil {
+			return nil, err
+		}
+		if idx+10 > len(resp) {
+			return nil, fmt.Errorf("short DNS answer")
+		}
+		typeCode := uint16(resp[idx])<<8 | uint16(resp[idx+1])
+		idx += 8
+		rdlen := int(resp[idx])<<8 | int(resp[idx+1])
+		idx += 2
+		if idx+rdlen > len(resp) {
+			return nil, fmt.Errorf("short RDATA")
+		}
+		if typeCode == 257 && rdlen >= 3 {
+			flag := resp[idx]
+			tagLen := int(resp[idx+1])
+			if 2+tagLen > rdlen {
+				return nil, fmt.Errorf("invalid CAA tag length")
+			}
+			tag := string(resp[idx+2 : idx+2+tagLen])
+			value := string(resp[idx+2+tagLen : idx+rdlen])
+			records = append(records, caaRecord{Flag: flag, Tag: tag, Value: value})
+		}
+		idx += rdlen
+	}
+	return records, nil
+}
+
+func skipName(msg []byte, idx int) (int, error) {
+	for {
+		if idx >= len(msg) {
+			return 0, fmt.Errorf("short name")
+		}
+		length := int(msg[idx])
+		idx++
+		if length == 0 {
+			return idx, nil
+		}
+		if length&0xC0 == 0xC0 {
+			if idx >= len(msg) {
+				return 0, fmt.Errorf("short pointer")
+			}
+			return idx + 1, nil
+		}
+		idx += length
+	}
 }

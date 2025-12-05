@@ -29,12 +29,13 @@ func InitDatabase() error {
 }
 
 type SecurityReportRecord struct {
-	ID          uint   `gorm:"primaryKey"`
-	ServerURL   string `gorm:"index"`
-	ReportData  []byte `gorm:"type:json"`
-	CreatedAt   time.Time
-	RiskLevel   RiskLevel `gorm:"index"`
-	Description string
+	ID             uint   `gorm:"primaryKey"`
+	ServerURL      string `gorm:"index"`
+	ReportData     []byte `gorm:"type:json"`
+	CreatedAt      time.Time
+	RiskLevel      RiskLevel `gorm:"index"`
+	Description    string
+	ScannerVersion string `gorm:"type:varchar(16);index"`
 }
 
 // Screenshot stores binary screenshot data
@@ -379,11 +380,12 @@ func storeSecurityReport(report *SecurityReport) error {
 
 	// Create security report record
 	reportRecord := SecurityReportRecord{
-		ServerURL:   strings.TrimPrefix(strings.TrimPrefix(report.TargetURL, "https://"), "http://"),
-		ReportData:  reportJSON,
-		CreatedAt:   report.ScanTimestamp,
-		RiskLevel:   determineOverallRisk(report),
-		Description: generateReportSummary(report),
+		ServerURL:      strings.TrimPrefix(strings.TrimPrefix(report.TargetURL, "https://"), "http://"),
+		ReportData:     reportJSON,
+		CreatedAt:      report.ScanTimestamp,
+		RiskLevel:      determineOverallRisk(report),
+		Description:    generateReportSummary(report),
+		ScannerVersion: report.ScannerVersion,
 	}
 
 	if err := db.Create(&reportRecord).Error; err != nil {
