@@ -136,7 +136,7 @@
 		return ping.status_code > 0 && ping.status_code < 400;
 	}
 
-	function calculateMetrics(server: Server) {
+	function calculateMetrics(server: Server, reportData: typeof searchResults) {
 		const decimals = 3;
 		const latestPing = getLatestPing(server);
 		const last24hPings = server.ping_results.filter(
@@ -165,7 +165,7 @@
 			).toFixed(decimals)
 		);
 
-		const certValidUntil = searchResults?.certificate?.validUntil;
+		const certValidUntil = reportData?.certificate?.validUntil;
 
 		return {
 			currentResponse: latestPing?.response_time_ms || 0,
@@ -199,7 +199,7 @@
 
 		<ServerInfoCard {server} />
 
-		<StatusMetrics {...calculateMetrics(server)} />
+		<StatusMetrics {...calculateMetrics(server, searchResults)} />
 
 		<ResponseTimeGraph
 			data={server.ping_results.map((ping) => ({
