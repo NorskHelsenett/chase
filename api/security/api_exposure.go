@@ -346,3 +346,41 @@ func appendUniqueEndpoint(endpoints []string, path string) []string {
 	}
 	return append(endpoints, path)
 }
+
+type apiTask struct{}
+
+func newAPITask() ScanTask {
+	return apiTask{}
+}
+
+func (apiTask) Name() string {
+	return "apiExposure"
+}
+
+func (apiTask) Run(ctx context.Context, scanner *Scanner, req ScanRequest, report *SecurityReport) error {
+	apiExposure, err := scanner.checkAPIExposures(ctx, req.Domain)
+	if err != nil {
+		return err
+	}
+	report.APIExposure = *apiExposure
+	return nil
+}
+
+type healthTask struct{}
+
+func newHealthTask() ScanTask {
+	return healthTask{}
+}
+
+func (healthTask) Name() string {
+	return "healthProbes"
+}
+
+func (healthTask) Run(ctx context.Context, scanner *Scanner, req ScanRequest, report *SecurityReport) error {
+	health, err := scanner.checkHealthProbes(ctx, req.Domain)
+	if err != nil {
+		return err
+	}
+	report.HealthProbes = *health
+	return nil
+}
