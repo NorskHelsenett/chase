@@ -69,9 +69,9 @@
 	// Subscribe to the filtered store
 	$: filteredServers = $filteredStore;
 
-	async function fetchServers(forceRefresh = false) {
-		await serverStoreActions.loadServers(activeFilter ?? null, forceRefresh);
-	}
+async function fetchServers(forceRefresh = false) {
+	await serverStoreActions.setFilter(activeFilter ?? null, forceRefresh);
+}
 
 	function handleSearch(event: CustomEvent) {
 		searchQuery = event.detail.query.toLowerCase();
@@ -99,14 +99,12 @@
 
 onMount(() => {
 	hasMounted = true;
-	// Always refresh data in background when visiting the dashboard
-	fetchServers(true);
 });
 
-	$: if (hasMounted && activeFilter !== undefined && activeFilter !== lastActiveFilter) {
-		lastActiveFilter = activeFilter;
-		fetchServers();
-	}
+$: if (hasMounted && activeFilter !== undefined && activeFilter !== lastActiveFilter) {
+	lastActiveFilter = activeFilter;
+	fetchServers();
+}
 </script>
 
 <div class="p-4 w-full">

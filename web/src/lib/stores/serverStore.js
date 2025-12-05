@@ -1,13 +1,29 @@
-import { writable, derived } from 'svelte/store';
+import { writable, derived, get } from 'svelte/store';
 import { browser } from '$app/environment';
 
 const memoryCache = new Map();
+const defaultCacheTTL = 60 * 60 * 1000; // 1 hour
 
 function getFilterKey(filter) {
 	if (filter === undefined || filter === null || filter === '') {
 		return 'all';
 	}
 	return String(filter);
+}
+
+function keyToFilterValue(key) {
+	if (key === 'all') {
+		return null;
+	}
+	if (key === 'true' || key === 'false') {
+		return key;
+	}
+	return key;
+}
+
+function getCurrentFilterValue() {
+	const state = get(serverStore);
+	return keyToFilterValue(state.currentFilter);
 }
 
 // Initialize store with cached data from localStorage if available
@@ -116,6 +132,13 @@ serverStore.subscribe((state) => {
 
 // Helper functions to interact with the store
 export const serverStoreActions = {
+	async setFilter(filter = null, force = false) {
+		const currentKey = get(serverStore).currentFilter;
+		const filterKey = getFilterKey(filter);
+		const shouldForce = force || currentKey !== filterKey;
+		return this.loadServers(filter, shouldForce);
+	},
+
 	// Load servers from API with optional filter
 	async loadServers(filter = null, force = false) {
 		const filterKey = getFilterKey(filter);
@@ -127,9 +150,9 @@ export const serverStoreActions = {
 			return { ...state, isLoading: true, error: null };
 		});
 
-		const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
+		const ttlAgo = new Date(Date.now() - defaultCacheTTL);
 		const hasFreshData =
-			currentState.lastUpdated && new Date(currentState.lastUpdated) > fiveMinutesAgo;
+			currentState.lastUpdated && new Date(currentState.lastUpdated) > ttlAgo;
 		const isSameFilter = currentState.currentFilter === filterKey;
 
 		if (!force && hasFreshData && isSameFilter && currentState.servers.length > 0) {
@@ -141,7 +164,7 @@ export const serverStoreActions = {
 		}
 
 		const cachedEntry = memoryCache.get(filterKey);
-		if (!force && cachedEntry && cachedEntry.lastUpdated > fiveMinutesAgo) {
+		if (!force && cachedEntry && cachedEntry.lastUpdated > ttlAgo) {
 			serverStore.update((state) => ({
 				...state,
 				servers: cachedEntry.data,
@@ -393,7 +416,7 @@ export const serverStoreActions = {
 			if (!response.ok) throw new Error(`Failed to force check server ${serverId}`);
 
 			// Refresh the server data
-			await this.loadServers(null, true);
+			await this.loadServers(getCurrentFilterValue(), true);
 
 			return true;
 		} catch (error) {

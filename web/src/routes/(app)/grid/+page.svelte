@@ -77,17 +77,17 @@
 	}
 
 	async function loadData(force = false) {
-		await serverStoreActions.loadServers(activeFilter ?? null, force);
+		await serverStoreActions.setFilter(activeFilter ?? null, force);
 	}
 
-	onMount(async () => {
-		hasMounted = true;
-	});
+onMount(async () => {
+	hasMounted = true;
+});
 
-	$: if (hasMounted && activeFilter !== undefined && activeFilter !== lastActiveFilter) {
-		lastActiveFilter = activeFilter;
-		loadData();
-	}
+$: if (hasMounted && activeFilter !== undefined && activeFilter !== lastActiveFilter) {
+	lastActiveFilter = activeFilter;
+	loadData();
+}
 </script>
 
 <div class="p-4 min-h-screen w-full">

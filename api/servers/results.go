@@ -12,10 +12,10 @@ import (
 )
 
 type pingSummary struct {
-	StatusCode   int       `json:"status_code"`
-	ResponseTime float64   `json:"response_time_ms"`
-	Error        string    `json:"error,omitempty"`
-	Timestamp    time.Time `json:"timestamp"`
+	StatusCode   int         `json:"status_code"`
+	ResponseTime float64     `json:"response_time_ms"`
+	Error        string      `json:"error,omitempty"`
+	Timestamp    time.Time   `json:"timestamp"`
 	Detail       *PingDetail `json:"detail,omitempty"`
 }
 

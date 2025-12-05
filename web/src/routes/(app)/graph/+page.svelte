@@ -216,7 +216,7 @@ function buildGraphData(serverList: Server[]) {
 async function loadGraphData(force = false) {
 	isLoading.set(true);
 	try {
-		await serverStoreActions.loadServers(activeFilter ?? null, force);
+		await serverStoreActions.setFilter(activeFilter ?? null, force);
 		updateGraph();
 	} finally {
 		isLoading.set(false);
