@@ -140,6 +140,44 @@
 			</div>
 		{/if}
 
+		{#if results.headers.cookieFindings?.length > 0}
+			<div class="mb-8">
+				<h3 class="text-lg font-semibold flex items-center gap-2 text-yellow-400">
+					<AlertTriangle class="w-5 h-5" />
+					Cookie Findings
+				</h3>
+				<div class="space-y-2">
+					{#each results.headers.cookieFindings as finding}
+						<div class="p-3 rounded-lg bg-[#2b2b2b]">
+							<div class="font-medium text-white">{finding.description}</div>
+							<div class="text-sm text-gray-400 mt-1">{finding.mitigation}</div>
+						</div>
+					{/each}
+				</div>
+			</div>
+		{/if}
+
+		<div class="mb-8">
+			<h3 class="text-lg font-semibold flex items-center gap-2 text-blue-400">
+				<Shield class="w-5 h-5" />
+				Cross-Origin Policy
+			</h3>
+			{#if results.headers.corsFindings?.length > 0}
+				<div class="space-y-2">
+					{#each results.headers.corsFindings as finding}
+						<div class="p-3 rounded-lg bg-[#2b2b2b]">
+							<div class="font-medium text-white">{finding.description}</div>
+							<div class="text-sm text-gray-400 mt-1">{finding.mitigation}</div>
+						</div>
+					{/each}
+				</div>
+			{:else}
+				<div class="text-sm text-green-400">
+					No cross-origin issues detected—CORS policy appears restrictive.
+				</div>
+			{/if}
+		</div>
+
 		<!-- Passed Checks -->
 		{#if results.headers.passed.length > 0}
 			<div>

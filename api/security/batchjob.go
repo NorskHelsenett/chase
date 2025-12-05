@@ -3,7 +3,9 @@ package security
 import (
 	"context"
 	"fmt"
+	"log"
 	"math/rand"
+	"os"
 	"strconv"
 	"strings"
 	"sync"
@@ -29,21 +31,25 @@ type BatchJobStore struct {
 
 // BatchResultStore stores individual server processing results
 type BatchResultStore struct {
-	ID           string    `gorm:"primaryKey;type:varchar(50)" json:"id"`
-	BatchJobID   string    `gorm:"type:varchar(50);index" json:"batch_job_id"`
-	ServerURL    string    `gorm:"type:varchar(255)" json:"server_url"`
-	SecurityScan bool      `gorm:"type:boolean" json:"security_scan_completed"`
-	Screenshot   bool      `gorm:"type:boolean" json:"screenshot_completed"`
-	Error        string    `gorm:"type:text" json:"error"`
-	CreatedAt    time.Time `gorm:"type:datetime;index" json:"created_at"`
+	ID              string    `gorm:"primaryKey;type:varchar(50)" json:"id"`
+	BatchJobID      string    `gorm:"type:varchar(50);index" json:"batch_job_id"`
+	ServerURL       string    `gorm:"type:varchar(255)" json:"server_url"`
+	SecurityScan    bool      `gorm:"type:boolean" json:"security_scan_completed"`
+	Screenshot      bool      `gorm:"type:boolean" json:"screenshot_completed"`
+	Error           string    `gorm:"type:text" json:"error"`
+	SecurityError   string    `gorm:"type:text" json:"security_error"`
+	ScreenshotError string    `gorm:"type:text" json:"screenshot_error"`
+	CreatedAt       time.Time `gorm:"type:datetime;index" json:"created_at"`
 }
 
 // BatchResult stores results for individual server processing
 type BatchResult struct {
-	ServerURL    string `json:"server_url"`
-	SecurityScan bool   `json:"security_scan_completed"`
-	Screenshot   bool   `json:"screenshot_completed"`
-	Error        string `json:"error,omitempty"`
+	ServerURL       string `json:"server_url"`
+	SecurityScan    bool   `json:"security_scan_completed"`
+	Screenshot      bool   `json:"screenshot_completed"`
+	Error           string `json:"error,omitempty"`
+	SecurityError   string `json:"security_error,omitempty"`
+	ScreenshotError string `json:"screenshot_error,omitempty"`
 }
 
 // BatchJob represents a running batch operation
@@ -249,7 +255,7 @@ func CancelBatchHandler(c *gin.Context) {
 
 	// Update job status in database
 	db := database.GetDB()
-	if err := updateBatchJob(db, job, nil); err != nil {
+	if err := updateBatchJob(db, job); err != nil {
 		c.JSON(500, gin.H{"error": "Failed to update job status"})
 		return
 	}
@@ -299,49 +305,55 @@ func processServer(ctx context.Context, server types.Server) BatchResult {
 	securityChan := make(chan struct {
 		report *SecurityReport
 		err    error
-	})
-	screenshotChan := make(chan error)
+	}, 1)
+	screenshotChan := make(chan error, 1)
 
 	// Start security scan in goroutine
+	securityCtx, cancelSecurity := context.WithTimeout(ctx, 30*time.Second)
 	go func() {
-		scanner := NewScanner()
-		report, err := scanner.ScanWebsite(server.URL)
-		securityChan <- struct {
+		defer cancelSecurity()
+		scanner := NewScanner(0)
+		report, err := scanner.ScanWebsite(securityCtx, server.URL)
+		select {
+		case securityChan <- struct {
 			report *SecurityReport
 			err    error
-		}{report, err}
+		}{report, err}:
+		case <-securityCtx.Done():
+		}
 	}()
 
 	// Start screenshot capture in goroutine
+	screenshotCtx, cancelScreenshot := context.WithTimeout(ctx, 30*time.Second)
 	go func() {
+		defer cancelScreenshot()
 		// Ensure URL has protocol
 		url := server.URL
 		if !strings.HasPrefix(url, "http") {
 			url = "https://" + url
 		}
 		err := captureAndSendScreenshot(nil, url, false, 0)
-		screenshotChan <- err
+		select {
+		case screenshotChan <- err:
+		case <-screenshotCtx.Done():
+		}
 	}()
-
-	// Wait for operations with timeout
-	securityTimeout := time.After(30 * time.Second)
-	screenshotTimeout := time.After(30 * time.Second)
 
 	// Wait for security scan
 	select {
 	case <-ctx.Done():
-		result.Error = "Operation cancelled"
+		result.SecurityError = "Operation cancelled"
 		return result
-	case <-securityTimeout:
-		result.Error = "Security scan timed out"
+	case <-securityCtx.Done():
+		result.SecurityError = "Security scan timed out"
 	case securityResult := <-securityChan:
 		if securityResult.err != nil {
-			result.Error = fmt.Sprintf("Security scan failed: %v", securityResult.err)
+			result.SecurityError = fmt.Sprintf("Security scan failed: %v", securityResult.err)
 		} else {
 			result.SecurityScan = true
 			// Store the security report
 			if err := storeSecurityReport(securityResult.report); err != nil {
-				result.Error = fmt.Sprintf("Failed to store security report: %v", err)
+				result.SecurityError = fmt.Sprintf("Failed to store security report: %v", err)
 			}
 		}
 	}
@@ -349,22 +361,31 @@ func processServer(ctx context.Context, server types.Server) BatchResult {
 	// Wait for screenshot
 	select {
 	case <-ctx.Done():
-		if result.Error == "" {
-			result.Error = "Operation cancelled"
+		if result.ScreenshotError == "" {
+			result.ScreenshotError = "Operation cancelled"
 		}
 		return result
-	case <-screenshotTimeout:
-		if result.Error == "" {
-			result.Error = "Screenshot capture timed out"
+	case <-screenshotCtx.Done():
+		if result.ScreenshotError == "" {
+			result.ScreenshotError = "Screenshot capture timed out"
 		}
 	case err := <-screenshotChan:
 		if err != nil {
-			if result.Error == "" {
-				result.Error = fmt.Sprintf("Screenshot capture failed: %v", err)
+			if result.ScreenshotError == "" {
+				result.ScreenshotError = fmt.Sprintf("Screenshot capture failed: %v", err)
 			}
 		} else {
 			result.Screenshot = true
 		}
+	}
+
+	switch {
+	case result.SecurityError != "" && result.ScreenshotError != "":
+		result.Error = fmt.Sprintf("security: %s; screenshot: %s", result.SecurityError, result.ScreenshotError)
+	case result.SecurityError != "":
+		result.Error = result.SecurityError
+	case result.ScreenshotError != "":
+		result.Error = result.ScreenshotError
 	}
 
 	return result
@@ -385,11 +406,11 @@ func processBatch(ctx context.Context, servers []types.Server, job *BatchJob) {
 		return
 	}
 
-	results := make(chan BatchResult, len(servers))
+	results := make(chan BatchResult)
 	var wg sync.WaitGroup
 
-	workerCount := 3 // Reduced for SQLite
-	serverChan := make(chan types.Server, len(servers))
+	workerCount := getBatchWorkerCount()
+	serverChan := make(chan types.Server, workerCount*2)
 
 	for i := 0; i < workerCount; i++ {
 		wg.Add(1)
@@ -399,18 +420,22 @@ func processBatch(ctx context.Context, servers []types.Server, job *BatchJob) {
 				select {
 				case <-ctx.Done():
 					return
-				default:
-					result := processServer(ctx, server)
-					results <- result
+				case results <- processServer(ctx, server):
 				}
 			}
 		}()
 	}
 
-	for _, server := range servers {
-		serverChan <- server
-	}
-	close(serverChan)
+	go func() {
+		defer close(serverChan)
+		for _, server := range servers {
+			select {
+			case <-ctx.Done():
+				return
+			case serverChan <- server:
+			}
+		}
+	}()
 
 	go func() {
 		wg.Wait()
@@ -426,16 +451,28 @@ func processBatch(ctx context.Context, servers []types.Server, job *BatchJob) {
 		jobsMutex.Unlock()
 	}
 
+	pendingResults := make([]BatchResult, 0, 10)
+	flushResults := func() {
+		if len(pendingResults) == 0 {
+			return
+		}
+		if err := storeBatchResults(db, job.ID, pendingResults); err != nil {
+			log.Printf("failed to store batch results: %v", err)
+		}
+		pendingResults = pendingResults[:0]
+	}
+
 	for {
 		select {
 		case result, ok := <-results:
 			if !ok {
+				flushResults()
 				job.Status = "completed"
 				job.EndTime = time.Now()
 				if job.Failed == job.Total {
 					job.Status = "failed"
 				}
-				updateBatchJob(db, job, nil)
+				updateBatchJob(db, job)
 				cleanupJob()
 				return
 			}
@@ -448,15 +485,20 @@ func processBatch(ctx context.Context, servers []types.Server, job *BatchJob) {
 			}
 			jobsMutex.Unlock()
 
-			updateBatchJob(db, job, &result)
+			pendingResults = append(pendingResults, result)
+			if len(pendingResults) >= 10 {
+				flushResults()
+			}
 
 		case <-updateTicker.C:
-			updateBatchJob(db, job, nil)
+			flushResults()
+			updateBatchJob(db, job)
 
 		case <-ctx.Done():
+			flushResults()
 			job.Status = "cancelled"
 			job.EndTime = time.Now()
-			updateBatchJob(db, job, nil)
+			updateBatchJob(db, job)
 			cleanupJob()
 			return
 		}
@@ -477,35 +519,38 @@ func storeBatchJob(db *gorm.DB, job *BatchJob) error {
 	return db.Create(&jobStore).Error
 }
 
-func updateBatchJob(db *gorm.DB, job *BatchJob, result *BatchResult) error {
-	// Update job status
-	if err := db.Model(&BatchJobStore{}).
+func updateBatchJob(db *gorm.DB, job *BatchJob) error {
+	return db.Model(&BatchJobStore{}).
 		Where("id = ?", job.ID).
 		Updates(map[string]interface{}{
 			"completed": job.Completed,
 			"failed":    job.Failed,
 			"status":    job.Status,
 			"end_time":  job.EndTime,
-			"error":     job.Error,
-		}).Error; err != nil {
-		return err
+		}).Error
+}
+
+func storeBatchResults(db *gorm.DB, jobID string, results []BatchResult) error {
+	if len(results) == 0 {
+		return nil
 	}
 
-	// Store result if provided
-	if result != nil {
-		resultStore := BatchResultStore{
-			ID:           generateResultID(),
-			BatchJobID:   job.ID,
-			ServerURL:    result.ServerURL,
-			SecurityScan: result.SecurityScan,
-			Screenshot:   result.Screenshot,
-			Error:        result.Error,
-			CreatedAt:    time.Now(),
-		}
-		return db.Create(&resultStore).Error
+	stores := make([]BatchResultStore, 0, len(results))
+	now := time.Now()
+	for _, result := range results {
+		stores = append(stores, BatchResultStore{
+			ID:              generateResultID(),
+			BatchJobID:      jobID,
+			ServerURL:       result.ServerURL,
+			SecurityScan:    result.SecurityScan,
+			Screenshot:      result.Screenshot,
+			Error:           result.Error,
+			SecurityError:   result.SecurityError,
+			ScreenshotError: result.ScreenshotError,
+			CreatedAt:       now,
+		})
 	}
-
-	return nil
+	return db.Create(&stores).Error
 }
 
 func generateJobID() string {
@@ -523,4 +568,17 @@ func randomString(n int) string {
 		b[i] = letterBytes[rand.Intn(len(letterBytes))]
 	}
 	return string(b)
+}
+
+func getBatchWorkerCount() int {
+	value := os.Getenv("BATCH_WORKERS")
+	if value == "" {
+		return 3
+	}
+
+	if count, err := strconv.Atoi(value); err == nil && count > 0 {
+		return count
+	}
+
+	return 3
 }

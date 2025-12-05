@@ -2,6 +2,7 @@ package security
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"io"
 	"net/http"
@@ -25,7 +26,7 @@ type AdminPageSignature struct {
 // PageValidator defines validation logic for admin pages
 type PageValidator func(content []byte, headers http.Header) bool
 
-func (s *Scanner) checkAdminPages(domain string) (*AdminPagesAnalysis, error) {
+func (s *Scanner) checkAdminPages(ctx context.Context, domain string) (*AdminPagesAnalysis, error) {
 	analysis := &AdminPagesAnalysis{
 		Exposed:         make([]string, 0),
 		Risk:            RiskLow,
@@ -73,7 +74,7 @@ func (s *Scanner) checkAdminPages(domain string) (*AdminPagesAnalysis, error) {
 		go func(p AdminPageSignature) {
 			defer wg.Done()
 
-			exposed, evidence := s.validateAdminPage(domain, p)
+			exposed, evidence := s.validateAdminPage(ctx, domain, p)
 			if exposed {
 				mu.Lock()
 				analysis.Exposed = append(analysis.Exposed, p.path)
@@ -105,14 +106,8 @@ func (s *Scanner) checkAdminPages(domain string) (*AdminPagesAnalysis, error) {
 	return analysis, nil
 }
 
-func (s *Scanner) validateAdminPage(domain string, page AdminPageSignature) (bool, string) {
-	client := &http.Client{
-		CheckRedirect: func(req *http.Request, via []*http.Request) error {
-			return http.ErrUseLastResponse // Don't follow redirects
-		},
-	}
-
-	resp, err := client.Get(domain + page.path)
+func (s *Scanner) validateAdminPage(ctx context.Context, domain string, page AdminPageSignature) (bool, string) {
+	resp, err := s.fetch(ctx, domain+page.path, requestOptions{followRedirects: boolPtr(false)})
 	if err != nil {
 		return false, ""
 	}
@@ -239,4 +234,24 @@ func min(a, b int) int {
 		return a
 	}
 	return b
+}
+
+// adminTask wires the admin page scanner into the task registry.
+type adminTask struct{}
+
+func newAdminTask() ScanTask {
+	return adminTask{}
+}
+
+func (adminTask) Name() string {
+	return "adminPages"
+}
+
+func (adminTask) Run(ctx context.Context, scanner *Scanner, req ScanRequest, report *SecurityReport) error {
+	admin, err := scanner.checkAdminPages(ctx, req.Domain)
+	if err != nil {
+		return err
+	}
+	report.AdminPages = *admin
+	return nil
 }

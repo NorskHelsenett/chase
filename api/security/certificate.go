@@ -1,16 +1,18 @@
 package security
 
 import (
+	"context"
 	"crypto/ecdsa"
 	"crypto/rsa"
 	"crypto/tls"
 	"crypto/x509"
 	"fmt"
+	"net"
 	"strings"
 	"time"
 )
 
-func (s *Scanner) checkCertificate(domain string) (*CertificateAnalysis, error) {
+func (s *Scanner) checkCertificate(ctx context.Context, domain string) (*CertificateAnalysis, error) {
 	host := strings.TrimPrefix(strings.TrimPrefix(domain, "https://"), "http://")
 	if !strings.Contains(host, ":") {
 		host = host + ":443"
@@ -26,27 +28,29 @@ func (s *Scanner) checkCertificate(domain string) (*CertificateAnalysis, error) 
 	}
 
 	for version, name := range versions {
-		config := &tls.Config{
-			InsecureSkipVerify: true,
-			MinVersion:         version,
-			MaxVersion:         version,
-		}
-		if conn, err := tls.Dial("tcp", host, config); err == nil {
+		conn, err := s.dialTLS(ctx, host, true, version)
+		if err == nil {
 			tlsVersions = append(tlsVersions, name)
 			conn.Close()
 		}
 	}
 
 	// Main connection for full analysis
-	conn, err := tls.Dial("tcp", host, &tls.Config{
-		InsecureSkipVerify: true,
-	})
+	conn, err := s.dialTLS(ctx, host, false, 0)
+	var tlsVerificationErr error
 	if err != nil {
-		return nil, err
+		if isTLSError(err) {
+			tlsVerificationErr = err
+			conn, err = s.dialTLS(ctx, host, true, 0)
+		}
+		if err != nil {
+			return nil, err
+		}
 	}
 	defer conn.Close()
 
-	cert := conn.ConnectionState().PeerCertificates[0]
+	state := conn.ConnectionState()
+	cert := state.PeerCertificates[0]
 	// Get public key information
 	var keyType string
 	var keyBits int
@@ -63,19 +67,73 @@ func (s *Scanner) checkCertificate(domain string) (*CertificateAnalysis, error) 
 	}
 
 	analysis := &CertificateAnalysis{
-		ValidFrom:     cert.NotBefore,
-		ValidUntil:    cert.NotAfter,
-		Issuer:        cert.Issuer.CommonName,
-		Organization:  GetOrganization(cert),
-		SubjectDNS:    cert.DNSNames,
-		SerialNumber:  cert.SerialNumber.Text(16),
-		SignatureAlg:  cert.SignatureAlgorithm.String(),
-		PublicKeyType: keyType,
-		PublicKeyBits: keyBits,
-		Findings:      make([]Finding, 0),
-		Warnings:      make([]Finding, 0),
-		Risk:          RiskLow,
-		TLSVersions:   tlsVersions,
+		ValidFrom:          cert.NotBefore,
+		ValidUntil:         cert.NotAfter,
+		Issuer:             cert.Issuer.CommonName,
+		Organization:       GetOrganization(cert),
+		SubjectDNS:         cert.DNSNames,
+		SerialNumber:       cert.SerialNumber.Text(16),
+		SignatureAlg:       cert.SignatureAlgorithm.String(),
+		PublicKeyType:      keyType,
+		PublicKeyBits:      keyBits,
+		Findings:           make([]Finding, 0),
+		Warnings:           make([]Finding, 0),
+		Risk:               RiskLow,
+		TLSVersions:        tlsVersions,
+		NegotiatedProtocol: state.NegotiatedProtocol,
+		PreferredCipher:    tls.CipherSuiteName(state.CipherSuite),
+		CTEnabled:          len(state.SignedCertificateTimestamps) > 0,
+	}
+
+	if len(state.OCSPResponse) > 0 {
+		analysis.RevocationStatus = "Stapled OCSP response present"
+	} else {
+		analysis.RevocationStatus = "OCSP stapling not enabled"
+	}
+
+	if len(tlsVersions) == 0 {
+		analysis.Findings = append(analysis.Findings, Finding{
+			Description: "Unable to negotiate any modern TLS versions",
+			Risk:        RiskCritical,
+			Evidence:    "Server rejected TLS 1.0 - 1.3 handshakes",
+			Mitigation:  "Enable TLS 1.2+ on the edge load balancer",
+		})
+		analysis.Risk = RiskCritical
+	} else if !containsString(tlsVersions, "TLS 1.3") {
+		analysis.Warnings = append(analysis.Warnings, Finding{
+			Description: "TLS 1.3 not supported",
+			Risk:        RiskMedium,
+			Evidence:    fmt.Sprintf("Supported versions: %s", strings.Join(tlsVersions, ", ")),
+			Mitigation:  "Enable TLS 1.3 to prevent downgrade attacks",
+		})
+	}
+
+	if !analysis.CTEnabled {
+		analysis.Warnings = append(analysis.Warnings, Finding{
+			Description: "Certificate Transparency SCTs not provided",
+			Risk:        RiskLow,
+			Evidence:    "TLS handshake lacked SignedCertificateTimestamps",
+			Mitigation:  "Request SCT stapling from the CA or use a CT-embedded certificate",
+		})
+	}
+
+	if len(state.OCSPResponse) == 0 {
+		analysis.Warnings = append(analysis.Warnings, Finding{
+			Description: "OCSP stapling disabled",
+			Risk:        RiskLow,
+			Evidence:    "TLS handshake did not include a stapled OCSP response",
+			Mitigation:  "Enable OCSP stapling on the load balancer or origin",
+		})
+	}
+
+	if tlsVerificationErr != nil {
+		analysis.Findings = append(analysis.Findings, Finding{
+			Description: "TLS verification failed",
+			Risk:        RiskHigh,
+			Evidence:    tlsVerificationErr.Error(),
+			Mitigation:  "Install a publicly trusted certificate matching the hostname",
+		})
+		analysis.Risk = RiskHigh
 	}
 
 	// Check TLS version support
@@ -148,6 +206,40 @@ func (s *Scanner) checkCertificate(domain string) (*CertificateAnalysis, error) 
 	return analysis, nil
 }
 
+func containsString(values []string, candidate string) bool {
+	for _, v := range values {
+		if v == candidate {
+			return true
+		}
+	}
+	return false
+}
+
+func (s *Scanner) dialTLS(ctx context.Context, host string, insecure bool, version uint16) (*tls.Conn, error) {
+	dialer := &net.Dialer{
+		Timeout: s.timeout,
+	}
+	if deadline, ok := ctx.Deadline(); ok {
+		dialer.Deadline = deadline
+	}
+
+	serverName := host
+	if strings.Contains(host, ":") {
+		serverName = strings.Split(host, ":")[0]
+	}
+
+	config := &tls.Config{
+		InsecureSkipVerify: insecure,
+		ServerName:         serverName,
+	}
+	if version != 0 {
+		config.MinVersion = version
+		config.MaxVersion = version
+	}
+
+	return tls.DialWithDialer(dialer, "tcp", host, config)
+}
+
 func GetOrganization(cert *x509.Certificate) string {
 	// Try different certificate fields for organization info
 	if len(cert.Subject.Organization) > 0 {
@@ -203,4 +295,23 @@ func calculateGradeCertificate(analysis *CertificateAnalysis) string {
 	}
 
 	return "A+"
+}
+
+type certificateTask struct{}
+
+func newCertificateTask() ScanTask {
+	return certificateTask{}
+}
+
+func (certificateTask) Name() string {
+	return "certificate"
+}
+
+func (certificateTask) Run(ctx context.Context, scanner *Scanner, req ScanRequest, report *SecurityReport) error {
+	cert, err := scanner.checkCertificate(ctx, req.Domain)
+	if err != nil {
+		return err
+	}
+	report.Certificate = *cert
+	return nil
 }

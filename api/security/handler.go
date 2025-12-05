@@ -29,12 +29,13 @@ func InitDatabase() error {
 }
 
 type SecurityReportRecord struct {
-	ID          uint   `gorm:"primaryKey"`
-	ServerURL   string `gorm:"index"`
-	ReportData  []byte `gorm:"type:json"`
-	CreatedAt   time.Time
-	RiskLevel   RiskLevel `gorm:"index"`
-	Description string
+	ID             uint   `gorm:"primaryKey"`
+	ServerURL      string `gorm:"index"`
+	ReportData     []byte `gorm:"type:json"`
+	CreatedAt      time.Time
+	RiskLevel      RiskLevel `gorm:"index"`
+	Description    string
+	ScannerVersion string `gorm:"type:varchar(16);index"`
 }
 
 // Screenshot stores binary screenshot data
@@ -61,7 +62,7 @@ func SecurityScanHandler(c *gin.Context) {
 	}
 
 	// Initialize scanner with timeout and error handling
-	scanner := NewScanner()
+	scanner := NewScanner(0)
 
 	// Create a channel for results with timeout
 	resultChan := make(chan *SecurityReport)
@@ -69,7 +70,7 @@ func SecurityScanHandler(c *gin.Context) {
 
 	// Perform scan in goroutine with timeout
 	go func() {
-		report, err := scanner.ScanWebsite(domain)
+		report, err := scanner.ScanWebsite(c.Request.Context(), domain)
 		if err != nil {
 			errChan <- err
 			return
@@ -91,7 +92,7 @@ func SecurityScanHandler(c *gin.Context) {
 				fmt.Sprintf("Domain %s implements basic security measures", domain))
 		}
 
-		if len(report.Certificate.Findings) > 0 {
+		if len(report.Certificate.Findings) == 0 {
 			report.Certificate.Findings = append(report.Certificate.Findings, Finding{
 				Description: fmt.Sprintf("%s uses modern encryption standards", domain),
 				Risk:        RiskLow,
@@ -197,7 +198,7 @@ func LastSecurityScanHandler(c *gin.Context) {
 	}
 
 	// Check if security scan exists
-	var securityReport types.SecurityReportRecord
+	var securityReport SecurityReportRecord
 	err := db.Where("server_url = ?", server.URL).
 		Order("created_at DESC").
 		First(&securityReport).Error
@@ -215,7 +216,7 @@ func LastSecurityScanHandler(c *gin.Context) {
 	}
 
 	// Return existing security report
-	var report types.SecurityReport
+	var report SecurityReport
 	if err := json.Unmarshal(securityReport.ReportData, &report); err != nil {
 		c.JSON(500, gin.H{"error": "Failed to parse security report"})
 		return
@@ -379,11 +380,12 @@ func storeSecurityReport(report *SecurityReport) error {
 
 	// Create security report record
 	reportRecord := SecurityReportRecord{
-		ServerURL:   strings.TrimPrefix(strings.TrimPrefix(report.TargetURL, "https://"), "http://"),
-		ReportData:  reportJSON,
-		CreatedAt:   report.ScanTimestamp,
-		RiskLevel:   determineOverallRisk(report),
-		Description: generateReportSummary(report),
+		ServerURL:      strings.TrimPrefix(strings.TrimPrefix(report.TargetURL, "https://"), "http://"),
+		ReportData:     reportJSON,
+		CreatedAt:      report.ScanTimestamp,
+		RiskLevel:      determineOverallRisk(report),
+		Description:    generateReportSummary(report),
+		ScannerVersion: report.ScannerVersion,
 	}
 
 	if err := db.Create(&reportRecord).Error; err != nil {

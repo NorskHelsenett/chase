@@ -1,6 +1,7 @@
 package security
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"mime"
@@ -38,7 +39,7 @@ func isValidTextFile(contentType string, content string) bool {
 	return true
 }
 
-func (s *Scanner) checkRobotsTxt(domain string) (*RobotsAnalysis, error) {
+func (s *Scanner) checkRobotsTxt(ctx context.Context, domain string) (*RobotsAnalysis, error) {
 	robotsPaths := []string{
 		"/robots.txt",
 	}
@@ -58,7 +59,7 @@ func (s *Scanner) checkRobotsTxt(domain string) (*RobotsAnalysis, error) {
 		wg.Add(1)
 		go func(p string) {
 			defer wg.Done()
-			resp, err := s.client.Get(domain + p)
+			resp, err := s.fetch(ctx, domain+p, requestOptions{})
 			if err != nil {
 				return
 			}
@@ -118,7 +119,7 @@ func (s *Scanner) checkRobotsTxt(domain string) (*RobotsAnalysis, error) {
 	return analysis, nil
 }
 
-func (s *Scanner) checkSecurityTxt(domain string) (*SecurityTxtAnalysis, error) {
+func (s *Scanner) checkSecurityTxt(ctx context.Context, domain string) (*SecurityTxtAnalysis, error) {
 	securityPaths := []string{
 		"/.well-known/security.txt",
 		"/security.txt",
@@ -145,7 +146,7 @@ func (s *Scanner) checkSecurityTxt(domain string) (*SecurityTxtAnalysis, error) 
 		wg.Add(1)
 		go func(p string) {
 			defer wg.Done()
-			resp, err := s.client.Get(domain + p)
+			resp, err := s.fetch(ctx, domain+p, requestOptions{})
 			if err != nil {
 				return
 			}
@@ -304,4 +305,42 @@ func (s *Scanner) checkSecurityTxt(domain string) (*SecurityTxtAnalysis, error) 
 
 	wg.Wait()
 	return analysis, nil
+}
+
+type robotsTask struct{}
+
+func newRobotsTask() ScanTask {
+	return robotsTask{}
+}
+
+func (robotsTask) Name() string {
+	return "robotsTxt"
+}
+
+func (robotsTask) Run(ctx context.Context, scanner *Scanner, req ScanRequest, report *SecurityReport) error {
+	robotsTxt, err := scanner.checkRobotsTxt(ctx, req.Domain)
+	if err != nil {
+		return err
+	}
+	report.RobotsTxt = *robotsTxt
+	return nil
+}
+
+type securityTxtTask struct{}
+
+func newSecurityTxtTask() ScanTask {
+	return securityTxtTask{}
+}
+
+func (securityTxtTask) Name() string {
+	return "securityTxt"
+}
+
+func (securityTxtTask) Run(ctx context.Context, scanner *Scanner, req ScanRequest, report *SecurityReport) error {
+	securityTxt, err := scanner.checkSecurityTxt(ctx, req.Domain)
+	if err != nil {
+		return err
+	}
+	report.SecurityTxt = *securityTxt
+	return nil
 }

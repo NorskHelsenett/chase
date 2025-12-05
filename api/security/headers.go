@@ -1,7 +1,9 @@
 package security
 
 import (
+	"context"
 	"fmt"
+	"net/http"
 	"sort"
 	"strconv"
 	"strings"
@@ -18,6 +20,8 @@ const (
 	StatusSuboptimal
 	StatusGood
 )
+
+const corsProbeOrigin = "https://scanner.invalid"
 
 // HeaderRequirement defines the validation rules and recommendations for a security header
 type HeaderRequirement struct {
@@ -42,8 +46,27 @@ func sortIssuesByRisk(issues []Finding) {
 	})
 }
 
-func (s *Scanner) checkSecurityHeaders(domain string) (*HeadersAnalysis, error) {
-	resp, err := s.client.Get(domain)
+type headersTask struct{}
+
+func newHeadersTask() ScanTask {
+	return headersTask{}
+}
+
+func (headersTask) Name() string {
+	return "headers"
+}
+
+func (headersTask) Run(ctx context.Context, scanner *Scanner, req ScanRequest, report *SecurityReport) error {
+	analysis, err := scanner.checkSecurityHeaders(ctx, req.Domain)
+	if err != nil {
+		return err
+	}
+	report.Headers = *analysis
+	return nil
+}
+
+func (s *Scanner) checkSecurityHeaders(ctx context.Context, domain string) (*HeadersAnalysis, error) {
+	resp, err := s.fetch(ctx, domain, requestOptions{})
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch domain: %w", err)
 	}
@@ -71,10 +94,12 @@ func (s *Scanner) checkSecurityHeaders(domain string) (*HeadersAnalysis, error) 
 	findTitle(doc)
 
 	analysis := &HeadersAnalysis{
-		Issues: make([]Finding, 0),
-		Passed: make([]string, 0),
-		Risk:   RiskLow,
-		Title:  title,
+		Issues:         make([]Finding, 0),
+		CookieFindings: make([]Finding, 0),
+		CORSFindings:   make([]Finding, 0),
+		Passed:         make([]string, 0),
+		Risk:           RiskLow,
+		Title:          title,
 	}
 
 	headerChecks := map[string]HeaderRequirement{
@@ -204,41 +229,85 @@ func (s *Scanner) checkSecurityHeaders(domain string) (*HeadersAnalysis, error) 
 				return StatusGood, "", ""
 			},
 		},
+		"Referrer-Policy": {
+			name:        "Referrer Policy",
+			description: "Controls how much referrer data is shared",
+			risk:        RiskMedium,
+			required:    true,
+			validator: func(value string) (HeaderStatus, string, string) {
+				if value == "" {
+					return StatusMissing, "Header is missing", "Set Referrer-Policy to strict-origin-when-cross-origin"
+				}
+				val := strings.ToLower(strings.TrimSpace(value))
+				switch val {
+				case "no-referrer", "strict-origin", "strict-origin-when-cross-origin", "same-origin":
+					return StatusGood, "", ""
+				case "unsafe-url":
+					return StatusMisconfigured, "unsafe-url leaks full URLs", "Use strict-origin-when-cross-origin or no-referrer"
+				default:
+					return StatusSuboptimal, fmt.Sprintf("Policy %s is permissive", value), "Tighten the policy to strict-origin-when-cross-origin"
+				}
+			},
+		},
 		"Permissions-Policy": {
 			name:        "Permissions Policy",
-			description: "Browser features control",
+			description: "Restricts advanced browser features",
 			risk:        RiskMedium,
 			required:    false,
 			validator: func(value string) (HeaderStatus, string, string) {
 				if value == "" {
-					return StatusMissing,
-						"Header is missing",
-						"Consider implementing Permissions-Policy to restrict browser features"
+					return StatusMissing, "Header is missing", "Add Permissions-Policy to disable unused sensors/APIs"
 				}
-
-				recommendedPolicies := map[string]bool{
-					"geolocation": true,
-					"microphone":  true,
-					"camera":      true,
-					"payment":     true,
+				if strings.Contains(value, "*") {
+					return StatusMisconfigured, "Wildcard permissions detected", "Enumerate explicit origins for each feature"
 				}
-
-				policies := strings.Split(value, ",")
-				for policy := range recommendedPolicies {
-					found := false
-					for _, p := range policies {
-						if strings.Contains(p, policy) {
-							found = true
-							break
-						}
-					}
-					if !found {
-						return StatusSuboptimal,
-							fmt.Sprintf("Missing recommended policy for %s", policy),
-							fmt.Sprintf("Consider adding policy for %s", policy)
-					}
+				return StatusGood, "", ""
+			},
+		},
+		"Cross-Origin-Opener-Policy": {
+			name:        "Cross-Origin-Opener-Policy (COOP)",
+			description: "Defends against cross-origin attacks",
+			risk:        RiskMedium,
+			required:    false,
+			validator: func(value string) (HeaderStatus, string, string) {
+				if value == "" {
+					return StatusMissing, "Header is missing", "Set COOP to same-origin"
 				}
-
+				val := strings.ToLower(value)
+				if val == "same-origin" || val == "same-origin-allow-popups" {
+					return StatusGood, "", ""
+				}
+				return StatusMisconfigured, "Unexpected COOP policy", "Prefer same-origin for isolation"
+			},
+		},
+		"Cross-Origin-Embedder-Policy": {
+			name:        "Cross-Origin-Embedder-Policy (COEP)",
+			description: "Prevents loading untrusted cross-origin resources",
+			risk:        RiskHigh,
+			required:    false,
+			validator: func(value string) (HeaderStatus, string, string) {
+				if value == "" {
+					return StatusMissing, "Header is missing", "Set COEP: require-corp to enable full site isolation"
+				}
+				if strings.ToLower(value) != "require-corp" {
+					return StatusMisconfigured, "COEP must be set to require-corp", "Use 'Cross-Origin-Embedder-Policy: require-corp'"
+				}
+				return StatusGood, "", ""
+			},
+		},
+		"Cross-Origin-Resource-Policy": {
+			name:        "Cross-Origin-Resource-Policy (CORP)",
+			description: "Restricts how other origins load resources",
+			risk:        RiskMedium,
+			required:    false,
+			validator: func(value string) (HeaderStatus, string, string) {
+				if value == "" {
+					return StatusMissing, "Header is missing", "Set CORP to same-origin or same-site"
+				}
+				val := strings.ToLower(value)
+				if val == "cross-origin" {
+					return StatusSuboptimal, "CORP allows cross-origin consumption", "Use same-origin or at least same-site"
+				}
 				return StatusGood, "", ""
 			},
 		},
@@ -264,6 +333,7 @@ func (s *Scanner) checkSecurityHeaders(domain string) (*HeadersAnalysis, error) 
 				Evidence:    issue,
 				Mitigation:  recommendation,
 			})
+			highestRisk = maxRiskLevel(highestRisk, check.risk)
 		case StatusMisconfigured:
 			score -= 15
 			analysis.Issues = append(analysis.Issues, Finding{
@@ -272,24 +342,40 @@ func (s *Scanner) checkSecurityHeaders(domain string) (*HeadersAnalysis, error) 
 				Evidence:    issue,
 				Mitigation:  recommendation,
 			})
+			highestRisk = maxRiskLevel(highestRisk, check.risk)
 		case StatusSuboptimal:
 			score -= 5
+			issueRisk := decreaseRisk(check.risk)
 			analysis.Issues = append(analysis.Issues, Finding{
 				Description: fmt.Sprintf("%s configuration suboptimal", check.name),
-				Risk:        decreaseRisk(check.risk),
+				Risk:        issueRisk,
 				Evidence:    issue,
 				Mitigation:  recommendation,
 			})
+			highestRisk = maxRiskLevel(highestRisk, issueRisk)
 		case StatusGood:
 			analysis.Passed = append(analysis.Passed, fmt.Sprintf("%s: %s", header, value))
 		}
-
-		if check.risk > highestRisk && status != StatusGood {
-			highestRisk = check.risk
-		}
 	}
 
+	if corsFindings := analyzeCORSHeaders(resp.Header); len(corsFindings) > 0 {
+		analysis.CORSFindings = append(analysis.CORSFindings, corsFindings...)
+	}
+	if probeFindings := s.probeCORS(ctx, domain); len(probeFindings) > 0 {
+		analysis.CORSFindings = append(analysis.CORSFindings, probeFindings...)
+	}
+	analyzeCookies(resp.Cookies(), analysis)
+
 	sortIssuesByRisk(analysis.Issues)
+	sortIssuesByRisk(analysis.CookieFindings)
+	sortIssuesByRisk(analysis.CORSFindings)
+
+	for _, finding := range analysis.CookieFindings {
+		highestRisk = maxRiskLevel(highestRisk, finding.Risk)
+	}
+	for _, finding := range analysis.CORSFindings {
+		highestRisk = maxRiskLevel(highestRisk, finding.Risk)
+	}
 
 	analysis.Score = calculateGrade(score)
 	analysis.Risk = highestRisk
@@ -317,6 +403,166 @@ func parseDirective(value string) map[string]string {
 	}
 
 	return directives
+}
+
+func analyzeCORSHeaders(headers http.Header) []Finding {
+	origin := headers.Get("Access-Control-Allow-Origin")
+	if origin == "" || origin == "null" {
+		return nil
+	}
+
+	findings := make([]Finding, 0)
+	credentials := strings.EqualFold(strings.TrimSpace(headers.Get("Access-Control-Allow-Credentials")), "true")
+	if origin == "*" {
+		risk := RiskMedium
+		if credentials {
+			risk = RiskHigh
+		}
+		findings = append(findings, Finding{
+			Description: "CORS allows any origin",
+			Risk:        risk,
+			Evidence:    fmt.Sprintf("Access-Control-Allow-Origin: %s", origin),
+			Mitigation:  "Return explicit trusted origins instead of a wildcard",
+		})
+	}
+
+	allowedHeaders := strings.ToLower(headers.Get("Access-Control-Allow-Headers"))
+	if strings.Contains(allowedHeaders, "*") || strings.Contains(allowedHeaders, "authorization") {
+		findings = append(findings, Finding{
+			Description: "CORS allows arbitrary headers",
+			Risk:        RiskMedium,
+			Evidence:    fmt.Sprintf("Access-Control-Allow-Headers: %s", allowedHeaders),
+			Mitigation:  "Limit allowed headers to a minimal known list",
+		})
+	}
+
+	return findings
+}
+
+func (s *Scanner) probeCORS(ctx context.Context, domain string) []Finding {
+	resp, err := s.fetch(ctx, domain, requestOptions{
+		method: http.MethodOptions,
+		headers: http.Header{
+			"Origin":                        []string{corsProbeOrigin},
+			"Access-Control-Request-Method": []string{http.MethodPost},
+			"Access-Control-Request-Headers": []string{
+				"Authorization,X-Api-Key,Content-Type",
+			},
+		},
+	})
+	if err != nil {
+		return nil
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= 400 {
+		return nil
+	}
+
+	allowOrigin := resp.Header.Get("Access-Control-Allow-Origin")
+	if allowOrigin == "" || allowOrigin == "null" {
+		return nil
+	}
+
+	findings := make([]Finding, 0)
+	creds := strings.EqualFold(strings.TrimSpace(resp.Header.Get("Access-Control-Allow-Credentials")), "true")
+	if allowOrigin == corsProbeOrigin {
+		risk := RiskMedium
+		if creds {
+			risk = RiskHigh
+		}
+		findings = append(findings, Finding{
+			Description: "CORS reflects arbitrary origins",
+			Risk:        risk,
+			Evidence:    fmt.Sprintf("Origin %s echoed in Access-Control-Allow-Origin", corsProbeOrigin),
+			Mitigation:  "Use an allow-list instead of mirroring the request Origin header",
+		})
+	}
+
+	if allowOrigin == "*" && creds {
+		findings = append(findings, Finding{
+			Description: "CORS allows any origin with credentials",
+			Risk:        RiskHigh,
+			Evidence:    "Access-Control-Allow-Origin: * with Access-Control-Allow-Credentials: true",
+			Mitigation:  "Disable credentialed requests for wildcard origins or restrict to trusted hosts",
+		})
+	}
+
+	allowedHeaders := strings.ToLower(resp.Header.Get("Access-Control-Allow-Headers"))
+	if strings.Contains(allowedHeaders, "authorization") && creds {
+		findings = append(findings, Finding{
+			Description: "CORS permits credentialed Authorization headers",
+			Risk:        RiskHigh,
+			Evidence:    fmt.Sprintf("Allow-Headers includes Authorization: %s", allowedHeaders),
+			Mitigation:  "Disallow Authorization headers for cross-origin calls or require pre-authentication",
+		})
+	}
+
+	return findings
+}
+
+func analyzeCookies(cookies []*http.Cookie, analysis *HeadersAnalysis) {
+	if len(cookies) == 0 {
+		analysis.Passed = append(analysis.Passed, "No cookies observed – authentication may require login to validate session settings")
+		return
+	}
+
+	for _, cookie := range cookies {
+		if !cookie.Secure {
+			analysis.CookieFindings = append(analysis.CookieFindings, Finding{
+				Description: fmt.Sprintf("Cookie %s missing Secure flag", cookie.Name),
+				Risk:        RiskHigh,
+				Evidence:    "Cookie transmitted over HTTP",
+				Mitigation:  "Set Secure on all session cookies",
+			})
+		}
+		if !cookie.HttpOnly {
+			analysis.CookieFindings = append(analysis.CookieFindings, Finding{
+				Description: fmt.Sprintf("Cookie %s missing HttpOnly flag", cookie.Name),
+				Risk:        RiskHigh,
+				Evidence:    "Cookie accessible to JavaScript",
+				Mitigation:  "Set HttpOnly to defend against XSS",
+			})
+		}
+		if cookie.SameSite == http.SameSiteDefaultMode {
+			analysis.CookieFindings = append(analysis.CookieFindings, Finding{
+				Description: fmt.Sprintf("Cookie %s missing explicit SameSite", cookie.Name),
+				Risk:        RiskMedium,
+				Evidence:    "SameSite default can be lax on older browsers",
+				Mitigation:  "Set SameSite=Strict or Lax explicitly",
+			})
+		}
+		if cookie.SameSite == http.SameSiteNoneMode && !cookie.Secure {
+			analysis.CookieFindings = append(analysis.CookieFindings, Finding{
+				Description: fmt.Sprintf("Cookie %s uses SameSite=None without Secure", cookie.Name),
+				Risk:        RiskHigh,
+				Evidence:    "SameSite=None cookies must be marked Secure",
+				Mitigation:  "Add the Secure attribute when using SameSite=None",
+			})
+		}
+	}
+}
+
+func maxRiskLevel(current RiskLevel, candidate RiskLevel) RiskLevel {
+	if riskWeight(candidate) > riskWeight(current) {
+		return candidate
+	}
+	return current
+}
+
+func riskWeight(level RiskLevel) int {
+	switch level {
+	case RiskCritical:
+		return 5
+	case RiskHigh:
+		return 4
+	case RiskMedium:
+		return 3
+	case RiskLow:
+		return 2
+	default:
+		return 1
+	}
 }
 
 // Helper function to decrease risk level for suboptimal configurations

@@ -1,6 +1,7 @@
 <!-- SecurityDashboard.svelte -->
 <script lang="ts">
-	import { AlertTriangle, Server, Globe, Shield, File, Book } from 'lucide-svelte';
+	import { AlertTriangle, Server, Globe, Shield, File, Book, Activity } from 'lucide-svelte';
+	import HealthProbes from './scan/HealthProbes.svelte';
 	import { fade } from 'svelte/transition';
 	import { onMount } from 'svelte';
 	import Certificate from './scan/Certificate.svelte';
@@ -355,6 +356,19 @@
 		</div>
 	{/if}
 
+	<!-- Health Endpoint Probes -->
+	{#if !loading && results?.healthProbes}
+		<div class="bg-[#202020] rounded-lg overflow-hidden">
+			<div class="p-6">
+				<div class="flex items-center gap-2 mb-6">
+					<Activity class="w-5 h-5" />
+					<h2 class="text-xl">Health Endpoints</h2>
+				</div>
+				<HealthProbes probes={results.healthProbes} />
+			</div>
+		</div>
+	{/if}
+
 	<!-- Infrastructure Analysis -->
 	{#if !loading && results?.infrastructure}
 		<div class="bg-[#202020] rounded-lg p-6" transition:fade>
@@ -469,6 +483,17 @@
 						<h3 class="text-gray-400 mb-2">A Records</h3>
 						<ul class="space-y-1">
 							{#each results.dnsRecords.aRecords as record}
+								<li class="text-gray-300">• {record}</li>
+							{/each}
+						</ul>
+					</div>
+				{/if}
+
+				{#if results.dnsRecords.caaRecords?.length > 0}
+					<div class="md:col-span-2">
+						<h3 class="text-gray-400 mb-2">CAA Records</h3>
+						<ul class="space-y-1">
+							{#each results.dnsRecords.caaRecords as record}
 								<li class="text-gray-300">• {record}</li>
 							{/each}
 						</ul>
@@ -604,7 +629,7 @@
 		</div>
 	{/if}
 
-	<!-- Security.txt Analysis -->
+	<!-- Security.txt Analysis --><!-- Security.txt Analysis -->
 	{#if !loading && results?.securityTxt}
 		<div class="bg-[#202020] rounded-lg overflow-hidden">
 			<div class="p-6">
