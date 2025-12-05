@@ -9,7 +9,7 @@
 
 	let filteredServers: Server[] = [];
 	let searchTerm = '';
-	let filterStatus = 'all';
+	let filterStatus = 'online';
 	let hasMounted = false;
 	let lastActiveFilter: string | null | undefined = undefined;
 	let activeFilter: string | null = null;
