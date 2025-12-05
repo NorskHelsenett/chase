@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -123,6 +124,16 @@ func (s *Scanner) evaluateSPF(analysis *DNSAnalysis) {
 				analysis.Findings = append(analysis.Findings,
 					"SPF record allows all senders (+all) – tighten to specific senders only")
 			}
+			if strings.Contains(lower, "~all") {
+				analysis.Findings = append(analysis.Findings,
+					"SPF uses softfail (~all) – enforce '-all' to block spoofing")
+			} else if strings.Contains(lower, "?all") {
+				analysis.Findings = append(analysis.Findings,
+					"SPF uses neutral (?all) – enforce '-all' to block spoofing")
+			} else if !strings.Contains(lower, "-all") {
+				analysis.Findings = append(analysis.Findings,
+					"SPF record missing a final -all directive")
+			}
 		}
 	}
 
@@ -142,13 +153,51 @@ func (s *Scanner) evaluateDMARC(ctx context.Context, resolver dnsResolver, host 
 
 	for _, record := range records {
 		lower := strings.ToLower(record)
-		if strings.Contains(lower, "p=none") {
+		if !strings.HasPrefix(lower, "v=dmarc1") {
+			continue
+		}
+		directives := parseDMARCDirectives(lower)
+		policy := directives["p"]
+		if policy == "" || policy == "none" {
 			analysis.Findings = append(analysis.Findings, "DMARC policy set to none – enforce quarantine or reject")
 		}
-		if !strings.Contains(lower, "rua=") {
+		if rua := directives["rua"]; rua == "" {
 			analysis.Findings = append(analysis.Findings, "DMARC record missing aggregate reporting (rua)")
 		}
+		if ruf := directives["ruf"]; ruf == "" {
+			analysis.Findings = append(analysis.Findings, "DMARC record missing forensic reporting (ruf)")
+		}
+		if pct := directives["pct"]; pct != "" {
+			if value, err := strconv.Atoi(strings.TrimSpace(pct)); err == nil && value < 100 {
+				analysis.Findings = append(analysis.Findings, fmt.Sprintf("DMARC policy only enforced for %d%% of mail", value))
+			}
+		}
+		if adkim := directives["adkim"]; adkim != "" && adkim != "s" {
+			analysis.Findings = append(analysis.Findings, "DMARC uses relaxed DKIM alignment (adkim) – prefer strict (s)")
+		} else if adkim == "" {
+			analysis.Findings = append(analysis.Findings, "DMARC missing adkim alignment directive – defaults to relaxed")
+		}
+		if aspf := directives["aspf"]; aspf != "" && aspf != "s" {
+			analysis.Findings = append(analysis.Findings, "DMARC uses relaxed SPF alignment (aspf) – prefer strict (s)")
+		} else if aspf == "" {
+			analysis.Findings = append(analysis.Findings, "DMARC missing aspf alignment directive – defaults to relaxed")
+		}
 	}
+}
+
+func parseDMARCDirectives(record string) map[string]string {
+	result := make(map[string]string)
+	parts := strings.Split(record, ";")
+	for _, part := range parts {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+		if kv := strings.SplitN(part, "=", 2); len(kv) == 2 {
+			result[strings.TrimSpace(kv[0])] = strings.TrimSpace(kv[1])
+		}
+	}
+	return result
 }
 
 func (s *Scanner) evaluateCAA(ctx context.Context, host string, analysis *DNSAnalysis) {

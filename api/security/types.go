@@ -121,6 +121,7 @@ type HeadersAnalysis struct {
 	Title          string    `json:"title"`
 	Issues         []Finding `json:"issues"` // Changed to Finding type
 	CookieFindings []Finding `json:"cookieFindings,omitempty"`
+	CORSFindings   []Finding `json:"corsFindings,omitempty"`
 	Passed         []string  `json:"passed"`
 	Risk           RiskLevel `json:"risk"`
 }

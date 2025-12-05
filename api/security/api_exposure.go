@@ -1,8 +1,10 @@
 package security
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"strings"
@@ -12,6 +14,9 @@ type apiProbe struct {
 	Path        string
 	Description string
 	Risk        RiskLevel
+	Method      string
+	Headers     http.Header
+	Body        []byte
 	Validator   func([]byte, *http.Response) bool
 }
 
@@ -26,6 +31,22 @@ func (s *Scanner) checkAPIExposures(ctx context.Context, domain string) (*APIExp
 				return strings.Contains(content, "must provide query string") ||
 					strings.Contains(content, "\"errors\"") ||
 					strings.Contains(content, "graphql")
+			},
+		},
+		{
+			Path:        "/graphql",
+			Method:      http.MethodPost,
+			Description: "GraphQL introspection enabled",
+			Risk:        RiskMedium,
+			Headers: http.Header{
+				"Content-Type": []string{"application/json"},
+			},
+			Body: []byte(`{"query":"query IntrospectionQuery { __schema { queryType { name } } }"}`),
+			Validator: func(body []byte, resp *http.Response) bool {
+				if resp.StatusCode >= 400 {
+					return false
+				}
+				return bytes.Contains(bytes.ToLower(body), []byte("__schema"))
 			},
 		},
 		{
@@ -72,6 +93,18 @@ func (s *Scanner) checkAPIExposures(ctx context.Context, domain string) (*APIExp
 				return strings.Contains(content, "admin console") || strings.Contains(content, "management console")
 			},
 		},
+		{
+			Path:        "/.well-known/openid-configuration",
+			Description: "OpenID Connect discovery document exposed",
+			Risk:        RiskMedium,
+			Validator: func(body []byte, resp *http.Response) bool {
+				if resp.StatusCode >= 400 {
+					return false
+				}
+				content := strings.ToLower(string(body))
+				return strings.Contains(content, "token_endpoint") && strings.Contains(content, "authorization_endpoint")
+			},
+		},
 	}
 
 	analysis := &APIExposureAnalysis{
@@ -81,7 +114,18 @@ func (s *Scanner) checkAPIExposures(ctx context.Context, domain string) (*APIExp
 	}
 
 	for _, probe := range probes {
-		resp, err := s.fetch(ctx, domain+probe.Path, requestOptions{})
+		opts := requestOptions{}
+		if probe.Method != "" {
+			opts.method = probe.Method
+		}
+		if probe.Headers != nil {
+			opts.headers = probe.Headers
+		}
+		if len(probe.Body) > 0 {
+			opts.body = probe.Body
+		}
+
+		resp, err := s.fetch(ctx, domain+probe.Path, opts)
 		if err != nil {
 			continue
 		}
@@ -109,6 +153,8 @@ func (s *Scanner) checkAPIExposures(ctx context.Context, domain string) (*APIExp
 			}
 		}
 	}
+
+	s.probeLoginEndpoints(ctx, domain, analysis)
 
 	return analysis, nil
 }
@@ -215,4 +261,88 @@ func isLikelySoft404(body []byte) bool {
 	}
 
 	return false
+}
+
+func (s *Scanner) probeLoginEndpoints(ctx context.Context, domain string, analysis *APIExposureAnalysis) {
+	loginPaths := []string{
+		"/login",
+		"/signin",
+		"/account/login",
+		"/auth/login",
+		"/admin/login",
+		"/Account/Login",
+	}
+
+	for _, path := range loginPaths {
+		resp, err := s.fetch(ctx, domain+path, requestOptions{})
+		if err != nil {
+			continue
+		}
+
+		body, err := io.ReadAll(io.LimitReader(resp.Body, 128*1024))
+		resp.Body.Close()
+		if err != nil {
+			continue
+		}
+
+		if resp.StatusCode >= http.StatusInternalServerError {
+			continue
+		}
+
+		lower := strings.ToLower(string(body))
+		if !strings.Contains(lower, "<form") || !strings.Contains(lower, "type=\"password\"") {
+			continue
+		}
+
+		if !containsCSRFTokens(lower) {
+			analysis.Findings = append(analysis.Findings, Finding{
+				Description: "Login form missing CSRF token",
+				Risk:        RiskHigh,
+				Evidence:    path,
+				Mitigation:  "Embed a hidden anti-CSRF token in the form and validate it server-side",
+			})
+			analysis.Endpoints = appendUniqueEndpoint(analysis.Endpoints, path)
+			analysis.Risk = maxRiskLevel(analysis.Risk, RiskHigh)
+		}
+
+		if strings.HasPrefix(domain, "http://") {
+			analysis.Findings = append(analysis.Findings, Finding{
+				Description: "Login page served over HTTP",
+				Risk:        RiskHigh,
+				Evidence:    fmt.Sprintf("Password form exposed at %s%s", domain, path),
+				Mitigation:  "Force HTTPS for authentication endpoints",
+			})
+			analysis.Endpoints = appendUniqueEndpoint(analysis.Endpoints, path)
+			analysis.Risk = maxRiskLevel(analysis.Risk, RiskHigh)
+		}
+	}
+}
+
+func containsCSRFTokens(lower string) bool {
+	indicators := []string{
+		"csrf-token",
+		"name=\"csrf\"",
+		"name='csrf'",
+		"name=\"_csrf\"",
+		"name='__csrf'",
+		"__requestverificationtoken",
+		"anti-forgery",
+		"_antiforgery",
+	}
+
+	for _, indicator := range indicators {
+		if strings.Contains(lower, indicator) {
+			return true
+		}
+	}
+	return false
+}
+
+func appendUniqueEndpoint(endpoints []string, path string) []string {
+	for _, existing := range endpoints {
+		if existing == path {
+			return endpoints
+		}
+	}
+	return append(endpoints, path)
 }

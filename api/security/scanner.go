@@ -2,6 +2,7 @@
 package security
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"crypto/tls"
@@ -9,6 +10,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"os"
@@ -40,6 +42,9 @@ type Scanner struct {
 
 type requestOptions struct {
 	followRedirects *bool
+	method          string
+	headers         http.Header
+	body            []byte
 }
 
 type ScannerOptions struct {
@@ -213,7 +218,33 @@ func (s *Scanner) fetch(ctx context.Context, url string, opts requestOptions) (*
 		followRedirects = *opts.followRedirects
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	method := http.MethodGet
+	if opts.method != "" {
+		method = opts.method
+	}
+
+	buildRequest := func() (*http.Request, error) {
+		var body io.Reader
+		if len(opts.body) > 0 {
+			body = bytes.NewReader(opts.body)
+		}
+
+		req, err := http.NewRequestWithContext(ctx, method, url, body)
+		if err != nil {
+			return nil, err
+		}
+
+		if opts.headers != nil {
+			for key, values := range opts.headers {
+				for _, value := range values {
+					req.Header.Add(key, value)
+				}
+			}
+		}
+		return req, nil
+	}
+
+	req, err := buildRequest()
 	if err != nil {
 		return nil, err
 	}
@@ -229,7 +260,7 @@ func (s *Scanner) fetch(ctx context.Context, url string, opts requestOptions) (*
 
 	s.recordTLSIssue(url, err)
 
-	req, err = http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	req, err = buildRequest()
 	if err != nil {
 		return nil, err
 	}

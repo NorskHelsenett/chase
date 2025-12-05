@@ -49,7 +49,8 @@ func (s *Scanner) checkCertificate(ctx context.Context, domain string) (*Certifi
 	}
 	defer conn.Close()
 
-	cert := conn.ConnectionState().PeerCertificates[0]
+	state := conn.ConnectionState()
+	cert := state.PeerCertificates[0]
 	// Get public key information
 	var keyType string
 	var keyBits int
@@ -79,8 +80,15 @@ func (s *Scanner) checkCertificate(ctx context.Context, domain string) (*Certifi
 		Warnings:           make([]Finding, 0),
 		Risk:               RiskLow,
 		TLSVersions:        tlsVersions,
-		NegotiatedProtocol: conn.ConnectionState().NegotiatedProtocol,
-		PreferredCipher:    tls.CipherSuiteName(conn.ConnectionState().CipherSuite),
+		NegotiatedProtocol: state.NegotiatedProtocol,
+		PreferredCipher:    tls.CipherSuiteName(state.CipherSuite),
+		CTEnabled:          len(state.SignedCertificateTimestamps) > 0,
+	}
+
+	if len(state.OCSPResponse) > 0 {
+		analysis.RevocationStatus = "Stapled OCSP response present"
+	} else {
+		analysis.RevocationStatus = "OCSP stapling not enabled"
 	}
 
 	if len(tlsVersions) == 0 {
@@ -97,6 +105,24 @@ func (s *Scanner) checkCertificate(ctx context.Context, domain string) (*Certifi
 			Risk:        RiskMedium,
 			Evidence:    fmt.Sprintf("Supported versions: %s", strings.Join(tlsVersions, ", ")),
 			Mitigation:  "Enable TLS 1.3 to prevent downgrade attacks",
+		})
+	}
+
+	if !analysis.CTEnabled {
+		analysis.Warnings = append(analysis.Warnings, Finding{
+			Description: "Certificate Transparency SCTs not provided",
+			Risk:        RiskLow,
+			Evidence:    "TLS handshake lacked SignedCertificateTimestamps",
+			Mitigation:  "Request SCT stapling from the CA or use a CT-embedded certificate",
+		})
+	}
+
+	if len(state.OCSPResponse) == 0 {
+		analysis.Warnings = append(analysis.Warnings, Finding{
+			Description: "OCSP stapling disabled",
+			Risk:        RiskLow,
+			Evidence:    "TLS handshake did not include a stapled OCSP response",
+			Mitigation:  "Enable OCSP stapling on the load balancer or origin",
 		})
 	}
 

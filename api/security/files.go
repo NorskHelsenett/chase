@@ -249,6 +249,55 @@ func (s *Scanner) checkFileExposure(ctx context.Context, domain string) (*FileEx
 					strings.Contains(contentLower, "<title>index of")
 			},
 		},
+		{
+			path:        "/.aws/credentials",
+			fileType:    "Secrets",
+			description: "AWS credentials file exposed",
+			risk:        RiskCritical,
+			validate: func(content []byte) bool {
+				contentLower := strings.ToLower(string(content))
+				return strings.Contains(contentLower, "[default]") && strings.Contains(contentLower, "aws_access_key_id")
+			},
+		},
+		{
+			path:        "/config/database.yml",
+			fileType:    "Config",
+			description: "Rails database configuration exposed",
+			risk:        RiskHigh,
+			validate: func(content []byte) bool {
+				contentLower := strings.ToLower(string(content))
+				return strings.Contains(contentLower, "adapter:") && strings.Contains(contentLower, "database:")
+			},
+		},
+		{
+			path:        "/appsettings.json",
+			fileType:    "Config",
+			description: ".NET appsettings exposed",
+			risk:        RiskHigh,
+			validate: func(content []byte) bool {
+				return bytes.Contains(content, []byte("\"Logging\"")) && bytes.Contains(content, []byte("\"ConnectionStrings\""))
+			},
+		},
+		{
+			path:        "/storage/logs/laravel.log",
+			fileType:    "Logs",
+			description: "Laravel application logs exposed",
+			risk:        RiskMedium,
+			validate: func(content []byte) bool {
+				contentLower := strings.ToLower(string(content))
+				return strings.Contains(contentLower, "laravel") && strings.Contains(contentLower, "production")
+			},
+		},
+		{
+			path:        "/wp-config.php",
+			fileType:    "Config",
+			description: "WordPress configuration exposed",
+			risk:        RiskCritical,
+			validate: func(content []byte) bool {
+				contentLower := strings.ToLower(string(content))
+				return strings.Contains(contentLower, "define('db_") || strings.Contains(contentLower, "table_prefix")
+			},
+		},
 	}
 
 	var wg sync.WaitGroup
