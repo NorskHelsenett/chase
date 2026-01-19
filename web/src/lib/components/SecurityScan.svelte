@@ -9,6 +9,7 @@
 
 	export let domain: string = '';
 	export let searchResults = {};
+	export let hideHero: boolean = false;
 
 	let loading = true;
 	let results: any = null;
@@ -123,107 +124,109 @@
 		</div>
 	</div>
 {:else}
-	<section class="mb-8">
-		{#if loading}
-			<div class="bg-[#202020] rounded-lg p-6 animate-pulse">
-				<div class="h-48 bg-gray-700 rounded-lg w-full mb-4"></div>
-				<div class="space-y-2">
-					{#each Array(3) as _}
-						<div class="h-4 bg-gray-700 rounded w-full"></div>
-					{/each}
-				</div>
-			</div>
-		{:else if results}
-			<div class="bg-[#202020] rounded-lg overflow-hidden" in:fade={{ duration: 200 }}>
-				<!-- Website Screenshot -->
-				<div class="w-full h-48 bg-[#2b2b2b] relative">
-					<div class="w-full h-48 bg-[#2b2b2b] relative">
-						{#if loading}
-							<div class="absolute inset-0 animate-pulse bg-gray-700/50" />
-						{:else}
-							<div class="w-full h-48 bg-[#2b2b2b] relative">
-								{#key domain}
-									<div class="relative w-full h-full">
-										<img
-											src={`/api/screenshot/${encodeURIComponent(domain)}`}
-											alt="Website preview"
-											class="absolute w-full h-full object-cover opacity-0 transition-opacity duration-300"
-											on:load={(e) => {
-												e.target.classList.remove('opacity-0');
-												e.target.classList.add('opacity-80');
-												// Find and remove the loading overlay
-												const overlay = e.target.parentElement.querySelector('.loading-overlay');
-												if (overlay) overlay.remove();
-											}}
-											on:error={(e) => {
-												// Remove the loading overlay on error too
-												const overlay = e.target.parentElement.querySelector('.loading-overlay');
-												if (overlay) overlay.remove();
-											}}
-										/>
-										<div
-											class="loading-overlay absolute inset-0 bg-gray-700/50 animate-pulse"
-											style="animation-duration: 2s;"
-										/>
-									</div>
-								{/key}
-								<div class="absolute bottom-0 left-0 right-0 h-16" />
-							</div>
-						{/if}
-						<div class="absolute bottom-0 left-0 right-0 h-16" />
-					</div>
-					<div class="absolute bottom-0 left-0 right-0 h-16"></div>
-				</div>
-
-				<!-- Summary Content -->
-				<div class="p-6">
-					<div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-						<div class="text-center p-3 bg-[#2b2b2b] rounded-lg">
-							<div class="text-2xl font-bold mb-1 {getRiskColor(results.headers.score)}">
-								{results.headers.score}
-							</div>
-							<div class="text-sm text-gray-400">Headers</div>
-						</div>
-						<div class="text-center p-3 bg-[#2b2b2b] rounded-lg">
-							<div class="text-2xl font-bold mb-1 {getRiskColor(results.certificate.grade)}">
-								{results.certificate.grade}
-							</div>
-							<div class="text-sm text-gray-400">SSL/TLS</div>
-						</div>
-						<div class="text-center p-3 bg-[#2b2b2b] rounded-lg">
-							<div
-								class="text-2xl font-bold mb-1 uppercase {getRiskColor(results.adminPages.risk)}"
-							>
-								{results.adminPages.risk}
-							</div>
-							<div class="text-sm text-gray-400">Admin Risk</div>
-						</div>
-						<div class="text-center p-3 bg-[#2b2b2b] rounded-lg">
-							<div class="text-2xl font-bold mb-1 uppercase {getRiskColor(results.swagger.risk)}">
-								{results.swagger.risk}
-							</div>
-							<div class="text-sm text-gray-400">API Risk</div>
-						</div>
-					</div>
-
+	{#if !hideHero}
+		<section class="mb-8">
+			{#if loading}
+				<div class="bg-[#202020] rounded-lg p-6 animate-pulse">
+					<div class="h-48 bg-gray-700 rounded-lg w-full mb-4"></div>
 					<div class="space-y-2">
-						<div class="text-gray-400">Key Findings:</div>
-						<ul class="text-gray-300 space-y-1">
-							{#if getHighestRisk(results.headers)}
-								<li>{getHighestRisk(results.headers)?.description || ''}</li>{/if}
-							<li>• Certificate valid until {results.certificate.validUntil}</li>
-							<li>• {results.adminPages.exposed.length} admin pages exposed</li>
-							<li>
-								• {results.swagger.exposed
-									? 'API documentation publicly accessible'
-									: 'No public API documentation'}
-							</li>
-						</ul>
+						{#each Array(3) as _}
+							<div class="h-4 bg-gray-700 rounded w-full"></div>
+						{/each}
 					</div>
 				</div>
-			</div>
-		{/if}
-	</section>
+			{:else if results}
+				<div class="bg-[#202020] rounded-lg overflow-hidden" in:fade={{ duration: 200 }}>
+					<!-- Website Screenshot -->
+					<div class="w-full h-48 bg-[#2b2b2b] relative">
+						<div class="w-full h-48 bg-[#2b2b2b] relative">
+							{#if loading}
+								<div class="absolute inset-0 animate-pulse bg-gray-700/50" />
+							{:else}
+								<div class="w-full h-48 bg-[#2b2b2b] relative">
+									{#key domain}
+										<div class="relative w-full h-full">
+											<img
+												src={`/api/screenshot/${encodeURIComponent(domain)}`}
+												alt="Website preview"
+												class="absolute w-full h-full object-cover opacity-0 transition-opacity duration-300"
+												on:load={(e) => {
+													e.target.classList.remove('opacity-0');
+													e.target.classList.add('opacity-80');
+													// Find and remove the loading overlay
+													const overlay = e.target.parentElement.querySelector('.loading-overlay');
+													if (overlay) overlay.remove();
+												}}
+												on:error={(e) => {
+													// Remove the loading overlay on error too
+													const overlay = e.target.parentElement.querySelector('.loading-overlay');
+													if (overlay) overlay.remove();
+												}}
+											/>
+											<div
+												class="loading-overlay absolute inset-0 bg-gray-700/50 animate-pulse"
+												style="animation-duration: 2s;"
+											/>
+										</div>
+									{/key}
+									<div class="absolute bottom-0 left-0 right-0 h-16" />
+								</div>
+							{/if}
+							<div class="absolute bottom-0 left-0 right-0 h-16" />
+						</div>
+						<div class="absolute bottom-0 left-0 right-0 h-16"></div>
+					</div>
+
+					<!-- Summary Content -->
+					<div class="p-6">
+						<div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+							<div class="text-center p-3 bg-[#2b2b2b] rounded-lg">
+								<div class="text-2xl font-bold mb-1 {getRiskColor(results.headers.score)}">
+									{results.headers.score}
+								</div>
+								<div class="text-sm text-gray-400">Headers</div>
+							</div>
+							<div class="text-center p-3 bg-[#2b2b2b] rounded-lg">
+								<div class="text-2xl font-bold mb-1 {getRiskColor(results.certificate.grade)}">
+									{results.certificate.grade}
+								</div>
+								<div class="text-sm text-gray-400">SSL/TLS</div>
+							</div>
+							<div class="text-center p-3 bg-[#2b2b2b] rounded-lg">
+								<div
+									class="text-2xl font-bold mb-1 uppercase {getRiskColor(results.adminPages.risk)}"
+								>
+									{results.adminPages.risk}
+								</div>
+								<div class="text-sm text-gray-400">Admin Risk</div>
+							</div>
+							<div class="text-center p-3 bg-[#2b2b2b] rounded-lg">
+								<div class="text-2xl font-bold mb-1 uppercase {getRiskColor(results.swagger.risk)}">
+									{results.swagger.risk}
+								</div>
+								<div class="text-sm text-gray-400">API Risk</div>
+							</div>
+						</div>
+
+						<div class="space-y-2">
+							<div class="text-gray-400">Key Findings:</div>
+							<ul class="text-gray-300 space-y-1">
+								{#if getHighestRisk(results.headers)}
+									<li>{getHighestRisk(results.headers)?.description || ''}</li>{/if}
+								<li>• Certificate valid until {results.certificate.validUntil}</li>
+								<li>• {results.adminPages.exposed.length} admin pages exposed</li>
+								<li>
+									• {results.swagger.exposed
+										? 'API documentation publicly accessible'
+										: 'No public API documentation'}
+								</li>
+							</ul>
+						</div>
+					</div>
+				</div>
+			{/if}
+		</section>
+	{/if}
 
 	<!-- Security Headers Section -->
 	<Headers {loading} {results} />
