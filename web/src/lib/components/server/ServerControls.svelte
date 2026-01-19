@@ -58,24 +58,22 @@
 	}
 </script>
 
-<div class="bg-[#202020] rounded-lg p-4 flex items-center justify-between gap-4">
-	<div class="flex items-center gap-6">
-		<ToggleButton
-			bind:value={serverActive}
-			onLabel="Active"
-			offLabel="Inactive"
-			on:change={handleActiveChange}
-		/>
-	</div>
+<div class="controls-bar">
+	<ToggleButton
+		bind:value={serverActive}
+		onLabel="Active"
+		offLabel="Paused"
+		on:change={handleActiveChange}
+	/>
 
-	<div class="flex items-center gap-3">
+	<div class="controls-actions">
 		<button
 			on:click={handleDialogOpen}
 			disabled={isLoading}
-			class="p-2 text-gray-400 hover:text-gray-200 transition-colors rounded-lg hover:bg-[#2b2b2b] disabled:opacity-50"
+			class="action-btn"
 			title="Edit server"
 		>
-			<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+			<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 				<path
 					stroke-linecap="round"
 					stroke-linejoin="round"
@@ -88,10 +86,10 @@
 		<button
 			on:click={handleDelete}
 			disabled={isLoading}
-			class="p-2 text-gray-400 hover:text-red-500 transition-colors rounded-lg hover:bg-[#2b2b2b] disabled:opacity-50"
+			class="action-btn delete"
 			title="Delete server"
 		>
-			<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+			<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 				<path
 					stroke-linecap="round"
 					stroke-linejoin="round"
@@ -102,6 +100,50 @@
 		</button>
 	</div>
 </div>
+
+<style>
+	.controls-bar {
+		display: flex;
+		align-items: center;
+		gap: 1rem;
+	}
+
+	.controls-actions {
+		display: flex;
+		align-items: center;
+		gap: 0.25rem;
+	}
+
+	.action-btn {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 2rem;
+		height: 2rem;
+		border-radius: 0.5rem;
+		color: #6b7280;
+		background: rgba(255, 255, 255, 0.03);
+		border: 1px solid transparent;
+		transition: all 0.15s ease;
+	}
+
+	.action-btn:hover:not(:disabled) {
+		color: #d1d5db;
+		background: rgba(255, 255, 255, 0.08);
+		border-color: #333;
+	}
+
+	.action-btn.delete:hover:not(:disabled) {
+		color: #f87171;
+		background: rgba(248, 113, 113, 0.1);
+		border-color: rgba(248, 113, 113, 0.2);
+	}
+
+	.action-btn:disabled {
+		opacity: 0.4;
+		cursor: not-allowed;
+	}
+</style>
 
 <DeleteDialog
 	bind:showDialog={showDeleteDialog}

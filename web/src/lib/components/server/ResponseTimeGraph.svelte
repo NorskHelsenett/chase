@@ -29,11 +29,11 @@
 			const options = {
 				chart: {
 					type: 'area',
-					height: 400,
+					height: 350,
 					toolbar: {
 						show: false
 					},
-					background: '#202020',
+					background: '#141414',
 					animations: {
 						enabled: true,
 						easing: 'cubicBezier', // Changed to cubicBezier for smoother animation
@@ -192,26 +192,64 @@
 	});
 </script>
 
-<div class="bg-[#202020] rounded-lg p-4">
+<div class="graph-wrapper">
 	{#if browser}
 		<div bind:this={chartElement}></div>
 	{:else}
-		<div class="h-[400px] flex items-center justify-center text-gray-400">Loading chart...</div>
+		<div class="graph-loading">
+			<div class="loading-spinner"></div>
+			<span>Loading chart...</span>
+		</div>
 	{/if}
 </div>
 
 <style>
+	.graph-wrapper {
+		background: transparent;
+	}
+
+	.graph-loading {
+		height: 400px;
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		justify-content: center;
+		gap: 1rem;
+		color: #6b7280;
+		font-size: 0.875rem;
+	}
+
+	.loading-spinner {
+		width: 1.5rem;
+		height: 1.5rem;
+		border: 2px solid #333;
+		border-top-color: #4ade80;
+		border-radius: 50%;
+		animation: spin 0.8s linear infinite;
+	}
+
+	@keyframes spin {
+		to { transform: rotate(360deg); }
+	}
+
 	:global(.apexcharts-tooltip-box) {
-		background: #2a2a2a !important;
-		padding: 8px 12px !important;
-		border-radius: 6px;
-		box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25) !important;
+		background: #1a1a1a !important;
+		padding: 0.625rem 0.875rem !important;
+		border-radius: 0.5rem;
+		border: 1px solid #333 !important;
+		box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4) !important;
 	}
 
 	:global(.apexcharts-tooltip-box .timestamp) {
-		color: #999;
-		font-size: 0.9em;
-		margin-bottom: 4px;
+		color: #6b7280;
+		font-size: 0.75rem;
+		margin-bottom: 0.25rem;
+	}
+
+	:global(.apexcharts-tooltip-box .value) {
+		color: #4ade80;
+		font-weight: 600;
+		font-size: 0.875rem;
 	}
 
 	:global(.apexcharts-tooltip-box .average) {
@@ -221,7 +259,7 @@
 	}
 
 	:global(.apexcharts-tooltip-box .range) {
-		color: #888;
-		font-size: 0.9em;
+		color: #6b7280;
+		font-size: 0.75rem;
 	}
 </style>
