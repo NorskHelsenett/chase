@@ -19,7 +19,8 @@
               "OIDC_REDIRECT_URL":"http://localhost:5173/api/callback",
               "OIDC_ISSUER_URL": "http://host.containers.internal:9999",
               "OIDC_CLIENT_ID": "CHASE",
-              "OIDC_CLIENT_SECRET": "chase-secret"
+              "OIDC_CLIENT_SECRET": "chase-secret",
+              "SCREENSHOT_SERVICE_URL": "http://host.containers.internal:10808",
           },
           "envFile": "${workspaceFolder}/api/.env",
         //   "preLaunchTask": "ensure-debug-dir",

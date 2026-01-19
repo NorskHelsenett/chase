@@ -351,6 +351,7 @@
 		gap: 1rem;
 		padding: 1.5rem;
 		min-height: 100vh;
+		width: 100%;
 	}
 
 	/* Loading & Error States */
