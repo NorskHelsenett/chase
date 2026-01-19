@@ -14,15 +14,24 @@ import (
 func RequireToken() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		apiToken := c.GetHeader("x-api-token")
-		if apiToken != "" {
-			exists, err := isTokenInDatabase(apiToken)
-			if err == nil || exists {
-				c.Next()
-				return
-			}
+		if apiToken == "" {
 			c.AbortWithStatus(http.StatusUnauthorized)
 			return
 		}
+
+		// Basic format validation before DB lookup
+		if len(apiToken) != 35 {
+			c.AbortWithStatus(http.StatusUnauthorized)
+			return
+		}
+
+		exists, err := isTokenInDatabase(apiToken)
+		if err == nil && exists {
+			c.Next()
+			return
+		}
+
+		c.AbortWithStatus(http.StatusUnauthorized)
 	}
 }
 

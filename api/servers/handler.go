@@ -2,7 +2,6 @@ package servers
 
 import (
 	"errors"
-	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -10,7 +9,6 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/norskhelsenett/chase/database"
 	"github.com/norskhelsenett/chase/types"
-	"github.com/norskhelsenett/chase/utils"
 	"gorm.io/gorm"
 )
 
@@ -116,40 +114,20 @@ func AddServer(c *gin.Context) {
 		return
 	}
 
-	var server Server
-	if err := c.ShouldBindJSON(&server); err != nil {
+	var request serverCreateRequest
+	if err := c.ShouldBindJSON(&request); err != nil {
 		tx.Rollback()
 		c.JSON(400, gin.H{"error": err.Error()})
 		return
 	}
 
+	server := serverFromCreateRequest(request)
 	var err error
-	if server.URL, err = utils.EnsureHTTPS(server.URL); err != nil {
+
+	if server.URL, err = normalizeServerURL(server.URL); err != nil {
 		tx.Rollback()
 		c.JSON(400, gin.H{"error": "Invalid URL format"})
 		return
-	}
-
-	parsedURL, err := url.Parse(server.URL)
-	if err != nil {
-		tx.Rollback()
-		c.JSON(400, gin.H{"error": "Invalid URL format"})
-		return
-	}
-
-	// Check if host is present
-	if parsedURL.Host == "" {
-		tx.Rollback()
-		c.JSON(400, gin.H{"error": "URL must contain a valid host"})
-		return
-	}
-
-	// Remove scheme (http/https) from URL
-	server.URL = strings.TrimPrefix(strings.TrimPrefix(server.URL, "https://"), "http://")
-
-	// Set default status code if not provided
-	if server.ExpectedStatusCode == 0 {
-		server.ExpectedStatusCode = 200
 	}
 
 	server.NextCheck = time.Now().Add(time.Duration(server.UpdateInterval) * time.Minute)
