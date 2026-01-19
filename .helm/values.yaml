@@ -95,11 +95,11 @@ screenshotr:
 
 certstream:
   enabled: false
-  repository: 0rickyy0/certstream-server-go:v1.8.2@sha256:5ba5a2f54901b0c4794fb460e454a56e05a1bca37d34934369f83be69fee43d7
+  repository: 0rickyy0/certstream-server-go
   pullPolicy: IfNotPresent
   deployment: deployment
   replicaCount: 1
-  tag: latest
+  tag: v1.8.2@sha256:5ba5a2f54901b0c4794fb460e454a56e05a1bca37d34934369f83be69fee43d7
   resources:
     requests:
       memory: "512Mi"
