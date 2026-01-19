@@ -3,6 +3,7 @@
 	import { fade } from 'svelte/transition';
 	import { createEventDispatcher } from 'svelte';
 	import type { Server } from '$lib/models';
+	import { Trash2, Loader2 } from 'lucide-svelte';
 
 	const dispatch = createEventDispatcher();
 
@@ -25,42 +26,31 @@
 </script>
 
 {#if showDialog}
-	<div class="fixed inset-0 bg-black/50 flex items-center justify-center z-50" transition:fade>
-		<div class="bg-[#202020] rounded-lg p-6 w-full max-w-lg">
-			<div class="flex items-center justify-between mb-6">
-				<div class="flex items-center gap-3">
-					<div class="bg-red-500/10 p-3 rounded-full">
-						<svg class="w-6 h-6 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-							<path
-								stroke-linecap="round"
-								stroke-linejoin="round"
-								stroke-width="2"
-								d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-							/>
-						</svg>
-					</div>
-					<h2 class="text-xl text-gray-200 font-semibold">{title}</h2>
+	<div class="overlay" transition:fade>
+		<div class="dialog">
+			<div class="dialog-header">
+				<div class="icon-wrapper">
+					<Trash2 size={24} />
 				</div>
+				<h2>{title}</h2>
 			</div>
 
-			<div class="space-y-4">
-				<p class="text-gray-300">
-					Are you sure you want to delete <span class="font-semibold text-white"
-						>{serverData.url}</span
-					>?
+			<div class="dialog-body">
+				<p class="message">
+					Are you sure you want to delete <span class="highlight">{serverData.url}</span>?
 				</p>
-				<p class="text-gray-400 text-sm">
+				<p class="warning">
 					This action cannot be undone. All monitoring data, history, and settings for this server
 					will be permanently removed.
 				</p>
 			</div>
 
-			<div class="flex justify-end gap-3 mt-8">
+			<div class="dialog-footer">
 				<button
 					type="button"
 					on:click={handleClose}
 					disabled={isLoading}
-					class="px-4 py-2 bg-[#2b2b2b] hover:bg-[#333] rounded-lg text-gray-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+					class="btn btn-secondary"
 				>
 					Cancel
 				</button>
@@ -68,29 +58,131 @@
 					type="button"
 					on:click={handleSubmit}
 					disabled={isLoading}
-					class="px-4 py-2 bg-red-600 hover:bg-red-700 rounded-lg text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+					class="btn btn-danger"
 				>
 					{#if isLoading}
-						<svg class="animate-spin h-4 w-4" viewBox="0 0 24 24">
-							<circle
-								class="opacity-25"
-								cx="12"
-								cy="12"
-								r="10"
-								stroke="currentColor"
-								stroke-width="4"
-								fill="none"
-							/>
-							<path
-								class="opacity-75"
-								fill="currentColor"
-								d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-							/>
-						</svg>
+						<Loader2 size={16} class="spinning" />
 					{/if}
-					{isLoading ? loadingLabel : submitLabel}
+					<span>{isLoading ? loadingLabel : submitLabel}</span>
 				</button>
 			</div>
 		</div>
 	</div>
 {/if}
+
+<style>
+	.overlay {
+		position: fixed;
+		inset: 0;
+		background: rgba(0, 0, 0, 0.5);
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		z-index: 50;
+	}
+
+	.dialog {
+		background: #202020;
+		border-radius: 0.5rem;
+		padding: 1.5rem;
+		width: 100%;
+		max-width: 32rem;
+		margin: 1rem;
+	}
+
+	.dialog-header {
+		display: flex;
+		align-items: center;
+		gap: 0.75rem;
+		margin-bottom: 1.5rem;
+	}
+
+	.icon-wrapper {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 3rem;
+		height: 3rem;
+		border-radius: 50%;
+		background: rgba(239, 68, 68, 0.1);
+		color: #ef4444;
+	}
+
+	.dialog-header h2 {
+		font-size: 1.25rem;
+		font-weight: 600;
+		color: #e5e7eb;
+	}
+
+	.dialog-body {
+		display: flex;
+		flex-direction: column;
+		gap: 1rem;
+	}
+
+	.message {
+		color: #d1d5db;
+	}
+
+	.highlight {
+		font-weight: 600;
+		color: #fff;
+	}
+
+	.warning {
+		font-size: 0.875rem;
+		color: #9ca3af;
+	}
+
+	.dialog-footer {
+		display: flex;
+		justify-content: flex-end;
+		gap: 0.75rem;
+		margin-top: 2rem;
+	}
+
+	.btn {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		padding: 0.5rem 1rem;
+		border: none;
+		border-radius: 0.5rem;
+		font-size: 0.875rem;
+		font-weight: 500;
+		cursor: pointer;
+		transition: background-color 0.15s ease, opacity 0.15s ease;
+	}
+
+	.btn:disabled {
+		opacity: 0.5;
+		cursor: not-allowed;
+	}
+
+	.btn-secondary {
+		background: #2b2b2b;
+		color: #e5e7eb;
+	}
+
+	.btn-secondary:hover:not(:disabled) {
+		background: #333;
+	}
+
+	.btn-danger {
+		background: #dc2626;
+		color: white;
+	}
+
+	.btn-danger:hover:not(:disabled) {
+		background: #b91c1c;
+	}
+
+	:global(.spinning) {
+		animation: spin 1s linear infinite;
+	}
+
+	@keyframes spin {
+		from { transform: rotate(0deg); }
+		to { transform: rotate(360deg); }
+	}
+</style>

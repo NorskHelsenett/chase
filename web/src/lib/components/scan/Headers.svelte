@@ -7,128 +7,100 @@
 
 	let expandedIssue = null;
 
-	function getRiskColor(risk) {
+	function getRiskClass(risk) {
 		switch (risk) {
-			case 'CRITICAL':
-				return 'text-red-500';
-			case 'HIGH':
-				return 'text-orange-500';
-			case 'MEDIUM':
-				return 'text-yellow-500';
-			case 'LOW':
-				return 'text-green-500';
-			default:
-				return 'text-blue-500';
+			case 'CRITICAL': return 'risk-critical';
+			case 'HIGH': return 'risk-high';
+			case 'MEDIUM': return 'risk-medium';
+			case 'LOW': return 'risk-low';
+			default: return 'risk-info';
 		}
 	}
 
-	function getScoreColor(score) {
+	function getScoreClass(score) {
 		switch (score) {
-			case 'A+':
-				return 'text-emerald-500';
-			case 'A':
-				return 'text-green-500';
-			case 'B':
-				return 'text-blue-500';
-			case 'C':
-				return 'text-yellow-500';
-			case 'D':
-				return 'text-orange-500';
+			case 'A+': return 'score-a-plus';
+			case 'A': return 'score-a';
+			case 'B': return 'score-b';
+			case 'C': return 'score-c';
+			case 'D': return 'score-d';
 			case 'E':
-			case 'F':
-				return 'text-red-500';
-			default:
-				return 'text-gray-500';
+			case 'F': return 'score-f';
+			default: return 'score-none';
 		}
 	}
 </script>
 
 {#if loading}
-	<div class="w-full rounded-lg bg-card border p-6 animate-pulse">
-		<div class="flex items-center gap-2 mb-6">
-			<Lock class="w-5 h-5" />
-			<div class="h-8 bg-muted rounded w-1/3" />
+	<div class="card loading">
+		<div class="card-header">
+			<Lock size={20} />
+			<div class="skeleton skeleton-title"></div>
 		</div>
-		<div class="space-y-4">
-			<div class="h-12 bg-muted rounded" />
-			<div class="space-y-2">
-				{#each Array(3) as _}
-					<div class="h-4 bg-muted rounded w-full" />
-				{/each}
-			</div>
+		<div class="skeleton-content">
+			<div class="skeleton skeleton-large"></div>
+			{#each Array(3) as _}
+				<div class="skeleton skeleton-line"></div>
+			{/each}
 		</div>
 	</div>
 {:else if results?.headers}
-	<div class="w-full rounded-lg bg-card border p-6" in:fade={{ duration: 200 }}>
+	<div class="card" in:fade={{ duration: 200 }}>
 		<!-- Header -->
-		<div class="mb-6">
-			<h2 class="text-xl flex items-center gap-2">
-				<Lock class="w-5 h-5" />
-				Security Headers Analysis
-			</h2>
+		<div class="card-header">
+			<Lock size={20} />
+			<h2>Security Headers Analysis</h2>
 		</div>
 
 		<!-- Score -->
-		<div class="flex items-center gap-4 mb-8">
-			<div class="text-4xl font-bold {getScoreColor(results.headers.score)}">
+		<div class="score-section">
+			<div class="score-value {getScoreClass(results.headers.score)}">
 				{results.headers.score}
 			</div>
-			<div class="text-muted-foreground">Security Headers Score</div>
+			<div class="score-label">Security Headers Score</div>
 		</div>
 
 		<!-- Issues -->
 		{#if results.headers.issues.length > 0}
-			<div class="space-y-4 mb-8">
-				<h3 class="text-lg font-semibold flex items-center gap-2 text-red-400">
-					<AlertTriangle class="w-5 h-5" />
-					Security Issues
+			<div class="section">
+				<h3 class="section-title error">
+					<AlertTriangle size={20} />
+					<span>Security Issues</span>
 				</h3>
 
-				<div class="space-y-3">
+				<div class="issues-list">
 					{#each results.headers.issues as issue, index}
-						<div class="rounded-lg bg-[#2b2b2b]">
-							<!-- Issue Header -->
+						<div class="issue-card">
 							<button
-								class="w-full text-left px-4 py-3 flex items-start gap-2"
+								class="issue-header"
 								on:click={() => (expandedIssue = expandedIssue === index ? null : index)}
 							>
-								<ShieldAlert class="w-5 h-5 mt-1 {getRiskColor(issue.risk)}" />
-								<div class="flex-1">
-									<div class="flex items-center gap-2">
-										<span class="font-medium">{issue.description}</span>
-										<span
-											class="px-2 py-0.5 text-xs rounded-full {getRiskColor(
-												issue.risk
-											)} bg-{issue.risk.toLowerCase()}-500/10"
-										>
-											{issue.risk}
-										</span>
-									</div>
+								<ShieldAlert size={20} class="issue-icon {getRiskClass(issue.risk)}" />
+								<div class="issue-content">
+									<span class="issue-description">{issue.description}</span>
+									<span class="risk-badge {getRiskClass(issue.risk)}">
+										{issue.risk}
+									</span>
 								</div>
 							</button>
 
-							<!-- Expanded Content -->
 							{#if expandedIssue === index}
-								<div class="px-4 pb-4" transition:slide|local>
-									<!-- Evidence -->
-									<div class="mb-3 p-3 rounded-lg bg-red-500/10 border border-red-900 text-red-200">
-										<div class="flex gap-2 items-center mb-2 text-sm font-semibold">
-											<Info class="w-4 h-4" />
-											Current Configuration
+								<div class="issue-details" transition:slide|local>
+									<div class="detail-box evidence">
+										<div class="detail-header">
+											<Info size={16} />
+											<span>Current Configuration</span>
 										</div>
-										<div class="font-mono text-sm whitespace-pre-wrap">
-											{issue.evidence}
-										</div>
+										<pre class="detail-content">{issue.evidence}</pre>
 									</div>
 
-									<!-- Mitigation -->
-									<div class="p-3 rounded-lg bg-blue-500/10 border border-blue-900 text-blue-200">
-										<div class="flex gap-2 items-center mb-2 text-sm font-semibold">
-											<Shield class="w-4 h-4" />
-											Recommended Action
+									<div class="detail-box mitigation">
+										<div class="detail-header">
+											<Shield size={16} />
+											<span>Recommended Action</span>
 										</div>
-										<div class="flex gap-2">
-											<ArrowRight class="w-4 h-4 mt-1 flex-shrink-0" />
+										<div class="detail-content with-arrow">
+											<ArrowRight size={16} />
 											<span>{issue.mitigation}</span>
 										</div>
 									</div>
@@ -141,54 +113,53 @@
 		{/if}
 
 		{#if results.headers.cookieFindings?.length > 0}
-			<div class="mb-8">
-				<h3 class="text-lg font-semibold flex items-center gap-2 text-yellow-400">
-					<AlertTriangle class="w-5 h-5" />
-					Cookie Findings
+			<div class="section">
+				<h3 class="section-title warning">
+					<AlertTriangle size={20} />
+					<span>Cookie Findings</span>
 				</h3>
-				<div class="space-y-2">
+				<div class="findings-list">
 					{#each results.headers.cookieFindings as finding}
-						<div class="p-3 rounded-lg bg-[#2b2b2b]">
-							<div class="font-medium text-white">{finding.description}</div>
-							<div class="text-sm text-gray-400 mt-1">{finding.mitigation}</div>
+						<div class="finding-card">
+							<div class="finding-description">{finding.description}</div>
+							<div class="finding-mitigation">{finding.mitigation}</div>
 						</div>
 					{/each}
 				</div>
 			</div>
 		{/if}
 
-		<div class="mb-8">
-			<h3 class="text-lg font-semibold flex items-center gap-2 text-blue-400">
-				<Shield class="w-5 h-5" />
-				Cross-Origin Policy
+		<div class="section">
+			<h3 class="section-title info">
+				<Shield size={20} />
+				<span>Cross-Origin Policy</span>
 			</h3>
 			{#if results.headers.corsFindings?.length > 0}
-				<div class="space-y-2">
+				<div class="findings-list">
 					{#each results.headers.corsFindings as finding}
-						<div class="p-3 rounded-lg bg-[#2b2b2b]">
-							<div class="font-medium text-white">{finding.description}</div>
-							<div class="text-sm text-gray-400 mt-1">{finding.mitigation}</div>
+						<div class="finding-card">
+							<div class="finding-description">{finding.description}</div>
+							<div class="finding-mitigation">{finding.mitigation}</div>
 						</div>
 					{/each}
 				</div>
 			{:else}
-				<div class="text-sm text-green-400">
+				<div class="success-message">
 					No cross-origin issues detected—CORS policy appears restrictive.
 				</div>
 			{/if}
 		</div>
 
-		<!-- Passed Checks -->
 		{#if results.headers.passed.length > 0}
-			<div>
-				<h3 class="text-lg font-semibold flex items-center gap-2 text-green-400 mb-3">
-					<Shield class="w-5 h-5" />
-					Passed Checks
+			<div class="section">
+				<h3 class="section-title success">
+					<Shield size={20} />
+					<span>Passed Checks</span>
 				</h3>
-				<div class="space-y-2">
+				<div class="passed-list">
 					{#each results.headers.passed as check}
-						<div class="flex items-center gap-2 text-muted-foreground">
-							<div class="w-1.5 h-1.5 rounded-full bg-green-500" />
+						<div class="passed-item">
+							<span class="passed-dot"></span>
 							<span>{check}</span>
 						</div>
 					{/each}
@@ -197,3 +168,287 @@
 		{/if}
 	</div>
 {/if}
+
+<style>
+	.card {
+		width: 100%;
+		background: #202020;
+		border-radius: 0.5rem;
+		padding: 1.5rem;
+	}
+
+	.card.loading {
+		animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+	}
+
+	.card-header {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		margin-bottom: 1.5rem;
+		color: #e5e7eb;
+	}
+
+	.card-header h2 {
+		font-size: 1.25rem;
+		font-weight: 500;
+	}
+
+	.skeleton {
+		background: #374151;
+		border-radius: 0.25rem;
+	}
+
+	.skeleton-title {
+		height: 2rem;
+		width: 33%;
+	}
+
+	.skeleton-content {
+		display: flex;
+		flex-direction: column;
+		gap: 0.5rem;
+	}
+
+	.skeleton-large {
+		height: 3rem;
+	}
+
+	.skeleton-line {
+		height: 1rem;
+		width: 100%;
+	}
+
+	.score-section {
+		display: flex;
+		align-items: center;
+		gap: 1rem;
+		margin-bottom: 2rem;
+	}
+
+	.score-value {
+		font-size: 2.5rem;
+		font-weight: 700;
+	}
+
+	.score-label {
+		color: #9ca3af;
+	}
+
+	.score-a-plus { color: #10b981; }
+	.score-a { color: #22c55e; }
+	.score-b { color: #3b82f6; }
+	.score-c { color: #eab308; }
+	.score-d { color: #f97316; }
+	.score-f { color: #ef4444; }
+	.score-none { color: #6b7280; }
+
+	.section {
+		margin-bottom: 2rem;
+	}
+
+	.section:last-child {
+		margin-bottom: 0;
+	}
+
+	.section-title {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		font-size: 1.125rem;
+		font-weight: 600;
+		margin-bottom: 0.75rem;
+	}
+
+	.section-title.error { color: #f87171; }
+	.section-title.warning { color: #fbbf24; }
+	.section-title.info { color: #60a5fa; }
+	.section-title.success { color: #4ade80; }
+
+	.issues-list {
+		display: flex;
+		flex-direction: column;
+		gap: 0.75rem;
+	}
+
+	.issue-card {
+		background: #2b2b2b;
+		border-radius: 0.5rem;
+		overflow: hidden;
+	}
+
+	.issue-header {
+		width: 100%;
+		display: flex;
+		align-items: flex-start;
+		gap: 0.5rem;
+		padding: 0.75rem 1rem;
+		text-align: left;
+		background: transparent;
+		border: none;
+		cursor: pointer;
+		color: #e5e7eb;
+	}
+
+	.issue-header:hover {
+		background: #333;
+	}
+
+	:global(.issue-icon) {
+		flex-shrink: 0;
+		margin-top: 0.125rem;
+	}
+
+	:global(.issue-icon.risk-critical) { color: #ef4444; }
+	:global(.issue-icon.risk-high) { color: #f97316; }
+	:global(.issue-icon.risk-medium) { color: #eab308; }
+	:global(.issue-icon.risk-low) { color: #22c55e; }
+	:global(.issue-icon.risk-info) { color: #3b82f6; }
+
+	.issue-content {
+		flex: 1;
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		flex-wrap: wrap;
+	}
+
+	.issue-description {
+		font-weight: 500;
+	}
+
+	.risk-badge {
+		display: inline-flex;
+		padding: 0.125rem 0.5rem;
+		font-size: 0.6875rem;
+		font-weight: 500;
+		text-transform: uppercase;
+		letter-spacing: 0.025em;
+		border-radius: 9999px;
+	}
+
+	.risk-badge.risk-critical {
+		color: #ef4444;
+		background: rgba(239, 68, 68, 0.1);
+	}
+
+	.risk-badge.risk-high {
+		color: #f97316;
+		background: rgba(249, 115, 22, 0.1);
+	}
+
+	.risk-badge.risk-medium {
+		color: #eab308;
+		background: rgba(234, 179, 8, 0.1);
+	}
+
+	.risk-badge.risk-low {
+		color: #22c55e;
+		background: rgba(34, 197, 94, 0.1);
+	}
+
+	.risk-badge.risk-info {
+		color: #3b82f6;
+		background: rgba(59, 130, 246, 0.1);
+	}
+
+	.issue-details {
+		padding: 0 1rem 1rem;
+		display: flex;
+		flex-direction: column;
+		gap: 0.75rem;
+	}
+
+	.detail-box {
+		padding: 0.75rem;
+		border-radius: 0.5rem;
+		border: 1px solid;
+	}
+
+	.detail-box.evidence {
+		background: rgba(239, 68, 68, 0.1);
+		border-color: rgba(127, 29, 29, 0.5);
+		color: #fca5a5;
+	}
+
+	.detail-box.mitigation {
+		background: rgba(59, 130, 246, 0.1);
+		border-color: rgba(30, 58, 138, 0.5);
+		color: #93c5fd;
+	}
+
+	.detail-header {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		font-size: 0.875rem;
+		font-weight: 600;
+		margin-bottom: 0.5rem;
+	}
+
+	.detail-content {
+		font-size: 0.875rem;
+		white-space: pre-wrap;
+		font-family: ui-monospace, monospace;
+		margin: 0;
+	}
+
+	.detail-content.with-arrow {
+		display: flex;
+		gap: 0.5rem;
+		font-family: inherit;
+	}
+
+	.findings-list {
+		display: flex;
+		flex-direction: column;
+		gap: 0.5rem;
+	}
+
+	.finding-card {
+		padding: 0.75rem;
+		background: #2b2b2b;
+		border-radius: 0.5rem;
+	}
+
+	.finding-description {
+		font-weight: 500;
+		color: #e5e7eb;
+	}
+
+	.finding-mitigation {
+		font-size: 0.875rem;
+		color: #9ca3af;
+		margin-top: 0.25rem;
+	}
+
+	.success-message {
+		font-size: 0.875rem;
+		color: #4ade80;
+	}
+
+	.passed-list {
+		display: flex;
+		flex-direction: column;
+		gap: 0.5rem;
+	}
+
+	.passed-item {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		color: #9ca3af;
+	}
+
+	.passed-dot {
+		width: 6px;
+		height: 6px;
+		border-radius: 50%;
+		background: #22c55e;
+	}
+
+	@keyframes pulse {
+		0%, 100% { opacity: 1; }
+		50% { opacity: 0.5; }
+	}
+</style>

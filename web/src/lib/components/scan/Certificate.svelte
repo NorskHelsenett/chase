@@ -1,5 +1,4 @@
 <script>
-	import { getRiskColor } from '$lib/utils';
 	import {
 		Wrench,
 		AlertTriangle,
@@ -14,110 +13,114 @@
 
 	export let loading = true;
 	export let results = {};
+
+	function getGradeClass(grade) {
+		switch (grade) {
+			case 'A+': return 'grade-a-plus';
+			case 'A': return 'grade-a';
+			case 'B': return 'grade-b';
+			case 'C': return 'grade-c';
+			case 'D': return 'grade-d';
+			case 'F': return 'grade-f';
+			default: return 'grade-none';
+		}
+	}
 </script>
 
-<section>
-	<h2 class="text-xl flex items-center gap-2 mb-4">
-		<Wrench class="w-5 h-5" />
-		SSL/TLS Certificate Analysis
+<section class="cert-section">
+	<h2 class="section-header">
+		<Wrench size={20} />
+		<span>SSL/TLS Certificate Analysis</span>
 	</h2>
 
 	{#if loading}
-		<div class="bg-[#202020] rounded-lg p-6 animate-pulse">
-			<div class="h-8 bg-gray-700 rounded w-1/4 mb-4"></div>
-			<div class="space-y-2">
+		<div class="card loading">
+			<div class="skeleton skeleton-title"></div>
+			<div class="skeleton-content">
 				{#each Array(4) as _}
-					<div class="h-4 bg-gray-700 rounded w-full"></div>
+					<div class="skeleton skeleton-line"></div>
 				{/each}
 			</div>
 		</div>
 	{:else if results}
-		<div class="bg-[#202020] rounded-lg p-6" in:fade={{ duration: 200 }}>
+		<div class="card" in:fade={{ duration: 200 }}>
 			<!-- Grade Section -->
-			<div class="flex items-center gap-4 mb-6">
-				<div class="text-4xl font-bold {getRiskColor(results.certificate.grade)}">
+			<div class="grade-section">
+				<div class="grade-value {getGradeClass(results.certificate.grade)}">
 					{results.certificate.grade}
 				</div>
-				<div class="text-gray-400">Certificate Grade</div>
+				<div class="grade-label">Certificate Grade</div>
 			</div>
 
-			<div class="grid grid-cols-2 gap-6">
+			<div class="content-grid">
 				<!-- Certificate Details -->
-				<div>
-					<h3 class="text-gray-400 flex items-center gap-2 mb-4">
-						<Shield class="w-4 h-4" />
-						Certificate Details
+				<div class="details-column">
+					<h3 class="subsection-header">
+						<Shield size={16} />
+						<span>Certificate Details</span>
 					</h3>
 
-					<div class="space-y-4">
+					<div class="details-list">
 						<!-- Validity Period -->
-						<div>
-							<div class="flex items-center gap-2 mb-2">
-								<Calendar class="w-4 h-4 text-gray-400" />
-								<h4 class="text-gray-400">Validity Period</h4>
+						<div class="detail-group">
+							<div class="detail-group-header">
+								<Calendar size={16} />
+								<h4>Validity Period</h4>
 							</div>
-							<div class="grid grid-cols-[auto,1fr] gap-x-3 text-sm">
-								<span class="text-gray-400">Valid from:</span>
-								<span class="text-gray-300"
-									>{new Date(results.certificate.validFrom).toLocaleString(undefined, {
-										dateStyle: 'medium',
-										timeStyle: 'short'
-									})}</span
-								>
-								<span class="text-gray-400">Valid until:</span>
-								<span class="text-gray-300"
-									>{new Date(results.certificate.validUntil).toLocaleString(undefined, {
-										dateStyle: 'medium',
-										timeStyle: 'short'
-									})}</span
-								>
-							</div>
+							<dl class="detail-grid">
+								<dt>Valid from:</dt>
+								<dd>{new Date(results.certificate.validFrom).toLocaleString(undefined, {
+									dateStyle: 'medium',
+									timeStyle: 'short'
+								})}</dd>
+								<dt>Valid until:</dt>
+								<dd>{new Date(results.certificate.validUntil).toLocaleString(undefined, {
+									dateStyle: 'medium',
+									timeStyle: 'short'
+								})}</dd>
+							</dl>
 						</div>
 
 						<!-- Organization Info -->
-						<div>
-							<div class="flex items-center gap-2 mb-2">
-								<Building2 class="w-4 h-4 text-gray-400" />
-								<h4 class="text-gray-400">Organization Info</h4>
+						<div class="detail-group">
+							<div class="detail-group-header">
+								<Building2 size={16} />
+								<h4>Organization Info</h4>
 							</div>
-							<div class="grid grid-cols-[auto,1fr] gap-x-3 text-sm">
-								<span class="text-gray-400">Organization:</span>
-								<span class="text-gray-300">{results.certificate.organization || 'Unknown'}</span>
-								<span class="text-gray-400">Issuer:</span>
-								<span class="text-gray-300">{results.certificate.issuer || 'Unknown'}</span>
-							</div>
+							<dl class="detail-grid">
+								<dt>Organization:</dt>
+								<dd>{results.certificate.organization || 'Unknown'}</dd>
+								<dt>Issuer:</dt>
+								<dd>{results.certificate.issuer || 'Unknown'}</dd>
+							</dl>
 						</div>
 
 						<!-- Technical Details -->
-						<div>
-							<div class="flex items-center gap-2 mb-2">
-								<Key class="w-4 h-4 text-gray-400" />
-								<h4 class="text-gray-400">Technical Details</h4>
+						<div class="detail-group">
+							<div class="detail-group-header">
+								<Key size={16} />
+								<h4>Technical Details</h4>
 							</div>
-							<div class="grid grid-cols-[auto,1fr] gap-x-3 text-sm">
-								<span class="text-gray-400">Key Type:</span>
-								<span class="text-gray-300"
-									>{results.certificate.publicKeyType} ({results.certificate.publicKeyBits} bits)</span
-								>
-								<span class="text-gray-400">Signature:</span>
-								<span class="text-gray-300">{results.certificate.signatureAlg || 'Unknown'}</span>
-								<span class="text-gray-400">Serial:</span>
-								<span class="text-gray-300 font-mono text-xs"
-									>{results.certificate.serialNumber || 'Unknown'}</span
-								>
-							</div>
+							<dl class="detail-grid">
+								<dt>Key Type:</dt>
+								<dd>{results.certificate.publicKeyType} ({results.certificate.publicKeyBits} bits)</dd>
+								<dt>Signature:</dt>
+								<dd>{results.certificate.signatureAlg || 'Unknown'}</dd>
+								<dt>Serial:</dt>
+								<dd class="mono">{results.certificate.serialNumber || 'Unknown'}</dd>
+							</dl>
 						</div>
 
 						<!-- Subject DNS Names -->
 						{#if results.certificate.subjectDNS && results.certificate.subjectDNS.length > 0}
-							<div>
-								<div class="flex items-center gap-2 mb-2">
-									<Hash class="w-4 h-4 text-gray-400" />
-									<h4 class="text-gray-400">Protected Domains</h4>
+							<div class="detail-group">
+								<div class="detail-group-header">
+									<Hash size={16} />
+									<h4>Protected Domains</h4>
 								</div>
-								<ul class="text-sm text-gray-300">
+								<ul class="dns-list">
 									{#each results.certificate.subjectDNS as dns}
-										<li class="font-mono">• {dns}</li>
+										<li>• {dns}</li>
 									{/each}
 								</ul>
 							</div>
@@ -126,53 +129,50 @@
 				</div>
 
 				<!-- Findings and Warnings -->
-				<div class="space-y-6">
-					<!-- Findings -->
+				<div class="findings-column">
 					{#if results.certificate.findings.length > 0}
-						<div>
-							<h3 class="text-gray-400 flex items-center gap-2 mb-2">
-								<Award class="w-4 h-4" />
-								Findings
+						<div class="findings-group">
+							<h3 class="subsection-header">
+								<Award size={16} />
+								<span>Findings</span>
 							</h3>
-							<ul class="space-y-2">
+							<ul class="findings-list">
 								{#each results.certificate.findings as finding}
-									<li class="text-gray-300 text-sm">
-										<div class="font-medium">{finding.description}</div>
-										<div class="text-gray-400 text-xs mt-1">{finding.evidence}</div>
+									<li class="finding-item">
+										<div class="finding-description">{finding.description}</div>
+										<div class="finding-evidence">{finding.evidence}</div>
 									</li>
 								{/each}
 							</ul>
 						</div>
 					{/if}
 
-					<!-- Warnings -->
 					{#if results.certificate.warnings.length > 0}
-						<div>
-							<h3 class="text-yellow-400 flex items-center gap-2 mb-2">
-								<AlertTriangle class="w-4 h-4" />
-								Warnings
+						<div class="findings-group">
+							<h3 class="subsection-header warning">
+								<AlertTriangle size={16} />
+								<span>Warnings</span>
 							</h3>
-							<ul class="space-y-2">
+							<ul class="findings-list">
 								{#each results.certificate.warnings as warning}
-									<li class="text-gray-300 text-sm">
-										<div class="font-medium">{warning.description}</div>
-										<div class="text-gray-400 text-xs mt-1">{warning.evidence}</div>
+									<li class="finding-item">
+										<div class="finding-description">{warning.description}</div>
+										<div class="finding-evidence">{warning.evidence}</div>
 									</li>
 								{/each}
 							</ul>
 						</div>
 					{/if}
 
-					<!-- TLS Versions -->
 					{#if results.certificate.tlsVersions.length > 0}
-						<div>
-							<h3 class="text-gray-400 flex items-center gap-2 mb-2">
-								<Shield class="w-4 h-4" />
-								TLS Versions
+						<div class="findings-group">
+							<h3 class="subsection-header">
+								<Shield size={16} />
+								<span>TLS Versions</span>
 							</h3>
-							<ul class="space-y-1 text-sm">
+							<ul class="tls-list">
 								{#each results.certificate.tlsVersions as version}
-									<li class="text-gray-300">• {version}</li>
+									<li>• {version}</li>
 								{/each}
 							</ul>
 						</div>
@@ -182,3 +182,207 @@
 		</div>
 	{/if}
 </section>
+
+<style>
+	.cert-section {
+		width: 100%;
+	}
+
+	.section-header {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		font-size: 1.25rem;
+		font-weight: 500;
+		color: #e5e7eb;
+		margin-bottom: 1rem;
+	}
+
+	.card {
+		background: #202020;
+		border-radius: 0.5rem;
+		padding: 1.5rem;
+	}
+
+	.card.loading {
+		animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+	}
+
+	.skeleton {
+		background: #374151;
+		border-radius: 0.25rem;
+	}
+
+	.skeleton-title {
+		height: 2rem;
+		width: 25%;
+		margin-bottom: 1rem;
+	}
+
+	.skeleton-content {
+		display: flex;
+		flex-direction: column;
+		gap: 0.5rem;
+	}
+
+	.skeleton-line {
+		height: 1rem;
+		width: 100%;
+	}
+
+	.grade-section {
+		display: flex;
+		align-items: center;
+		gap: 1rem;
+		margin-bottom: 1.5rem;
+	}
+
+	.grade-value {
+		font-size: 2.5rem;
+		font-weight: 700;
+	}
+
+	.grade-label {
+		color: #9ca3af;
+	}
+
+	.grade-a-plus { color: #10b981; }
+	.grade-a { color: #22c55e; }
+	.grade-b { color: #3b82f6; }
+	.grade-c { color: #eab308; }
+	.grade-d { color: #f97316; }
+	.grade-f { color: #ef4444; }
+	.grade-none { color: #6b7280; }
+
+	.content-grid {
+		display: grid;
+		grid-template-columns: 1fr 1fr;
+		gap: 1.5rem;
+	}
+
+	.subsection-header {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		color: #9ca3af;
+		font-size: 0.875rem;
+		font-weight: 500;
+		margin-bottom: 1rem;
+	}
+
+	.subsection-header.warning {
+		color: #fbbf24;
+	}
+
+	.details-list {
+		display: flex;
+		flex-direction: column;
+		gap: 1rem;
+	}
+
+	.detail-group {
+		display: flex;
+		flex-direction: column;
+		gap: 0.5rem;
+	}
+
+	.detail-group-header {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		color: #9ca3af;
+	}
+
+	.detail-group-header h4 {
+		font-size: 0.875rem;
+		font-weight: 400;
+	}
+
+	.detail-grid {
+		display: grid;
+		grid-template-columns: auto 1fr;
+		gap: 0.25rem 0.75rem;
+		font-size: 0.875rem;
+	}
+
+	.detail-grid dt {
+		color: #9ca3af;
+	}
+
+	.detail-grid dd {
+		color: #d1d5db;
+		margin: 0;
+	}
+
+	.detail-grid dd.mono {
+		font-family: ui-monospace, monospace;
+		font-size: 0.75rem;
+	}
+
+	.dns-list {
+		list-style: none;
+		padding: 0;
+		margin: 0;
+		font-size: 0.875rem;
+		color: #d1d5db;
+		font-family: ui-monospace, monospace;
+	}
+
+	.findings-column {
+		display: flex;
+		flex-direction: column;
+		gap: 1.5rem;
+	}
+
+	.findings-group {
+		display: flex;
+		flex-direction: column;
+	}
+
+	.findings-list {
+		list-style: none;
+		padding: 0;
+		margin: 0;
+		display: flex;
+		flex-direction: column;
+		gap: 0.5rem;
+	}
+
+	.finding-item {
+		font-size: 0.875rem;
+	}
+
+	.finding-description {
+		color: #d1d5db;
+		font-weight: 500;
+	}
+
+	.finding-evidence {
+		color: #9ca3af;
+		font-size: 0.75rem;
+		margin-top: 0.25rem;
+	}
+
+	.tls-list {
+		list-style: none;
+		padding: 0;
+		margin: 0;
+		font-size: 0.875rem;
+		color: #d1d5db;
+	}
+
+	.tls-list li {
+		padding: 0.125rem 0;
+	}
+
+	@keyframes pulse {
+		0%, 100% { opacity: 1; }
+		50% { opacity: 0.5; }
+	}
+
+	@media (max-width: 768px) {
+		.content-grid {
+			grid-template-columns: 1fr;
+		}
+	}
+</style>
