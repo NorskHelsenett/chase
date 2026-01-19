@@ -84,6 +84,42 @@ spec:
           runAsUser: 1001
           runAsGroup: 1001
           readOnlyRootFilesystem: true
+
+      {{- if $value.sidecars }}
+      {{- range $sidecar := $value.sidecars }}
+      - name: {{ $sidecar.name }}
+        image: {{ $sidecar.repository }}:{{ $sidecar.tag }}
+        imagePullPolicy: {{ $sidecar.pullPolicy }}
+        {{- if $sidecar.resources }}
+        resources:
+          {{- toYaml $sidecar.resources | nindent 10 }}
+        {{- end }}
+        {{- if $sidecar.env }}
+        env:
+          {{- toYaml $sidecar.env | nindent 10 }}
+        {{- end }}
+        {{- if $sidecar.mounts }}
+        volumeMounts:
+          {{- range $sidecar.mounts }}
+          - name: {{ .name }}
+            mountPath: {{ .mountPath }}
+            readOnly: {{ .readOnly | default false }}
+          {{- end }}
+        {{- end }}
+        securityContext:
+          capabilities:
+            drop:
+              - ALL
+          seccompProfile:
+            type: RuntimeDefault
+          privileged: false
+          allowPrivilegeEscalation: false
+          runAsNonRoot: true
+          runAsUser: 1001
+          runAsGroup: 1001
+          readOnlyRootFilesystem: true
+      {{- end }}
+      {{- end }}
       volumes:
       {{- range $value.mounts }}
       - name: {{ .name }}
@@ -101,6 +137,18 @@ spec:
         persistentVolumeClaim:
           claimName: {{ $key }}-{{ .name }}-pvc
         {{- end }}
+      {{- end }}
+      {{- if $value.sidecars }}
+      {{- range $sidecar := $value.sidecars }}
+      {{- range $sidecar.mounts }}
+      {{- if .inMemory }}
+      - name: {{ .name }}
+        emptyDir:
+          medium: Memory
+          sizeLimit: {{ .storage | default "64Mi" }}
+      {{- end }}
+      {{- end }}
+      {{- end }}
       {{- end }}
 ---
 {{- end }}
