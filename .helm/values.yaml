@@ -114,13 +114,13 @@ certstream:
     port: 8081
   livenessProbe:
     httpGet:
-      path: /metrics
-      port: 8081
+      path: /domains-only/example.json
+      port: 8080
     periodSeconds: 30
   readinessProbe:
     httpGet:
-      path: /metrics
-      port: 8081
+      path: /domains-only/example.json
+      port: 8080
     periodSeconds: 30
   env:
   - name: CONFIG_FILE
