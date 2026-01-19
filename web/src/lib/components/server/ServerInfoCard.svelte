@@ -122,9 +122,8 @@
 
 <style>
 	.config-card {
-		background: #141414;
-		border: 1px solid #222;
-		border-radius: 1rem;
+		background: #202020;
+		border-radius: 0.5rem;
 		overflow: hidden;
 		height: 100%;
 		display: flex;
@@ -135,16 +134,14 @@
 		display: flex;
 		align-items: center;
 		justify-content: space-between;
-		padding: 1rem 1.25rem;
-		border-bottom: 1px solid #222;
+		padding: 0.875rem 1rem;
+		border-bottom: 1px solid #2b2b2b;
 	}
 
 	.config-header h2 {
 		font-size: 0.875rem;
 		font-weight: 500;
 		color: #d1d5db;
-		text-transform: uppercase;
-		letter-spacing: 0.05em;
 	}
 
 	.external-link {
@@ -153,31 +150,31 @@
 		justify-content: center;
 		width: 1.75rem;
 		height: 1.75rem;
-		border-radius: 0.5rem;
-		background: rgba(255, 255, 255, 0.03);
-		color: #6b7280;
+		border-radius: 0.375rem;
+		background: #2b2b2b;
+		color: #9ca3af;
 		transition: all 0.15s ease;
 	}
 
 	.external-link:hover {
-		background: rgba(255, 255, 255, 0.08);
-		color: #4ade80;
+		background: #333;
+		color: #22c55e;
 	}
 
 	.config-grid {
 		display: grid;
 		grid-template-columns: 1fr 1fr;
 		gap: 1px;
-		background: #222;
+		background: #2b2b2b;
 		flex: 1;
 	}
 
 	.config-item {
 		display: flex;
 		flex-direction: column;
-		gap: 0.5rem;
-		padding: 1rem;
-		background: #141414;
+		gap: 0.375rem;
+		padding: 0.75rem;
+		background: #202020;
 	}
 
 	.config-item.full-width {
@@ -190,95 +187,90 @@
 		gap: 0.5rem;
 		font-size: 0.6875rem;
 		font-weight: 500;
-		color: #6b7280;
+		color: #9ca3af;
 		text-transform: uppercase;
-		letter-spacing: 0.05em;
+		letter-spacing: 0.03em;
 	}
 
 	.config-value {
-		font-size: 0.875rem;
+		font-size: 0.8125rem;
 		color: #e5e7eb;
 	}
 
 	.config-value.mono {
-		font-family: 'SF Mono', 'Monaco', 'Inconsolata', monospace;
-		font-size: 0.8125rem;
+		font-family: ui-monospace, monospace;
+		font-size: 0.75rem;
 	}
 
 	.config-value.url {
-		font-family: 'SF Mono', 'Monaco', 'Inconsolata', monospace;
-		font-size: 0.8125rem;
+		font-family: ui-monospace, monospace;
+		font-size: 0.75rem;
 	}
 
 	.url-text {
-		color: #60a5fa;
+		color: #3b82f6;
 		word-break: break-all;
 	}
 
 	.status-badge {
 		display: inline-flex;
 		align-items: center;
-		padding: 0.25rem 0.625rem;
-		border-radius: 9999px;
-		font-size: 0.6875rem;
+		padding: 0.1875rem 0.5rem;
+		border-radius: 0.25rem;
+		font-size: 0.625rem;
 		font-weight: 500;
 		text-transform: uppercase;
 		letter-spacing: 0.025em;
+		background: #2b2b2b;
 	}
 
 	.status-badge.active {
-		background: rgba(74, 222, 128, 0.15);
-		color: #4ade80;
+		color: #22c55e;
 	}
 
 	.status-badge.inactive {
-		background: rgba(107, 114, 128, 0.15);
 		color: #9ca3af;
 	}
 
 	.status-badge.success {
-		background: rgba(74, 222, 128, 0.15);
-		color: #4ade80;
+		color: #22c55e;
 	}
 
 	.status-badge.warning {
-		background: rgba(251, 191, 36, 0.15);
-		color: #fbbf24;
+		color: #eab308;
 	}
 
 	.status-badge.neutral {
-		background: rgba(107, 114, 128, 0.15);
 		color: #9ca3af;
 	}
 
 	.status-code {
-		font-family: 'SF Mono', 'Monaco', 'Inconsolata', monospace;
-		font-size: 0.875rem;
+		font-family: ui-monospace, monospace;
+		font-size: 0.8125rem;
 		font-weight: 600;
 	}
 
 	.status-code.success {
-		color: #4ade80;
+		color: #22c55e;
 	}
 
 	.status-code.error {
-		color: #f87171;
+		color: #ef4444;
 	}
 
 	.status-code.neutral {
-		color: #6b7280;
+		color: #9ca3af;
 	}
 
 	.config-comment {
-		padding: 1rem;
-		border-top: 1px solid #222;
-		background: rgba(255, 255, 255, 0.02);
+		padding: 0.75rem;
+		border-top: 1px solid #2b2b2b;
 	}
 
 	.config-comment p {
-		font-size: 0.8125rem;
+		font-size: 0.75rem;
 		color: #9ca3af;
 		line-height: 1.5;
-		margin-top: 0.5rem;
+		margin-top: 0.375rem;
 	}
 </style>

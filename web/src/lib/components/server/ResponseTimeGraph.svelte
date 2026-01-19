@@ -33,7 +33,7 @@
 					toolbar: {
 						show: false
 					},
-					background: '#141414',
+					background: '#202020',
 					animations: {
 						enabled: true,
 						easing: 'cubicBezier', // Changed to cubicBezier for smoother animation
@@ -44,41 +44,19 @@
 					}
 				},
 				stroke: {
-					width: 3, // Slightly thicker line
-					colors: ['#4ade80'],
+					width: 2,
+					colors: ['#22c55e'],
 					lineCap: 'round',
-					// Added curve smoothness
 					curve: 'smooth',
 					smoothing: 0.35
 				},
 				fill: {
-					type: 'gradient',
-					gradient: {
-						shadeIntensity: 1,
-						opacityFrom: 0.25, // Slightly increased opacity
-						opacityTo: 0.05, // Added slight opacity at the end
-						stops: [0, 95, 100],
-						colorStops: [
-							{
-								offset: 0,
-								color: '#4ade80',
-								opacity: 0.25
-							},
-							{
-								offset: 95,
-								color: '#4ade80',
-								opacity: 0.05
-							},
-							{
-								offset: 100,
-								color: '#4ade80',
-								opacity: 0
-							}
-						]
-					}
+					type: 'solid',
+					colors: ['#22c55e'],
+					opacity: 0.08
 				},
 				grid: {
-					borderColor: '#333',
+					borderColor: '#2b2b2b',
 					strokeDashArray: 3,
 					xaxis: {
 						lines: {
@@ -98,7 +76,7 @@
 					type: 'datetime',
 					labels: {
 						style: {
-							colors: '#666'
+							colors: '#9ca3af'
 						},
 						datetimeFormatter: {
 							hour: 'HH:mm'
@@ -126,7 +104,7 @@
 					tickAmount: 6,
 					labels: {
 						style: {
-							colors: '#666'
+							colors: '#9ca3af'
 						},
 						formatter: (value: number) => Math.round(value)
 					}
@@ -168,7 +146,7 @@
 				tickAmount: 6,
 				labels: {
 					style: {
-						colors: '#666'
+						colors: '#9ca3af'
 					}
 				}
 			},
@@ -209,21 +187,21 @@
 	}
 
 	.graph-loading {
-		height: 400px;
+		height: 350px;
 		display: flex;
 		flex-direction: column;
 		align-items: center;
 		justify-content: center;
 		gap: 1rem;
-		color: #6b7280;
+		color: #9ca3af;
 		font-size: 0.875rem;
 	}
 
 	.loading-spinner {
 		width: 1.5rem;
 		height: 1.5rem;
-		border: 2px solid #333;
-		border-top-color: #4ade80;
+		border: 2px solid #2b2b2b;
+		border-top-color: #22c55e;
 		border-radius: 50%;
 		animation: spin 0.8s linear infinite;
 	}
@@ -233,33 +211,31 @@
 	}
 
 	:global(.apexcharts-tooltip-box) {
-		background: #1a1a1a !important;
-		padding: 0.625rem 0.875rem !important;
-		border-radius: 0.5rem;
-		border: 1px solid #333 !important;
-		box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4) !important;
+		background: #2b2b2b !important;
+		padding: 0.5rem 0.75rem !important;
+		border-radius: 0.375rem;
 	}
 
 	:global(.apexcharts-tooltip-box .timestamp) {
-		color: #6b7280;
+		color: #9ca3af;
 		font-size: 0.75rem;
 		margin-bottom: 0.25rem;
 	}
 
 	:global(.apexcharts-tooltip-box .value) {
-		color: #4ade80;
+		color: #22c55e;
 		font-weight: 600;
 		font-size: 0.875rem;
 	}
 
 	:global(.apexcharts-tooltip-box .average) {
-		color: #4ade80;
+		color: #22c55e;
 		font-weight: 500;
 		margin-bottom: 2px;
 	}
 
 	:global(.apexcharts-tooltip-box .range) {
-		color: #6b7280;
+		color: #9ca3af;
 		font-size: 0.75rem;
 	}
 </style>

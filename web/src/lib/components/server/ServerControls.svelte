@@ -105,7 +105,7 @@
 	.controls-bar {
 		display: flex;
 		align-items: center;
-		gap: 1rem;
+		gap: 0.75rem;
 	}
 
 	.controls-actions {
@@ -120,23 +120,20 @@
 		justify-content: center;
 		width: 2rem;
 		height: 2rem;
-		border-radius: 0.5rem;
-		color: #6b7280;
-		background: rgba(255, 255, 255, 0.03);
-		border: 1px solid transparent;
+		border-radius: 0.375rem;
+		color: #9ca3af;
+		background: #2b2b2b;
+		border: none;
 		transition: all 0.15s ease;
 	}
 
 	.action-btn:hover:not(:disabled) {
-		color: #d1d5db;
-		background: rgba(255, 255, 255, 0.08);
-		border-color: #333;
+		color: #e5e7eb;
+		background: #333;
 	}
 
 	.action-btn.delete:hover:not(:disabled) {
-		color: #f87171;
-		background: rgba(248, 113, 113, 0.1);
-		border-color: rgba(248, 113, 113, 0.2);
+		color: #ef4444;
 	}
 
 	.action-btn:disabled {
