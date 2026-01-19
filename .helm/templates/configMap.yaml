@@ -1,5 +1,6 @@
 {{- range $key, $value := .Values }}
-  {{- if $value.mounts }}
+  {{- $enabled := default true $value.enabled }}
+  {{- if and $enabled $value.mounts }}
     {{- range $value.mounts }}
       {{- if and .config .config.data }}
 apiVersion: v1

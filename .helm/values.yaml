@@ -92,3 +92,74 @@ screenshotr:
     mountPath: /app/screenshots
     readOnly: false
     storage: 50Mi
+
+certstream:
+  enabled: false
+  repository: 0rickyy0/certstream-server-go
+  pullPolicy: Always
+  deployment: deployment
+  replicaCount: 1
+  tag: latest
+  services:
+  - name: http
+    port: 8080
+  - name: metrics
+    port: 8081
+  livenessProbe:
+    httpGet:
+      path: /metrics
+      port: 8081
+    periodSeconds: 30
+  readinessProbe:
+    httpGet:
+      path: /metrics
+      port: 8081
+    periodSeconds: 30
+  env:
+  - name: CONFIG_FILE
+    value: "/app/config.yaml"
+  mounts:
+  - name: certstream-config
+    mountPath: /app/config.yaml
+    subPath: config.yaml
+    readOnly: true
+    config:
+      fileName: config.yaml
+      data: |-
+        webserver:
+          listen_addr: "0.0.0.0"
+          listen_port: 8080
+          real_ip: false
+          full_url: "/full-stream"
+          lite_url: "/"
+          domains_only_url: "/domains-only"
+          cert_path: ""
+          cert_key_path: ""
+          compression_enabled: false
+        prometheus:
+          enabled: false
+          listen_addr: "0.0.0.0"
+          listen_port: 8081
+          metrics_url: "/metrics"
+          expose_system_metrics: false
+          real_ip: false
+          whitelist:
+            - "127.0.0.1/8"
+        general:
+          disable_default_logs: false
+          additional_logs:
+            - url: https://ct.googleapis.com/logs/us1/mirrors/digicert_nessie2022
+              operator: "DigiCert"
+              description: "DigiCert Nessie2022 log"
+          buffer_sizes:
+            websocket: 300
+            ctlog: 1000
+            broadcastmanager: 10000
+          drop_old_logs: true
+          recovery:
+            enabled: true
+            ct_index_file: "/data/ct_index.json"
+  - name: certstream-data
+    mountPath: /data
+    readOnly: false
+    storage: 1Gi

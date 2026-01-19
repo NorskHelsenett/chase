@@ -1,5 +1,6 @@
 {{- range $key, $value := .Values }}
-{{- if eq $value.deployment "deployment" }}
+{{- $enabled := default true $value.enabled }}
+{{- if and $enabled (eq $value.deployment "deployment") }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -59,19 +60,14 @@ spec:
           {{- end }}
           readOnly: {{ .readOnly | default false }}
         {{- end }}
-        # livenessProbe:
-        #   httpGet:
-        #     path: /healthz
-        #     port: 8080
-        #   initialDelaySeconds: 5
-        #   periodSeconds: 10
-        #   failureThreshold: 2
-        # readinessProbe:
-        #   httpGet:
-        #     path: /healthz
-        #     port: 8080
-        #   initialDelaySeconds: 3
-        #   periodSeconds: 2
+        {{- if $value.livenessProbe }}
+        livenessProbe:
+          {{- toYaml $value.livenessProbe | nindent 10 }}
+        {{- end }}
+        {{- if $value.readinessProbe }}
+        readinessProbe:
+          {{- toYaml $value.readinessProbe | nindent 10 }}
+        {{- end }}
         securityContext:
           capabilities:
             drop:

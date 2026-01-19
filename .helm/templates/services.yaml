@@ -1,5 +1,6 @@
 {{- range $key, $value := .Values }}
-{{- if $value.services }}
+{{- $enabled := default true $value.enabled }}
+{{- if and $enabled $value.services }}
 apiVersion: v1
 kind: Service
 metadata:
