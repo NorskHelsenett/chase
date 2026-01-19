@@ -28,21 +28,6 @@ chase:
   services:
   - name: http
     port: 8080
-  sidecars: []
-  # sidecars:
-  # - name: my-sidecar
-  #   repository: my-sidecar-image
-  #   tag: latest
-  #   pullPolicy: Always
-  #   resources:
-  #     requests:
-  #       memory: "64Mi"
-  #       cpu: "100m"
-  #     limits:
-  #       memory: "128Mi"
-  #       cpu: "200m"
-  #   env: []
-  #   mounts: []
   sidecar:
     enabled: false
     name: my-sidecar
