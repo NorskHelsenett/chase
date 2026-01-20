@@ -5,7 +5,6 @@ import (
 	"io"
 	"net/http"
 	"strings"
-	"time"
 )
 
 // ScreenshotService handles communication with the Python screenshot service
@@ -19,7 +18,7 @@ func NewScreenshotService(baseURL string) *ScreenshotService {
 	return &ScreenshotService{
 		baseURL: baseURL,
 		httpClient: &http.Client{
-			Timeout: 30 * time.Second,
+			Timeout: serviceTimeout(),
 		},
 	}
 }

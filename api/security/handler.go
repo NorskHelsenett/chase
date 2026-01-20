@@ -280,9 +280,9 @@ func captureAndSendScreenshot(c *gin.Context, domain string, fullSize bool, wait
 		}
 
 		// Increase timeout for retries
-		timeout := 30 * time.Second
+		timeout := serviceTimeout()
 		if attempt > 0 {
-			timeout = 45 * time.Second
+			timeout += 15 * time.Second
 		}
 
 		client := &http.Client{Timeout: timeout}
@@ -572,6 +572,7 @@ func determineOverallRisk(report *SecurityReport) RiskLevel {
 		report.Swagger.Risk,
 		report.Infrastructure.Risk,
 		report.FileExposure.Risk,
+		report.SecretExposure.Risk,
 	}
 
 	// Return highest risk level found
@@ -590,7 +591,8 @@ func generateReportSummary(report *SecurityReport) string {
 		len(report.Certificate.Findings) +
 		len(report.AdminPages.Findings) +
 		len(report.Swagger.Findings) +
-		len(report.Infrastructure.Findings)
+		len(report.Infrastructure.Findings) +
+		len(report.SecretExposure.Findings)
 
 	return fmt.Sprintf("Security scan completed at %s with %d findings",
 		report.ScanTimestamp.Format(time.RFC3339),

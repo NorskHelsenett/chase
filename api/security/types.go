@@ -17,6 +17,7 @@ type SecurityReport struct {
 	Emails         []string               `json:"emails"`
 	DNSRecords     DNSAnalysis            `json:"dnsRecords"`
 	FileExposure   FileExposureAnalysis   `json:"fileExposure"`
+	SecretExposure SecretExposureAnalysis `json:"secretExposure"`
 	ScanErrors     []ScanError            `json:"scanErrors"`
 	APIExposure    APIExposureAnalysis    `json:"apiExposure"`
 	HealthProbes   HealthProbeAnalysis    `json:"healthProbes"`
@@ -64,6 +65,12 @@ type FileExposureAnalysis struct {
 	ExposedFiles []ExposedFile     `json:"exposedFiles"`
 	Risk         RiskLevel         `json:"risk"`
 	Evidence     map[string]string `json:"evidence"`
+}
+
+type SecretExposureAnalysis struct {
+	Findings []Finding  `json:"findings"`
+	Risk     RiskLevel  `json:"risk"`
+	Sources  []string   `json:"sources,omitempty"`
 }
 
 type ExposedFile struct {
