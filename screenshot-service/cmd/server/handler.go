@@ -105,6 +105,11 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		targetURL = "https://" + targetURL
 	}
 
+	if format == "html" && isLikelyNonHTML(targetURL) {
+		http.Error(w, "Target is not HTML", http.StatusUnsupportedMediaType)
+		return
+	}
+
 	fullPageScreenshot := false
 	viewportWidth := 1920
 	viewportHeight := 1080
@@ -221,6 +226,55 @@ func parsePositiveInt(values url.Values, key string) (int, bool) {
 	}
 
 	return value, true
+}
+
+func isLikelyNonHTML(rawURL string) bool {
+	parsed, err := url.Parse(rawURL)
+	if err != nil {
+		return false
+	}
+
+	path := strings.ToLower(parsed.Path)
+	segments := strings.Split(path, "/")
+	for _, ext := range []string{
+		".js",
+		".css",
+		".json",
+		".xml",
+		".png",
+		".jpg",
+		".jpeg",
+		".gif",
+		".webp",
+		".svg",
+		".ico",
+		".woff",
+		".woff2",
+		".ttf",
+		".otf",
+		".eot",
+		".pdf",
+		".zip",
+		".gz",
+		".tgz",
+		".rar",
+		".7z",
+		".mp4",
+		".mp3",
+		".avi",
+		".mov",
+		".m4a",
+	} {
+		if strings.HasSuffix(path, ext) {
+			return true
+		}
+		for _, segment := range segments {
+			if strings.HasSuffix(segment, ext) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func (h *Handler) Close() error {
