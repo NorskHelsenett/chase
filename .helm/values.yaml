@@ -80,22 +80,7 @@ screenshotr:
     inMemory: true
     mountPath: /dev/shm
     readOnly: false
-    storage: 1Gi
-  - name: tmp
-    inMemory: true
-    mountPath: /tmp
-    readOnly: false
-    storage: 50Mi
-  - name: home
-    inMemory: true
-    mountPath: /home
-    readOnly: false
-    storage: 50Mi
-  - name: screenshots
-    inMemory: true
-    mountPath: /app/screenshots
-    readOnly: false
-    storage: 50Mi
+    storage: 128Mi
 
 certstream:
   enabled: false
