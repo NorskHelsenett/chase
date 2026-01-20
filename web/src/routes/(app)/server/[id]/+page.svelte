@@ -273,6 +273,10 @@
 						<span class="grade-value {getRiskColor(searchResults.swagger?.risk)}">{searchResults.swagger?.risk || '?'}</span>
 						<span class="grade-label">API</span>
 					</div>
+					<div class="grade-card">
+						<span class="grade-value {getRiskColor(searchResults.secretExposure?.risk)}">{searchResults.secretExposure?.risk || '?'}</span>
+						<span class="grade-label">Secrets</span>
+					</div>
 				</div>
 
 				<!-- Key Findings -->
@@ -309,6 +313,17 @@
 							<li class="finding-item success">
 								<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
 								No public API documentation
+							</li>
+						{/if}
+						{#if searchResults.secretExposure?.findings?.length > 0}
+							<li class="finding-item danger">
+								<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" /></svg>
+								{searchResults.secretExposure.findings.length} secret{searchResults.secretExposure.findings.length > 1 ? 's' : ''} exposed
+							</li>
+						{:else}
+							<li class="finding-item success">
+								<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+								No secrets exposed
 							</li>
 						{/if}
 					</ul>
@@ -455,7 +470,7 @@
 	/* Security Grades */
 	.security-grades {
 		display: grid;
-		grid-template-columns: repeat(4, 1fr);
+		grid-template-columns: repeat(5, 1fr);
 		gap: 0.5rem;
 	}
 

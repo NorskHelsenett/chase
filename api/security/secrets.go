@@ -267,24 +267,30 @@ func (s *Scanner) checkSecretExposure(ctx context.Context, domain string) (*Secr
 		Findings: make([]Finding, 0),
 		Risk:     RiskLow,
 		Sources:  make([]string, 0),
+		Checks:   make([]SecretCheck, 0),
 	}
+
+	checkState := defaultSecretChecks()
 
 	htmlBody, contentType, err := s.fetchServiceContent(ctx, domain, "/.html", maxSecretScanBytes)
 	if err != nil {
+		analysis.Checks = buildSecretChecks(checkState)
 		return analysis, err
 	}
 	if len(htmlBody) == 0 || (!strings.Contains(strings.ToLower(contentType), "html") && !isLikelyHTML(htmlBody)) {
+		analysis.Checks = buildSecretChecks(checkState)
 		return analysis, nil
 	}
 
 	seen := make(map[string]struct{})
-	scanSecretContent(string(htmlBody), "document", analysis, seen)
+	scanSecretContent(string(htmlBody), "document", analysis, seen, checkState)
 
 	inlineScripts := extractInlineScripts(string(htmlBody))
 	for idx, script := range inlineScripts {
 		source := fmt.Sprintf("inline-script-%d", idx+1)
-		scanSecretContent(script, source, analysis, seen)
+		scanSecretContent(script, source, analysis, seen, checkState)
 		if len(analysis.Findings) >= maxSecretFindings {
+			analysis.Checks = buildSecretChecks(checkState)
 			return analysis, nil
 		}
 	}
@@ -307,10 +313,11 @@ func (s *Scanner) checkSecretExposure(ctx context.Context, domain string) (*Secr
 			continue
 		}
 		source := absolute
-		scanSecretContent(string(body), source, analysis, seen)
+		scanSecretContent(string(body), source, analysis, seen, checkState)
 		fetched++
 	}
 
+	analysis.Checks = buildSecretChecks(checkState)
 	return analysis, nil
 }
 
@@ -410,7 +417,7 @@ func resolveScriptURL(baseURL, src string) (string, error) {
 	return base.ResolveReference(ref).String(), nil
 }
 
-func scanSecretContent(content, source string, analysis *SecretExposureAnalysis, seen map[string]struct{}) {
+func scanSecretContent(content, source string, analysis *SecretExposureAnalysis, seen map[string]struct{}, checkState map[string]bool) {
 	if content == "" {
 		return
 	}
@@ -439,16 +446,36 @@ func scanSecretContent(content, source string, analysis *SecretExposureAnalysis,
 				Mitigation:  pattern.mitigation,
 			})
 			analysis.Risk = maxRiskLevel(analysis.Risk, pattern.risk)
+			if _, ok := checkState[pattern.name]; ok {
+				checkState[pattern.name] = false
+			}
 		}
 	}
 }
 
 func redactSecretMatch(match string) string {
-	re := regexp.MustCompile(`(["'])([^"']+)(["'])`)
-	redacted := re.ReplaceAllString(match, `$1[REDACTED]$3`)
-	trimmed := strings.TrimSpace(redacted)
-	if len(trimmed) <= 12 {
-		return "[REDACTED]"
+	return strings.TrimSpace(match)
+}
+
+func defaultSecretChecks() map[string]bool {
+	state := make(map[string]bool, len(secretPatterns))
+	for _, pattern := range secretPatterns {
+		state[pattern.name] = true
 	}
-	return trimmed[:4] + "..." + trimmed[len(trimmed)-4:]
+	return state
+}
+
+func buildSecretChecks(state map[string]bool) []SecretCheck {
+	checks := make([]SecretCheck, 0, len(secretPatterns))
+	for _, pattern := range secretPatterns {
+		passed, ok := state[pattern.name]
+		if !ok {
+			passed = true
+		}
+		checks = append(checks, SecretCheck{
+			Name:   pattern.name,
+			Passed: passed,
+		})
+	}
+	return checks
 }

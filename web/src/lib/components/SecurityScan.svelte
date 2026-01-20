@@ -6,6 +6,7 @@
 	import { onMount } from 'svelte';
 	import Certificate from './scan/Certificate.svelte';
 	import Headers from './scan/Headers.svelte';
+	import SecretExposure from './scan/SecretExposure.svelte';
 
 	export let domain: string = '';
 	export let searchResults = {};
@@ -179,7 +180,7 @@
 
 					<!-- Summary Content -->
 					<div class="p-6">
-						<div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+						<div class="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
 							<div class="text-center p-3 bg-[#2b2b2b] rounded-lg">
 								<div class="text-2xl font-bold mb-1 {getRiskColor(results.headers.score)}">
 									{results.headers.score}
@@ -206,6 +207,12 @@
 								</div>
 								<div class="text-sm text-gray-400">API Risk</div>
 							</div>
+							<div class="text-center p-3 bg-[#2b2b2b] rounded-lg">
+								<div class="text-2xl font-bold mb-1 uppercase {getRiskColor(results.secretExposure?.risk)}">
+									{results.secretExposure?.risk || 'N/A'}
+								</div>
+								<div class="text-sm text-gray-400">Secrets</div>
+							</div>
 						</div>
 
 						<div class="space-y-2">
@@ -220,6 +227,11 @@
 										? 'API documentation publicly accessible'
 										: 'No public API documentation'}
 								</li>
+								<li>
+									• {results.secretExposure?.findings?.length > 0
+										? `${results.secretExposure.findings.length} secret(s) exposed`
+										: 'No secrets exposed'}
+								</li>
 							</ul>
 						</div>
 					</div>
@@ -233,6 +245,9 @@
 
 	<!-- Certificate Section -->
 	<Certificate {loading} {results} />
+
+	<!-- Secret Exposure Section -->
+	<SecretExposure {loading} {results} />
 
 	<!-- Admin Pages Section -->
 	<section>

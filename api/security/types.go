@@ -68,9 +68,15 @@ type FileExposureAnalysis struct {
 }
 
 type SecretExposureAnalysis struct {
-	Findings []Finding  `json:"findings"`
-	Risk     RiskLevel  `json:"risk"`
-	Sources  []string   `json:"sources,omitempty"`
+	Findings []Finding    `json:"findings"`
+	Risk     RiskLevel    `json:"risk"`
+	Sources  []string     `json:"sources,omitempty"`
+	Checks   []SecretCheck `json:"checks"`
+}
+
+type SecretCheck struct {
+	Name   string `json:"name"`
+	Passed bool   `json:"passed"`
 }
 
 type ExposedFile struct {

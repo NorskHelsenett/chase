@@ -188,11 +188,10 @@ func (s *Scanner) checkHealthProbes(ctx context.Context, domain string) (*Health
 			continue
 		}
 
-		analysis.Paths[path] = resp.StatusCode
-		if resp.StatusCode >= 400 {
-			if isLikelySoft404(body) {
-				continue
-			}
+		if resp.StatusCode != http.StatusOK {
+			continue
+		}
+		if isLikelySoft404(body) {
 			continue
 		}
 
@@ -200,6 +199,7 @@ func (s *Scanner) checkHealthProbes(ctx context.Context, domain string) (*Health
 			continue
 		}
 
+		analysis.Paths[path] = resp.StatusCode
 		if exposesDetails(body) {
 			analysis.Findings = append(analysis.Findings, Finding{
 				Description: "Health endpoint " + path + " exposes internal details",
