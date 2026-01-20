@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/base64"
+	"fmt"
 	"log"
 	"net/http"
 	"net/url"
@@ -16,15 +17,23 @@ import (
 )
 
 type Handler struct {
-	crawler   *internal.Crawler
-	crawlerMu sync.Mutex
+	pool        chan *internal.Crawler
+	poolSize    int
+	poolCreated int
+	poolMu      sync.Mutex
 }
 
 const defaultCrawlTimeout = 30 * time.Second
 
 func NewHandler() *Handler {
+	poolSize := crawlPoolSize()
+	if poolSize <= 0 {
+		poolSize = 1
+	}
+
 	return &Handler{
-		crawler: nil,
+		pool:     make(chan *internal.Crawler, poolSize),
+		poolSize: poolSize,
 	}
 }
 
@@ -46,9 +55,10 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if path == "" || path == "health" || path == "healthz" {
 		logURL = r.URL.Path
 		logRequest = false
-		if err := h.ensureCrawlerHealthy(); err != nil {
+		if err := h.ensureCrawlerHealthy(r.Context()); err != nil {
 			log.Printf("Crawler unhealthy: %v", err)
-			os.Exit(1)
+			http.Error(w, "Crawler unhealthy", http.StatusServiceUnavailable)
+			return
 		}
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte("Crawler service running"))
@@ -127,22 +137,26 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	logURL = targetURL
 
 	// Create or reuse crawler instance
-	crawler, err := h.getCrawler()
+	ctx, cancel := context.WithTimeout(r.Context(), crawlTimeout())
+	defer cancel()
+
+	crawler, err := h.acquireCrawler(ctx)
 	if err != nil {
 		log.Printf("Failed to create crawler: %v", err)
 		http.Error(w, "Failed to initialize crawler", http.StatusInternalServerError)
 		return
 	}
+	var result *internal.CrawlResult
+	defer func() {
+		h.releaseCrawler(crawler, err == nil && result != nil && result.Error == "")
+	}()
 
 	// Crawl the URL
 	waitTime := 3 * time.Second
 	captureScreenshot := format == "png"
-	ctx, cancel := context.WithTimeout(r.Context(), crawlTimeout())
-	defer cancel()
-	result, err := crawler.Crawl(ctx, targetURL, waitTime, captureScreenshot, fullPageScreenshot, viewportWidth, viewportHeight)
+	result, err = crawler.Crawl(ctx, targetURL, waitTime, captureScreenshot, fullPageScreenshot, viewportWidth, viewportHeight)
 	if err != nil || result.Error != "" {
 		log.Printf("Error crawling %s: %v / %s", targetURL, err, result.Error)
-		h.resetCrawler("crawl failure")
 		http.Error(w, "Failed to crawl URL", http.StatusInternalServerError)
 		return
 	}
@@ -209,72 +223,16 @@ func parsePositiveInt(values url.Values, key string) (int, bool) {
 	return value, true
 }
 
-func (h *Handler) getCrawler() (*internal.Crawler, error) {
-	h.crawlerMu.Lock()
-	defer h.crawlerMu.Unlock()
-
-	if h.crawler != nil {
-		return h.crawler, nil
-	}
-
-	crawler, err := internal.NewCrawler()
-	if err != nil {
-		return nil, err
-	}
-
-	h.crawler = crawler
-	return h.crawler, nil
-}
-
-func (h *Handler) ensureCrawlerHealthy() error {
-	h.crawlerMu.Lock()
-	defer h.crawlerMu.Unlock()
-
-	if h.crawler == nil {
-		crawler, err := internal.NewCrawler()
-		if err != nil {
-			return err
-		}
-		h.crawler = crawler
-		return nil
-	}
-
-	if err := h.crawler.IsHealthy(); err != nil {
-		_ = h.crawler.Close()
-		h.crawler = nil
-		return err
-	}
-
-	return nil
-}
-
 func (h *Handler) Close() error {
-	h.crawlerMu.Lock()
-	defer h.crawlerMu.Unlock()
+	h.poolMu.Lock()
+	defer h.poolMu.Unlock()
 
-	if h.crawler == nil {
-		return nil
+	close(h.pool)
+	for crawler := range h.pool {
+		_ = crawler.Close()
 	}
-
-	err := h.crawler.Close()
-	h.crawler = nil
-	return err
-}
-
-func (h *Handler) resetCrawler(reason string) {
-	h.crawlerMu.Lock()
-	defer h.crawlerMu.Unlock()
-
-	if h.crawler == nil {
-		return
-	}
-
-	if err := h.crawler.Close(); err != nil {
-		log.Printf("Crawler reset error (%s): %v", reason, err)
-	} else {
-		log.Printf("Crawler reset (%s)", reason)
-	}
-	h.crawler = nil
+	h.poolCreated = 0
+	return nil
 }
 
 func crawlTimeout() time.Duration {
@@ -292,4 +250,97 @@ func crawlTimeout() time.Duration {
 	}
 
 	return defaultCrawlTimeout
+}
+
+func crawlPoolSize() int {
+	raw := strings.TrimSpace(os.Getenv("CRAWLER_POOL_SIZE"))
+	if raw == "" {
+		return 1
+	}
+
+	size, err := strconv.Atoi(raw)
+	if err != nil || size <= 0 {
+		return 1
+	}
+
+	return size
+}
+
+func (h *Handler) acquireCrawler(ctx context.Context) (*internal.Crawler, error) {
+	select {
+	case crawler := <-h.pool:
+		return crawler, nil
+	default:
+	}
+
+	h.poolMu.Lock()
+	if h.poolCreated < h.poolSize {
+		h.poolCreated++
+		h.poolMu.Unlock()
+
+		crawler, err := internal.NewCrawler()
+		if err != nil {
+			h.poolMu.Lock()
+			h.poolCreated--
+			h.poolMu.Unlock()
+			return nil, err
+		}
+		return crawler, nil
+	}
+	h.poolMu.Unlock()
+
+	select {
+	case crawler := <-h.pool:
+		return crawler, nil
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
+}
+
+func (h *Handler) releaseCrawler(crawler *internal.Crawler, healthy bool) {
+	if crawler == nil {
+		return
+	}
+
+	if !healthy {
+		_ = crawler.Close()
+		h.poolMu.Lock()
+		if h.poolCreated > 0 {
+			h.poolCreated--
+		}
+		h.poolMu.Unlock()
+		return
+	}
+
+	select {
+	case h.pool <- crawler:
+	default:
+		_ = crawler.Close()
+		h.poolMu.Lock()
+		if h.poolCreated > 0 {
+			h.poolCreated--
+		}
+		h.poolMu.Unlock()
+	}
+}
+
+func (h *Handler) ensureCrawlerHealthy(ctx context.Context) error {
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+
+	crawler, err := h.acquireCrawler(ctx)
+	if err != nil {
+		return err
+	}
+
+	healthy := true
+	if err := crawler.IsHealthy(); err != nil {
+		healthy = false
+	}
+
+	h.releaseCrawler(crawler, healthy)
+	if !healthy {
+		return fmt.Errorf("crawler unhealthy")
+	}
+	return nil
 }

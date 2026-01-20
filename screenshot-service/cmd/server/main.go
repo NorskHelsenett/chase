@@ -32,7 +32,7 @@ func main() {
 	}
 
 	go func() {
-		healthURL := "http://127.0.0.1:" + port + "/http://127.0.0.1:" + port + "/healthz/.html"
+		healthURL := "http://127.0.0.1:" + port + "/healthz"
 		var lastErr error
 
 		for attempt := 1; attempt <= 5; attempt++ {
