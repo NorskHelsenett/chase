@@ -76,11 +76,16 @@ screenshotr:
     - name: web
       port: 8080
   mounts:
-    - name: dshm
-      inMemory: true
-      mountPath: /dev/shm
-      readOnly: false
-      storage: 128Mi
+  - name: dshm
+    inMemory: true
+    mountPath: /dev/shm
+    readOnly: false
+    storage: 128Mi
+  - name: tmp
+    inMemory: true
+    mountPath: /tmp
+    readOnly: false
+    storage: 64Mi
 
 certstream:
   enabled: false
