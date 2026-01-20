@@ -19,6 +19,7 @@ type CrawlResult struct {
 	HTML        string `json:"html"`
 	Screenshot  string `json:"screenshot"` // base64 encoded PNG
 	Error       string `json:"error,omitempty"`
+	StatusCode  int    `json:"status_code,omitempty"`
 	Title       string `json:"title,omitempty"`
 	Description string `json:"description,omitempty"`
 	Author      string `json:"author,omitempty"`
@@ -106,6 +107,8 @@ func (c *Crawler) Crawl(ctx context.Context, targetURL string, waitTime time.Dur
 	}
 	defer page.Close()
 
+	_ = page.EnableDomain(&proto.NetworkEnable{})
+
 	// Set context timeout
 	page = page.Context(ctx)
 
@@ -148,6 +151,22 @@ func (c *Crawler) Crawl(ctx context.Context, targetURL string, waitTime time.Dur
 	_ = c.consentRemover.SetConsentCookies(page, parsedURL.Hostname())
 
 	// Navigate to URL
+	var statusCode int
+	waitDocument := make(chan struct{}, 1)
+	stop := page.EachEvent(func(event *proto.NetworkResponseReceived) {
+		if statusCode != 0 {
+			return
+		}
+		if event.Type == proto.NetworkResourceTypeDocument {
+			statusCode = int(event.Response.Status)
+			select {
+			case waitDocument <- struct{}{}:
+			default:
+			}
+		}
+	})
+	defer stop()
+
 	err = page.Navigate(targetURL)
 	if err != nil {
 		result.Error = fmt.Sprintf("failed to navigate: %v", err)
@@ -157,6 +176,13 @@ func (c *Crawler) Crawl(ctx context.Context, targetURL string, waitTime time.Dur
 	waitTimeout := waitTime
 	if waitTimeout <= 0 {
 		waitTimeout = 3 * time.Second
+	}
+	select {
+	case <-waitDocument:
+	case <-time.After(waitTimeout):
+	}
+	if statusCode > 0 {
+		result.StatusCode = statusCode
 	}
 
 	if err := c.waitForRender(page, waitTimeout); err != nil {

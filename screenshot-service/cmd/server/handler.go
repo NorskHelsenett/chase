@@ -162,22 +162,27 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	result, err = crawler.Crawl(ctx, targetURL, waitTime, captureScreenshot, fullPageScreenshot, viewportWidth, viewportHeight)
 	if err != nil || result.Error != "" {
 		log.Printf("Error crawling %s: %v / %s", targetURL, err, result.Error)
-		http.Error(w, "Failed to crawl URL", http.StatusInternalServerError)
+		http.Error(w, "Failed to crawl URL", statusFromCrawlError(err, result.Error))
 		return
+	}
+
+	statusCode := http.StatusOK
+	if result.StatusCode >= 100 && result.StatusCode <= 599 {
+		statusCode = result.StatusCode
 	}
 
 	// Respond based on format
 	switch format {
 	case "png":
-		h.servePNG(w, result)
+		h.servePNG(w, result, statusCode)
 	case "html":
-		h.serveHTML(w, result)
+		h.serveHTML(w, result, statusCode)
 	default:
 		http.Error(w, "Invalid format", http.StatusBadRequest)
 	}
 }
 
-func (h *Handler) servePNG(w http.ResponseWriter, result *internal.CrawlResult) {
+func (h *Handler) servePNG(w http.ResponseWriter, result *internal.CrawlResult, statusCode int) {
 	screenshotData, err := base64.StdEncoding.DecodeString(result.Screenshot)
 	if err != nil {
 		log.Printf("Error decoding screenshot: %v", err)
@@ -187,12 +192,14 @@ func (h *Handler) servePNG(w http.ResponseWriter, result *internal.CrawlResult) 
 
 	w.Header().Set("Content-Type", "image/png")
 	w.Header().Set("Cache-Control", "public, max-age=86400") // 24 hours
+	w.WriteHeader(statusCode)
 	w.Write(screenshotData)
 }
 
-func (h *Handler) serveHTML(w http.ResponseWriter, result *internal.CrawlResult) {
+func (h *Handler) serveHTML(w http.ResponseWriter, result *internal.CrawlResult, statusCode int) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Cache-Control", "public, max-age=3600") // 1 hour
+	w.WriteHeader(statusCode)
 	w.Write([]byte(result.HTML))
 }
 
@@ -275,6 +282,26 @@ func isLikelyNonHTML(rawURL string) bool {
 		}
 	}
 	return false
+}
+
+func statusFromCrawlError(err error, resultError string) int {
+	errText := strings.ToLower(fmt.Sprintf("%v %s", err, resultError))
+	switch {
+	case strings.Contains(errText, "context deadline exceeded"):
+		return http.StatusGatewayTimeout
+	case strings.Contains(errText, "err_address_unreachable"):
+		return http.StatusBadGateway
+	case strings.Contains(errText, "err_name_not_resolved"):
+		return http.StatusBadGateway
+	case strings.Contains(errText, "err_connection_refused"):
+		return http.StatusBadGateway
+	case strings.Contains(errText, "err_timed_out"):
+		return http.StatusGatewayTimeout
+	case strings.Contains(errText, "net::err"):
+		return http.StatusBadGateway
+	default:
+		return http.StatusInternalServerError
+	}
 }
 
 func (h *Handler) Close() error {
