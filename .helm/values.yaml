@@ -9,25 +9,25 @@ chase:
   auth:
     generateSecretKey: true
   mounts:
-  - name: data
-    mountPath: /data
-    readOnly: false
-    storage: 10Gi
-    statefulSet: true
-  - name: tmp
-    inMemory: true
-    mountPath: /tmp
-    readOnly: false
-    storage: 50Mi
+    - name: data
+      mountPath: /data
+      readOnly: false
+      storage: 10Gi
+      statefulSet: true
+    - name: tmp
+      inMemory: true
+      mountPath: /tmp
+      readOnly: false
+      storage: 50Mi
   host: chase.example.com
   env:
-  - name: DATA_FOLDER
-    value: "/data"
-  - name: SCREENSHOT_SERVICE_URL
-    value: "http://screenshotr-service:8080"
+    - name: DATA_FOLDER
+      value: "/data"
+    - name: SCREENSHOT_SERVICE_URL
+      value: "http://screenshotr-service:8080"
   services:
-  - name: http
-    port: 8080
+    - name: http
+      port: 8080
   sidecar:
     enabled: false
     name: my-sidecar
@@ -49,38 +49,38 @@ screenshotr:
   replicaCount: 1
   tag: ""
   env:
-  - name: PORT
-    value: "8080"
-  - name: CHROME_BIN
-    value: "/usr/bin/chromium-browser"
-  - name: CHROME_PATH
-    value: "/usr/lib/chromium/"
+    - name: PORT
+      value: "8080"
+    - name: CHROME_BIN
+      value: "/usr/bin/chromium-browser"
+    - name: CHROME_PATH
+      value: "/usr/lib/chromium/"
   resources:
     requests:
-      memory: "128Mi"    # Request 512 MiB of memory
-      cpu: "250m"        # Request 0.25 CPU cores
+      memory: "128Mi" # Request 512 MiB of memory
+      cpu: "250m" # Request 0.25 CPU cores
     limits:
-      memory: "2048Mi"   # Limit to 1 GiB of memory
-      cpu: "500m"        # Limit to 0.5 CPU cores
+      memory: "2048Mi" # Limit to 2 GiB of memory
+      cpu: "5000m" # Limit to 5 CPU cores
   livenessProbe:
     httpGet:
       path: /healthz
-      port: 11235
+      port: 8080
     periodSeconds: 30
   readinessProbe:
     httpGet:
       path: /healthz
-      port: 11235
+      port: 8080
     periodSeconds: 30
   services:
-  - name: web
-    port: 8080
+    - name: web
+      port: 8080
   mounts:
-  - name: dshm
-    inMemory: true
-    mountPath: /dev/shm
-    readOnly: false
-    storage: 128Mi
+    - name: dshm
+      inMemory: true
+      mountPath: /dev/shm
+      readOnly: false
+      storage: 128Mi
 
 certstream:
   enabled: false
@@ -97,10 +97,10 @@ certstream:
       memory: "1Gi"
       cpu: "500m"
   services:
-  - name: http
-    port: 8080
-  - name: metrics
-    port: 8081
+    - name: http
+      port: 8080
+    - name: metrics
+      port: 8081
   livenessProbe:
     httpGet:
       path: /domains-only/example.json
@@ -112,50 +112,50 @@ certstream:
       port: 8080
     periodSeconds: 30
   env:
-  - name: CONFIG_FILE
-    value: "/app/config.yaml"
+    - name: CONFIG_FILE
+      value: "/app/config.yaml"
   mounts:
-  - name: certstream-config
-    mountPath: /app/config.yaml
-    subPath: config.yaml
-    readOnly: true
-    config:
-      fileName: config.yaml
-      data: |-
-        webserver:
-          listen_addr: "0.0.0.0"
-          listen_port: 8080
-          real_ip: false
-          full_url: "/full-stream"
-          lite_url: "/"
-          domains_only_url: "/domains-only"
-          cert_path: ""
-          cert_key_path: ""
-          compression_enabled: false
-        prometheus:
-          enabled: false
-          listen_addr: "0.0.0.0"
-          listen_port: 8081
-          metrics_url: "/metrics"
-          expose_system_metrics: false
-          real_ip: false
-          whitelist:
-            - "127.0.0.1/8"
-        general:
-          disable_default_logs: false
-          additional_logs:
-            - url: https://ct.googleapis.com/logs/us1/mirrors/digicert_nessie2022
-              operator: "DigiCert"
-              description: "DigiCert Nessie2022 log"
-          buffer_sizes:
-            websocket: 300
-            ctlog: 1000
-            broadcastmanager: 10000
-          drop_old_logs: true
-          recovery:
-            enabled: true
-            ct_index_file: "/data/ct_index.json"
-  - name: certstream-data
-    mountPath: /data
-    readOnly: false
-    storage: 1Gi
+    - name: certstream-config
+      mountPath: /app/config.yaml
+      subPath: config.yaml
+      readOnly: true
+      config:
+        fileName: config.yaml
+        data: |-
+          webserver:
+            listen_addr: "0.0.0.0"
+            listen_port: 8080
+            real_ip: false
+            full_url: "/full-stream"
+            lite_url: "/"
+            domains_only_url: "/domains-only"
+            cert_path: ""
+            cert_key_path: ""
+            compression_enabled: false
+          prometheus:
+            enabled: false
+            listen_addr: "0.0.0.0"
+            listen_port: 8081
+            metrics_url: "/metrics"
+            expose_system_metrics: false
+            real_ip: false
+            whitelist:
+              - "127.0.0.1/8"
+          general:
+            disable_default_logs: false
+            additional_logs:
+              - url: https://ct.googleapis.com/logs/us1/mirrors/digicert_nessie2022
+                operator: "DigiCert"
+                description: "DigiCert Nessie2022 log"
+            buffer_sizes:
+              websocket: 300
+              ctlog: 1000
+              broadcastmanager: 10000
+            drop_old_logs: true
+            recovery:
+              enabled: true
+              ct_index_file: "/data/ct_index.json"
+    - name: certstream-data
+      mountPath: /data
+      readOnly: false
+      storage: 1Gi
