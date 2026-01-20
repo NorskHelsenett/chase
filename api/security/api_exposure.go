@@ -196,6 +196,10 @@ func (s *Scanner) checkHealthProbes(ctx context.Context, domain string) (*Health
 			continue
 		}
 
+		if !isLikelyHealthResponse(body, resp) {
+			continue
+		}
+
 		if exposesDetails(body) {
 			analysis.Findings = append(analysis.Findings, Finding{
 				Description: "Health endpoint " + path + " exposes internal details",
@@ -210,6 +214,46 @@ func (s *Scanner) checkHealthProbes(ctx context.Context, domain string) (*Health
 	}
 
 	return analysis, nil
+}
+
+func isLikelyHealthResponse(body []byte, resp *http.Response) bool {
+	if isLikelyHTML(body) {
+		return false
+	}
+
+	contentType := strings.ToLower(resp.Header.Get("Content-Type"))
+	if strings.Contains(contentType, "text/html") || strings.Contains(contentType, "application/xhtml+xml") {
+		return false
+	}
+
+	trimmed := strings.TrimSpace(string(body))
+	if trimmed == "" {
+		return false
+	}
+
+	if strings.HasPrefix(trimmed, "{") || strings.HasPrefix(trimmed, "[") || strings.Contains(contentType, "application/json") {
+		var payload map[string]any
+		if err := json.Unmarshal(body, &payload); err == nil {
+			for key := range payload {
+				lowerKey := strings.ToLower(key)
+				if lowerKey == "status" || lowerKey == "health" || lowerKey == "components" || lowerKey == "details" {
+					return true
+				}
+			}
+			return len(payload) > 0
+		}
+	}
+
+	lower := strings.ToLower(trimmed)
+	if len(lower) <= 128 {
+		return strings.Contains(lower, "ok") ||
+			strings.Contains(lower, "healthy") ||
+			strings.Contains(lower, "ready") ||
+			strings.Contains(lower, "alive") ||
+			strings.Contains(lower, "up")
+	}
+
+	return false
 }
 
 func exposesDetails(body []byte) bool {

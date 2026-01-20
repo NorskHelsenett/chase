@@ -72,14 +72,7 @@ func (s *Scanner) checkFileExposure(ctx context.Context, domain string) (*FileEx
 			description: "Environment file exposure",
 			risk:        RiskCritical,
 			validate: func(content []byte) bool {
-				lines := strings.Split(string(content), "\n")
-				envVarCount := 0
-				for _, line := range lines {
-					if strings.Contains(line, "=") {
-						envVarCount++
-					}
-				}
-				return envVarCount > 0
+				return isLikelyEnvFile(content)
 			},
 		},
 		{
@@ -106,7 +99,7 @@ func (s *Scanner) checkFileExposure(ctx context.Context, domain string) (*FileEx
 			description: "Subversion metadata exposed",
 			risk:        RiskHigh,
 			validate: func(content []byte) bool {
-				return bytes.Contains(content, []byte("svn")) || bytes.Contains(content, []byte("dir"))
+				return isLikelySubversionEntries(content)
 			},
 		},
 		{
@@ -115,7 +108,7 @@ func (s *Scanner) checkFileExposure(ctx context.Context, domain string) (*FileEx
 			description: "Mercurial repository exposed",
 			risk:        RiskHigh,
 			validate: func(content []byte) bool {
-				return len(content) > 0
+				return isLikelyMercurialRevlog(content)
 			},
 		},
 		{
@@ -124,7 +117,7 @@ func (s *Scanner) checkFileExposure(ctx context.Context, domain string) (*FileEx
 			description: "macOS Finder metadata exposed",
 			risk:        RiskLow,
 			validate: func(content []byte) bool {
-				return len(content) > 0
+				return bytes.HasPrefix(content, []byte("Bud1"))
 			},
 		},
 		{
@@ -133,7 +126,7 @@ func (s *Scanner) checkFileExposure(ctx context.Context, domain string) (*FileEx
 			description: "Shell history exposed",
 			risk:        RiskCritical,
 			validate: func(content []byte) bool {
-				return bytes.Contains(content, []byte("\n"))
+				return isLikelyShellHistory(content)
 			},
 		},
 		{
@@ -361,6 +354,10 @@ func (s *Scanner) validateFile(ctx context.Context, domain string, file FileSign
 		return false, ""
 	}
 
+	if file.fileType != "Directory" && isLikelyHTML(content) {
+		return false, ""
+	}
+
 	if !file.validate(content) {
 		return false, ""
 	}
@@ -410,6 +407,147 @@ func (s *Scanner) sanitizeConfig(content []byte) string {
 		sanitized = sanitized[:5]
 	}
 	return strings.Join(sanitized, "\n")
+}
+
+func isLikelyEnvFile(content []byte) bool {
+	if isLikelyHTML(content) {
+		return false
+	}
+
+	lines := strings.Split(string(content), "\n")
+	validLines := 0
+	checkedLines := 0
+
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
+			continue
+		}
+		checkedLines++
+		if isEnvAssignment(trimmed) {
+			validLines++
+		}
+	}
+
+	if checkedLines == 0 {
+		return false
+	}
+
+	return validLines > 0 && float64(validLines)/float64(checkedLines) >= 0.6
+}
+
+func isEnvAssignment(line string) bool {
+	trimmed := strings.TrimSpace(line)
+	if strings.HasPrefix(trimmed, "export ") {
+		trimmed = strings.TrimSpace(strings.TrimPrefix(trimmed, "export "))
+	}
+	parts := strings.SplitN(trimmed, "=", 2)
+	if len(parts) != 2 {
+		return false
+	}
+
+	key := strings.TrimSpace(parts[0])
+	return isValidEnvKey(key)
+}
+
+func isValidEnvKey(key string) bool {
+	if key == "" {
+		return false
+	}
+	for i := 0; i < len(key); i++ {
+		ch := key[i]
+		if i == 0 {
+			if !(ch == '_' || (ch >= 'A' && ch <= 'Z') || (ch >= 'a' && ch <= 'z')) {
+				return false
+			}
+			continue
+		}
+		if !(ch == '_' || (ch >= 'A' && ch <= 'Z') || (ch >= 'a' && ch <= 'z') || (ch >= '0' && ch <= '9')) {
+			return false
+		}
+	}
+	return true
+}
+
+func isLikelyShellHistory(content []byte) bool {
+	if isLikelyHTML(content) {
+		return false
+	}
+
+	lines := strings.Split(string(content), "\n")
+	commands := 0
+	checked := 0
+
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" {
+			continue
+		}
+		checked++
+		if looksLikeShellCommand(trimmed) {
+			commands++
+		}
+	}
+
+	if checked == 0 {
+		return false
+	}
+
+	return commands > 0 && float64(commands)/float64(checked) >= 0.4
+}
+
+func looksLikeShellCommand(line string) bool {
+	if strings.HasPrefix(line, "#") {
+		return false
+	}
+
+	tokens := strings.Fields(line)
+	if len(tokens) == 0 {
+		return false
+	}
+
+	first := tokens[0]
+	common := []string{
+		"cd", "ls", "cat", "grep", "rg", "find", "curl", "wget", "git",
+		"ssh", "scp", "cp", "mv", "rm", "chmod", "chown", "sudo",
+		"docker", "kubectl", "ps", "top", "tail", "head", "env", "export",
+	}
+	for _, cmd := range common {
+		if first == cmd {
+			return true
+		}
+	}
+
+	for i := 0; i < len(first); i++ {
+		ch := first[i]
+		if !((ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || ch == '-' || ch == '_' || ch == '/' || ch == '.') {
+			return false
+		}
+	}
+	return true
+}
+
+func isLikelySubversionEntries(content []byte) bool {
+	if isLikelyHTML(content) {
+		return false
+	}
+
+	lower := strings.ToLower(string(content))
+	if strings.Contains(lower, "svn") && strings.Contains(lower, "dir") {
+		return true
+	}
+
+	return strings.Contains(lower, "svn") && strings.Contains(lower, "entries")
+}
+
+func isLikelyMercurialRevlog(content []byte) bool {
+	if isLikelyHTML(content) {
+		return false
+	}
+	if len(content) < 32 {
+		return false
+	}
+	return bytes.Contains(content, []byte{0})
 }
 
 type fileExposureTask struct{}

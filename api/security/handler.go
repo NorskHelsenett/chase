@@ -1,8 +1,7 @@
 package security
 
 import (
-	"bytes"
-	"encoding/base64"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -45,13 +44,6 @@ type Screenshot struct {
 	Data      []byte `gorm:"type:blob"`
 	CreatedAt time.Time
 	MIMEType  string
-}
-
-type screenshotResponse struct {
-	Success   bool   `json:"success"`
-	Image     string `json:"image"`      // base64 encoded
-	ImageType string `json:"image_type"` // e.g., "image/png"
-	Error     string `json:"error,omitempty"`
 }
 
 func SecurityScanHandler(c *gin.Context) {
@@ -265,21 +257,14 @@ func captureAndSendScreenshot(c *gin.Context, domain string, fullSize bool, wait
 		return err
 	}
 
-	// Create request body with correct parameter name 'fullpage' instead of 'full_size'
-	jsonData, err := json.Marshal(map[string]interface{}{
-		"url":       domain,
-		"wait_time": wait,
-		"fullpage":  fullSize,
-	})
-	if err != nil {
-		return fmt.Errorf("failed to create request: %v", err)
-	}
-
 	// Get screenshot service URL
 	serviceURL := os.Getenv("SCREENSHOT_SERVICE_URL")
 	if serviceURL == "" {
-		serviceURL = "http://screenshot:8080"
+		serviceURL = "http://screenshot:11235"
 	}
+	serviceURL = strings.TrimRight(serviceURL, "/")
+	targetURL := strings.TrimRight(domain, "/")
+	requestURL := fmt.Sprintf("%s/%s/.png", serviceURL, targetURL)
 
 	// Retry logic with exponential backoff
 	maxRetries := 3
@@ -301,11 +286,15 @@ func captureAndSendScreenshot(c *gin.Context, domain string, fullSize bool, wait
 		}
 
 		client := &http.Client{Timeout: timeout}
-		resp, err = client.Post(
-			serviceURL+"/screenshot",
-			"application/json",
-			bytes.NewBuffer(jsonData),
-		)
+		ctx := context.Background()
+		if c != nil {
+			ctx = c.Request.Context()
+		}
+		req, reqErr := http.NewRequestWithContext(ctx, http.MethodGet, requestURL, nil)
+		if reqErr != nil {
+			return fmt.Errorf("failed to create request: %v", reqErr)
+		}
+		resp, err = client.Do(req)
 
 		if err == nil {
 			// Request succeeded, break retry loop
@@ -330,24 +319,15 @@ func captureAndSendScreenshot(c *gin.Context, domain string, fullSize bool, wait
 		return fmt.Errorf("screenshot service returned error status %d", resp.StatusCode)
 	}
 
-	// Parse response
-	var result screenshotResponse
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return fmt.Errorf("failed to parse response: %v", err)
+	imgData, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return fmt.Errorf("failed to read image: %v", err)
 	}
-
-	if !result.Success {
-		log.Printf("Screenshot failed for %s: %s", domain, result.Error)
+	if len(imgData) == 0 {
 		return fmt.Errorf("screenshot capture failed")
 	}
 
-	// Decode image
-	imgData, err := base64.StdEncoding.DecodeString(result.Image)
-	if err != nil {
-		return fmt.Errorf("failed to decode image: %v", err)
-	}
-
-	contentType := result.ImageType
+	contentType := resp.Header.Get("Content-Type")
 	if contentType == "" {
 		contentType = "image/png"
 	}

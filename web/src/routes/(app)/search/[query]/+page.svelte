@@ -1,5 +1,33 @@
 <script>
-	import { Clock, Globe, Shield, Lock, Server, FileText, AlertTriangle, CheckCircle, XCircle, ExternalLink, Activity, Heart, File, Mail, Link, Key, Eye, EyeOff, ChevronDown, ChevronUp } from 'lucide-svelte';
+	import {
+		Clock,
+		Globe,
+		Shield,
+		Lock,
+		Server,
+		FileText,
+		AlertTriangle,
+		CheckCircle,
+		XCircle,
+		ExternalLink,
+		Activity,
+		Heart,
+		File,
+		Mail,
+		Link,
+		Key,
+		Eye,
+		EyeOff,
+		ChevronDown,
+		ChevronUp,
+		Cookie,
+		Network,
+		Code,
+		Database,
+		Fingerprint,
+		Bug,
+		ShieldAlert
+	} from 'lucide-svelte';
 	import { fade, fly, slide } from 'svelte/transition';
 	import { onMount, onDestroy } from 'svelte';
 	import { searchHistory } from '$lib/stores/searchStore';
@@ -57,8 +85,8 @@
 	function calculateOverallGrade(results) {
 		if (!results) return 'N/A';
 
-		const gradeValues = { 'A+': 10, 'A': 9, 'B': 7, 'C': 5, 'D': 3, 'E': 2, 'F': 1 };
-		const riskValues = { 'LOW': 9, 'MEDIUM': 5, 'HIGH': 2, 'CRITICAL': 1 };
+		const gradeValues = { 'A+': 10, A: 9, B: 7, C: 5, D: 3, E: 2, F: 1 };
+		const riskValues = { LOW: 9, MEDIUM: 5, HIGH: 2, CRITICAL: 1 };
 
 		let scores = [];
 
@@ -82,11 +110,16 @@
 	function getGradeClass(grade) {
 		switch (grade) {
 			case 'A+':
-			case 'A': return 'grade-a';
-			case 'B': return 'grade-b';
-			case 'C': return 'grade-c';
-			case 'D': return 'grade-d';
-			default: return 'grade-f';
+			case 'A':
+				return 'grade-a';
+			case 'B':
+				return 'grade-b';
+			case 'C':
+				return 'grade-c';
+			case 'D':
+				return 'grade-d';
+			default:
+				return 'grade-f';
 		}
 	}
 
@@ -117,15 +150,20 @@
 	function getPassedCount(results) {
 		let count = 0;
 		if (results?.headers?.passed) count += results.headers.passed.length;
-		if (results?.certificate?.findings) count += results.certificate.findings.filter(f => f.risk === 'LOW').length;
+		if (results?.certificate?.findings)
+			count += results.certificate.findings.filter((f) => f.risk === 'LOW').length;
 		return count;
 	}
 
 	$: overallGrade = calculateOverallGrade(results);
-	$: certDaysLeft = results?.certificate?.validUntil ? getDaysUntil(results.certificate.validUntil) : null;
+	$: certDaysLeft = results?.certificate?.validUntil
+		? getDaysUntil(results.certificate.validUntil)
+		: null;
 	$: issueCount = getIssueCount(results);
 	$: passedCount = getPassedCount(results);
-	$: securityTxtDaysLeft = results?.securityTxt?.expiration ? getDaysUntil(results.securityTxt.expiration) : null;
+	$: securityTxtDaysLeft = results?.securityTxt?.expiration
+		? getDaysUntil(results.securityTxt.expiration)
+		: null;
 
 	function getHealthProbeStatus(probes) {
 		if (!probes?.paths) return { total: 0, found: 0 };
@@ -141,6 +179,54 @@
 	function toggleSection(section) {
 		expandedSections[section] = !expandedSections[section];
 	}
+
+	function getAllIssuesSorted(results) {
+		if (!results) return [];
+
+		const riskOrder = { CRITICAL: 0, HIGH: 1, MEDIUM: 2, LOW: 3, INFO: 4 };
+		let allIssues = [];
+
+		// Collect header issues
+		if (results.headers?.issues) {
+			allIssues.push(...results.headers.issues.map((issue) => ({ ...issue, source: 'Headers' })));
+		}
+
+		// Collect certificate warnings
+		if (results.certificate?.warnings) {
+			allIssues.push(
+				...results.certificate.warnings.map((issue) => ({ ...issue, source: 'Certificate' }))
+			);
+		}
+
+		// Collect DNS findings (as strings, need to convert)
+		if (results.dnsRecords?.findings) {
+			allIssues.push(
+				...results.dnsRecords.findings.map((finding) => ({
+					description: finding,
+					risk: 'INFO',
+					source: 'DNS'
+				}))
+			);
+		}
+
+		// Collect infrastructure findings
+		if (results.infrastructure?.findings) {
+			allIssues.push(
+				...results.infrastructure.findings.map((issue) => ({ ...issue, source: 'Infrastructure' }))
+			);
+		}
+
+		// Sort by risk level
+		allIssues.sort((a, b) => {
+			const aOrder = riskOrder[a.risk] ?? 999;
+			const bOrder = riskOrder[b.risk] ?? 999;
+			return aOrder - bOrder;
+		});
+
+		return allIssues;
+	}
+
+	$: sortedIssues = getAllIssuesSorted(results);
 </script>
 
 <div class="page">
@@ -175,11 +261,16 @@
 					alt="Website preview for {data.query}"
 					class="screenshot"
 					class:loaded={screenshotLoaded}
-					on:load={() => screenshotLoaded = true}
-					on:error={() => screenshotLoaded = true}
+					on:load={() => (screenshotLoaded = true)}
+					on:error={() => (screenshotLoaded = true)}
 				/>
 				<div class="screenshot-overlay">
-					<a href="https://{data.query}" target="_blank" rel="noopener noreferrer" class="visit-link">
+					<a
+						href="https://{data.query}"
+						target="_blank"
+						rel="noopener noreferrer"
+						class="visit-link"
+					>
 						<ExternalLink size={14} />
 						<span>Visit Site</span>
 					</a>
@@ -207,27 +298,34 @@
 					</div>
 					<div class="grade-meta">
 						<span class="grade-label">Overall Grade</span>
-						<span class="scan-time">
-							<Clock size={12} />
-							{relativeTime}
-						</span>
+						<div class="quick-stats">
+							<span class="stat-inline issues">{issueCount} Issues</span>
+							<span class="stat-separator">•</span>
+							<span class="stat-inline passed">{passedCount} Passed</span>
+							<span class="stat-separator">•</span>
+							<span class="stat-inline {certDaysLeft < 30 ? 'warning' : ''}">
+								{certDaysLeft ?? '—'} Days to Cert Expiry
+							</span>
+						</div>
 					</div>
 				</div>
 
-				<div class="quick-stats">
-					<div class="stat">
-						<span class="stat-value issues">{issueCount}</span>
-						<span class="stat-label">Issues</span>
+				<!-- Issues List in Panel -->
+				{#if sortedIssues.length > 0}
+					<div class="panel-issues">
+						{#each sortedIssues as issue}
+							<div class="panel-issue-item">
+								<div class="panel-issue-risk risk-{issue.risk.toLowerCase()}">{issue.risk}</div>
+								<div class="panel-issue-text">
+									<span class="panel-issue-desc">{issue.description}</span>
+									{#if issue.evidence}
+										<span class="panel-issue-evidence">{issue.evidence}</span>
+									{/if}
+								</div>
+							</div>
+						{/each}
 					</div>
-					<div class="stat">
-						<span class="stat-value passed">{passedCount}</span>
-						<span class="stat-label">Passed</span>
-					</div>
-					<div class="stat">
-						<span class="stat-value {certDaysLeft < 30 ? 'warning' : ''}">{certDaysLeft ?? '—'}</span>
-						<span class="stat-label">Days to Cert Expiry</span>
-					</div>
-				</div>
+				{/if}
 			</div>
 		</div>
 
@@ -237,28 +335,36 @@
 				<div class="score-icon"><Shield size={18} /></div>
 				<div class="score-content">
 					<span class="score-label">Headers</span>
-					<span class="score-value {getGradeClass(results.headers?.score)}">{results.headers?.score || 'N/A'}</span>
+					<span class="score-value {getGradeClass(results.headers?.score)}"
+						>{results.headers?.score || 'N/A'}</span
+					>
 				</div>
 			</div>
 			<div class="score-card">
 				<div class="score-icon"><Lock size={18} /></div>
 				<div class="score-content">
 					<span class="score-label">TLS/SSL</span>
-					<span class="score-value {getGradeClass(results.certificate?.grade)}">{results.certificate?.grade || 'N/A'}</span>
+					<span class="score-value {getGradeClass(results.certificate?.grade)}"
+						>{results.certificate?.grade || 'N/A'}</span
+					>
 				</div>
 			</div>
 			<div class="score-card">
 				<div class="score-icon"><Server size={18} /></div>
 				<div class="score-content">
 					<span class="score-label">Admin</span>
-					<span class="score-value risk-{results.adminPages?.risk?.toLowerCase()}">{results.adminPages?.risk || 'N/A'}</span>
+					<span class="score-value risk-{results.adminPages?.risk?.toLowerCase()}"
+						>{results.adminPages?.risk || 'N/A'}</span
+					>
 				</div>
 			</div>
 			<div class="score-card">
 				<div class="score-icon"><FileText size={18} /></div>
 				<div class="score-content">
 					<span class="score-label">API Docs</span>
-					<span class="score-value risk-{results.swagger?.risk?.toLowerCase()}">{results.swagger?.risk || 'N/A'}</span>
+					<span class="score-value risk-{results.swagger?.risk?.toLowerCase()}"
+						>{results.swagger?.risk || 'N/A'}</span
+					>
 				</div>
 			</div>
 		</div>
@@ -287,7 +393,11 @@
 							<span class="finding-value" class:warning={certDaysLeft < 30}>
 								{formatDate(results.certificate?.validUntil)}
 								{#if certDaysLeft !== null}
-									<span class="badge" class:warning={certDaysLeft < 30} class:danger={certDaysLeft < 7}>
+									<span
+										class="badge"
+										class:warning={certDaysLeft < 30}
+										class:danger={certDaysLeft < 7}
+									>
 										{certDaysLeft}d
 									</span>
 								{/if}
@@ -295,11 +405,15 @@
 						</div>
 						<div class="finding-row">
 							<span class="finding-label">TLS Version</span>
-							<span class="finding-value mono">{results.certificate?.tlsVersions?.join(', ') || 'N/A'}</span>
+							<span class="finding-value mono"
+								>{results.certificate?.tlsVersions?.join(', ') || 'N/A'}</span
+							>
 						</div>
 						<div class="finding-row">
 							<span class="finding-label">Cipher</span>
-							<span class="finding-value mono small">{results.certificate?.preferredCipher || 'N/A'}</span>
+							<span class="finding-value mono small"
+								>{results.certificate?.preferredCipher || 'N/A'}</span
+							>
 						</div>
 					</div>
 				</div>
@@ -339,7 +453,9 @@
 					<div class="finding-body">
 						<div class="finding-row">
 							<span class="finding-label">A Records</span>
-							<span class="finding-value mono small">{results.dnsRecords?.aRecords?.length || 0}</span>
+							<span class="finding-value mono small"
+								>{results.dnsRecords?.aRecords?.length || 0}</span
+							>
 						</div>
 						<div class="finding-row">
 							<span class="finding-label">NS Records</span>
@@ -379,7 +495,11 @@
 							</div>
 							<div class="health-probes-mini">
 								{#each Object.entries(results.healthProbes.paths).slice(0, 3) as [path, code]}
-									<div class="probe-mini" class:probe-ok={code >= 200 && code < 400} class:probe-fail={code >= 400 || code === 0}>
+									<div
+										class="probe-mini"
+										class:probe-ok={code >= 200 && code < 400}
+										class:probe-fail={code >= 400 || code === 0}
+									>
 										<span class="probe-code">{code || '—'}</span>
 										<span class="probe-path">{path}</span>
 									</div>
@@ -458,10 +578,17 @@
 									<div class="detail-item">
 										<div class="detail-label"><Clock size={14} /> Expiration</div>
 										<div class="detail-values">
-											<span class:warning={securityTxtDaysLeft < 30} class:danger={securityTxtDaysLeft < 7}>
+											<span
+												class:warning={securityTxtDaysLeft < 30}
+												class:danger={securityTxtDaysLeft < 7}
+											>
 												{formatDate(results.securityTxt.expiration)}
 												{#if securityTxtDaysLeft !== null}
-													<span class="badge" class:warning={securityTxtDaysLeft < 30} class:danger={securityTxtDaysLeft < 7}>
+													<span
+														class="badge"
+														class:warning={securityTxtDaysLeft < 30}
+														class:danger={securityTxtDaysLeft < 7}
+													>
 														{securityTxtDaysLeft}d remaining
 													</span>
 												{/if}
@@ -488,7 +615,12 @@
 						{:else}
 							<div class="empty-state">
 								<p>No security.txt file found at <code>/.well-known/security.txt</code></p>
-								<a href="https://securitytxt.org/" target="_blank" rel="noopener" class="learn-link">
+								<a
+									href="https://securitytxt.org/"
+									target="_blank"
+									rel="noopener"
+									class="learn-link"
+								>
 									Learn how to create one →
 								</a>
 							</div>
@@ -548,8 +680,14 @@
 					<div class="detail-title">
 						<Heart size={18} />
 						<span>Health Endpoints</span>
-						<span class="status-badge {getHealthProbeStatus(results.healthProbes).found > 0 ? 'success' : 'muted'}">
-							{getHealthProbeStatus(results.healthProbes).found}/{getHealthProbeStatus(results.healthProbes).total}
+						<span
+							class="status-badge {getHealthProbeStatus(results.healthProbes).found > 0
+								? 'success'
+								: 'muted'}"
+						>
+							{getHealthProbeStatus(results.healthProbes).found}/{getHealthProbeStatus(
+								results.healthProbes
+							).total}
 						</span>
 					</div>
 					<div class="detail-toggle">
@@ -565,7 +703,11 @@
 						{#if results.healthProbes?.paths}
 							<div class="probes-grid">
 								{#each Object.entries(results.healthProbes.paths) as [path, code]}
-									<div class="probe-item" class:probe-ok={code >= 200 && code < 400} class:probe-fail={code >= 400 || code === 0}>
+									<div
+										class="probe-item"
+										class:probe-ok={code >= 200 && code < 400}
+										class:probe-fail={code >= 400 || code === 0}
+									>
 										<span class="probe-status-code">{code || '—'}</span>
 										<span class="probe-path-full">{path}</span>
 										{#if code >= 200 && code < 400}
@@ -600,7 +742,12 @@
 								<File size={16} />
 							</div>
 							<div class="file-info">
-								<a href="https://{data.query}{file.path}" target="_blank" rel="noopener" class="file-path">
+								<a
+									href="https://{data.query}{file.path}"
+									target="_blank"
+									rel="noopener"
+									class="file-path"
+								>
 									{file.path}
 								</a>
 								<span class="file-desc">{file.description}</span>
@@ -611,6 +758,345 @@
 				</div>
 			</section>
 		{/if}
+
+		<!-- Additional Security Cards -->
+		<section class="security-cards" in:fade={{ duration: 300, delay: 250 }}>
+			<!-- Cookie Security -->
+			{#if results.headers?.cookieFindings?.length > 0}
+				<div class="security-card">
+					<div class="card-header">
+						<div class="card-title">
+							<Cookie size={20} />
+							<h3>Cookie Security</h3>
+						</div>
+						<span class="card-badge warning">{results.headers.cookieFindings.length} issues</span>
+					</div>
+					<div class="card-body">
+						{#each results.headers.cookieFindings as finding}
+							<div class="finding-item risk-{finding.risk.toLowerCase()}">
+								<div class="finding-header-inline">
+									<ShieldAlert size={14} />
+									<span class="finding-risk-label">{finding.risk}</span>
+								</div>
+								<p class="finding-desc">{finding.description}</p>
+								{#if finding.evidence}
+									<code class="finding-evidence">{finding.evidence}</code>
+								{/if}
+								{#if finding.mitigation}
+									<p class="finding-mitigation">💡 {finding.mitigation}</p>
+								{/if}
+							</div>
+						{/each}
+					</div>
+				</div>
+			{/if}
+
+			<!-- CORS Configuration -->
+			{#if results.headers?.corsFindings?.length > 0}
+				<div class="security-card">
+					<div class="card-header">
+						<div class="card-title">
+							<Network size={20} />
+							<h3>CORS Policy</h3>
+						</div>
+						<span class="card-badge warning">{results.headers.corsFindings.length} issues</span>
+					</div>
+					<div class="card-body">
+						{#each results.headers.corsFindings as finding}
+							<div class="finding-item risk-{finding.risk.toLowerCase()}">
+								<div class="finding-header-inline">
+									<ShieldAlert size={14} />
+									<span class="finding-risk-label">{finding.risk}</span>
+								</div>
+								<p class="finding-desc">{finding.description}</p>
+								{#if finding.evidence}
+									<code class="finding-evidence">{finding.evidence}</code>
+								{/if}
+								{#if finding.mitigation}
+									<p class="finding-mitigation">💡 {finding.mitigation}</p>
+								{/if}
+							</div>
+						{/each}
+					</div>
+				</div>
+			{/if}
+
+			<!-- API Exposure -->
+			{#if results.apiExposure?.endpoints?.length > 0}
+				<div class="security-card">
+					<div class="card-header">
+						<div class="card-title">
+							<Code size={20} />
+							<h3>API Endpoints</h3>
+						</div>
+						<span class="card-badge risk-{results.apiExposure.risk.toLowerCase()}"
+							>{results.apiExposure.risk}</span
+						>
+					</div>
+					<div class="card-body">
+						<div class="endpoints-list">
+							{#each results.apiExposure.endpoints as endpoint}
+								<div class="endpoint-item">
+									<code>{endpoint}</code>
+								</div>
+							{/each}
+						</div>
+						{#if results.apiExposure.findings?.length > 0}
+							<div class="findings-list">
+								{#each results.apiExposure.findings as finding}
+									<div class="finding-item risk-{finding.risk.toLowerCase()}">
+										<div class="finding-header-inline">
+											<AlertTriangle size={14} />
+											<span class="finding-risk-label">{finding.risk}</span>
+										</div>
+										<p class="finding-desc">{finding.description}</p>
+									</div>
+								{/each}
+							</div>
+						{/if}
+					</div>
+				</div>
+			{/if}
+
+			<!-- Technology Stack -->
+			{#if results.infrastructure?.tech?.length > 0}
+				<div class="security-card">
+					<div class="card-header">
+						<div class="card-title">
+							<Database size={20} />
+							<h3>Technology Stack</h3>
+						</div>
+						<span class="card-badge info">{results.infrastructure.tech.length} detected</span>
+					</div>
+					<div class="card-body">
+						<div class="tech-grid">
+							{#each results.infrastructure.tech as tech}
+								<div class="tech-item">
+									<span class="tech-name">{tech.name}</span>
+									{#if tech.version}
+										<span class="tech-version">{tech.version}</span>
+									{/if}
+								</div>
+							{/each}
+						</div>
+					</div>
+				</div>
+			{/if}
+
+			<!-- Email Addresses Found -->
+			{#if results.emails?.length > 0}
+				<div class="security-card">
+					<div class="card-header">
+						<div class="card-title">
+							<Mail size={20} />
+							<h3>Email Addresses</h3>
+						</div>
+						<span class="card-badge info">{results.emails.length} found</span>
+					</div>
+					<div class="card-body">
+						<div class="emails-list">
+							{#each results.emails as email}
+								<div class="email-item">
+									<Mail size={14} />
+									<a href="mailto:{email}">{email}</a>
+								</div>
+							{/each}
+						</div>
+					</div>
+				</div>
+			{/if}
+
+			<!-- DNS Details -->
+			{#if results.dnsRecords?.txtRecords?.length > 0 || results.dnsRecords?.caaRecords?.length > 0 || results.dnsRecords?.cnameRecords?.length > 0}
+				<div class="security-card">
+					<div class="card-header">
+						<div class="card-title">
+							<Globe size={20} />
+							<h3>DNS Configuration</h3>
+						</div>
+					</div>
+					<div class="card-body">
+						{#if results.dnsRecords.txtRecords?.length > 0}
+							<div class="dns-section">
+								<h4 class="dns-title">TXT Records (SPF/DKIM/DMARC)</h4>
+								<div class="dns-records">
+									{#each results.dnsRecords.txtRecords as record}
+										<code class="dns-record">{record}</code>
+									{/each}
+								</div>
+							</div>
+						{/if}
+						{#if results.dnsRecords.caaRecords?.length > 0}
+							<div class="dns-section">
+								<h4 class="dns-title">CAA Records</h4>
+								<div class="dns-records">
+									{#each results.dnsRecords.caaRecords as record}
+										<code class="dns-record">{record}</code>
+									{/each}
+								</div>
+							</div>
+						{/if}
+						{#if results.dnsRecords.cnameRecords?.length > 0}
+							<div class="dns-section">
+								<h4 class="dns-title">CNAME Records</h4>
+								<div class="dns-records">
+									{#each results.dnsRecords.cnameRecords as record}
+										<code class="dns-record">{record}</code>
+									{/each}
+								</div>
+							</div>
+						{/if}
+					</div>
+				</div>
+			{/if}
+
+			<!-- Certificate Details -->
+			{#if results.certificate?.subjectDNS?.length > 0 || results.certificate?.supportedCiphers?.length > 0}
+				<div class="security-card">
+					<div class="card-header">
+						<div class="card-title">
+							<Lock size={20} />
+							<h3>Certificate Details</h3>
+						</div>
+						<span class="card-badge {getGradeClass(results.certificate.grade)}"
+							>{results.certificate.grade}</span
+						>
+					</div>
+					<div class="card-body">
+						{#if results.certificate.subjectDNS?.length > 0}
+							<div class="cert-section">
+								<h4 class="cert-title">Subject Alternative Names</h4>
+								<div class="san-list">
+									{#each results.certificate.subjectDNS as san}
+										<span class="san-item">{san}</span>
+									{/each}
+								</div>
+							</div>
+						{/if}
+						<div class="cert-info-grid">
+							{#if results.certificate.serialNumber}
+								<div class="cert-info-item">
+									<span class="cert-label">Serial Number</span>
+									<code class="cert-value">{results.certificate.serialNumber}</code>
+								</div>
+							{/if}
+							{#if results.certificate.signatureAlg}
+								<div class="cert-info-item">
+									<span class="cert-label">Signature Algorithm</span>
+									<span class="cert-value">{results.certificate.signatureAlg}</span>
+								</div>
+							{/if}
+							{#if results.certificate.publicKeyType}
+								<div class="cert-info-item">
+									<span class="cert-label">Public Key</span>
+									<span class="cert-value"
+										>{results.certificate.publicKeyType} ({results.certificate.publicKeyBits} bits)</span
+									>
+								</div>
+							{/if}
+							{#if results.certificate.alpnProtocol}
+								<div class="cert-info-item">
+									<span class="cert-label">ALPN Protocol</span>
+									<span class="cert-value mono">{results.certificate.alpnProtocol}</span>
+								</div>
+							{/if}
+							{#if results.certificate.revocationStatus}
+								<div class="cert-info-item">
+									<span class="cert-label">Revocation Status</span>
+									<span class="cert-value">{results.certificate.revocationStatus}</span>
+								</div>
+							{/if}
+							<div class="cert-info-item">
+								<span class="cert-label">Certificate Transparency</span>
+								<span class="cert-value">
+									{#if results.certificate.ctEnabled}
+										<CheckCircle size={14} class="inline-icon success" /> Enabled
+									{:else}
+										<XCircle size={14} class="inline-icon danger" /> Disabled
+									{/if}
+								</span>
+							</div>
+						</div>
+						{#if results.certificate.supportedCiphers?.length > 0}
+							<div class="cert-section">
+								<h4 class="cert-title">
+									Supported Cipher Suites ({results.certificate.supportedCiphers.length})
+								</h4>
+								<div class="cipher-list">
+									{#each results.certificate.supportedCiphers.slice(0, 10) as cipher}
+										<div class="cipher-item" class:weak={cipher.weak}>
+											<div class="cipher-name">
+												{#if cipher.weak}
+													<AlertTriangle size={12} class="cipher-icon-weak" />
+												{:else if cipher.forward}
+													<CheckCircle size={12} class="cipher-icon-good" />
+												{/if}
+												{cipher.name}
+											</div>
+											<div class="cipher-details">
+												<span class="cipher-strength">{cipher.strength} bits</span>
+												{#if cipher.forward}
+													<span class="cipher-fs">FS</span>
+												{/if}
+											</div>
+										</div>
+									{/each}
+									{#if results.certificate.supportedCiphers.length > 10}
+										<div class="cipher-more">
+											+{results.certificate.supportedCiphers.length - 10} more ciphers
+										</div>
+									{/if}
+								</div>
+							</div>
+						{/if}
+					</div>
+				</div>
+			{/if}
+
+			<!-- IPv6 Addresses -->
+			{#if results.infrastructure?.ipv6Addresses?.length > 0}
+				<div class="security-card">
+					<div class="card-header">
+						<div class="card-title">
+							<Network size={20} />
+							<h3>IPv6 Addresses</h3>
+						</div>
+						<span class="card-badge success">{results.infrastructure.ipv6Addresses.length}</span>
+					</div>
+					<div class="card-body">
+						<div class="ipv6-list">
+							{#each results.infrastructure.ipv6Addresses as ip}
+								<code class="ipv6-item">{ip}</code>
+							{/each}
+						</div>
+					</div>
+				</div>
+			{/if}
+
+			<!-- Scan Errors -->
+			{#if results.scanErrors?.length > 0}
+				<div class="security-card error">
+					<div class="card-header">
+						<div class="card-title">
+							<Bug size={20} />
+							<h3>Scan Errors</h3>
+						</div>
+						<span class="card-badge danger">{results.scanErrors.length}</span>
+					</div>
+					<div class="card-body">
+						{#each results.scanErrors as error}
+							<div class="error-item">
+								<div class="error-header">
+									<span class="error-component">{error.component}</span>
+									<span class="error-timestamp">{getRelativeTime(error.timestamp)}</span>
+								</div>
+								<p class="error-message">{error.error}</p>
+							</div>
+						{/each}
+					</div>
+				</div>
+			{/if}
+		</section>
 
 		<!-- Issues List -->
 		{#if results.headers?.issues?.length > 0}
@@ -743,8 +1229,12 @@
 	}
 
 	@keyframes shimmer {
-		0% { background-position: -200% 0; }
-		100% { background-position: 200% 0; }
+		0% {
+			background-position: -200% 0;
+		}
+		100% {
+			background-position: 200% 0;
+		}
 	}
 
 	/* Hero Section */
@@ -782,7 +1272,9 @@
 	}
 
 	@keyframes spin {
-		to { transform: rotate(360deg); }
+		to {
+			transform: rotate(360deg);
+		}
 	}
 
 	.screenshot {
@@ -912,16 +1404,26 @@
 		font-weight: 700;
 	}
 
-	.grade-a .grade-letter { color: var(--green); }
-	.grade-b .grade-letter { color: var(--blue); }
-	.grade-c .grade-letter { color: var(--yellow); }
-	.grade-d .grade-letter { color: var(--orange); }
-	.grade-f .grade-letter { color: var(--red); }
+	.grade-a .grade-letter {
+		color: var(--green);
+	}
+	.grade-b .grade-letter {
+		color: var(--blue);
+	}
+	.grade-c .grade-letter {
+		color: var(--yellow);
+	}
+	.grade-d .grade-letter {
+		color: var(--orange);
+	}
+	.grade-f .grade-letter {
+		color: var(--red);
+	}
 
 	.grade-meta {
 		display: flex;
 		flex-direction: column;
-		gap: 0.25rem;
+		gap: 0.5rem;
 	}
 
 	.grade-label {
@@ -930,45 +1432,120 @@
 		color: var(--fg2);
 	}
 
-	.scan-time {
+	.quick-stats {
 		display: flex;
 		align-items: center;
-		gap: 0.375rem;
-		font-size: 0.75rem;
+		justify-content: flex-start;
+		flex-wrap: wrap;
+		gap: 0.5rem;
+		font-size: 0.8125rem;
+	}
+
+	.stat-inline {
+		color: var(--fg2);
+	}
+
+	.stat-inline.issues {
+		color: var(--orange);
+		font-weight: 600;
+	}
+
+	.stat-inline.passed {
+		color: var(--green);
+		font-weight: 600;
+	}
+
+	.stat-inline.warning {
+		color: var(--yellow);
+		font-weight: 600;
+	}
+
+	.stat-separator {
 		color: var(--fg4);
+		font-weight: 300;
 	}
 
-	.quick-stats {
-		display: grid;
-		grid-template-columns: repeat(3, 1fr);
-		gap: 0.75rem;
-		padding-top: 1rem;
+	/* Panel Issues */
+	.panel-issues {
+		margin-top: 0.75rem;
+		padding-top: 0.75rem;
 		border-top: 1px solid var(--bg2);
-	}
-
-	.stat {
 		display: flex;
 		flex-direction: column;
+		gap: 0.375rem;
+		max-height: 350px;
+		overflow-y: auto;
+	}
+
+	.panel-issue-item {
+		display: flex;
 		align-items: center;
-		gap: 0.25rem;
+		gap: 0.5rem;
+		padding: 0.375rem 0.5rem;
+		background: var(--bg2);
+		border-radius: 0.25rem;
+		font-size: 0.75rem;
 	}
 
-	.stat-value {
-		font-size: 1.5rem;
+	.panel-issue-risk {
+		font-size: 0.5rem;
 		font-weight: 700;
-		color: var(--fg);
+		padding: 0.125rem 0.3rem;
+		border-radius: 0.1875rem;
+		text-transform: uppercase;
+		letter-spacing: 0.03em;
+		flex-shrink: 0;
+		line-height: 1.2;
 	}
 
-	.stat-value.issues { color: var(--orange); }
-	.stat-value.passed { color: var(--green); }
-	.stat-value.warning { color: var(--yellow); }
+	.panel-issue-risk.risk-critical {
+		background: rgba(251, 73, 52, 0.2);
+		color: var(--red);
+	}
 
-	.stat-label {
+	.panel-issue-risk.risk-high {
+		background: rgba(254, 128, 25, 0.2);
+		color: var(--orange);
+	}
+
+	.panel-issue-risk.risk-medium {
+		background: rgba(250, 189, 47, 0.2);
+		color: var(--yellow);
+	}
+
+	.panel-issue-risk.risk-low {
+		background: rgba(184, 187, 38, 0.2);
+		color: var(--green);
+	}
+
+	.panel-issue-risk.risk-info {
+		background: rgba(131, 165, 152, 0.2);
+		color: var(--aqua);
+	}
+
+	.panel-issue-text {
+		display: flex;
+		flex-direction: column;
+		gap: 0.125rem;
+		flex: 1;
+		min-width: 0;
+	}
+
+	.panel-issue-desc {
+		color: var(--fg2);
+		line-height: 1.3;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	.panel-issue-evidence {
 		font-size: 0.6875rem;
 		color: var(--fg4);
-		text-align: center;
-		text-transform: uppercase;
-		letter-spacing: 0.025em;
+		font-family: ui-monospace, monospace;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
 	}
 
 	/* Score Cards */
@@ -1017,18 +1594,38 @@
 		font-weight: 700;
 	}
 
-	.score-value.grade-a { color: var(--green); }
-	.score-value.grade-b { color: var(--blue); }
-	.score-value.grade-c { color: var(--yellow); }
-	.score-value.grade-d { color: var(--orange); }
-	.score-value.grade-f { color: var(--red); }
-	.score-value.risk-low { color: var(--green); }
-	.score-value.risk-medium { color: var(--yellow); }
-	.score-value.risk-high { color: var(--orange); }
-	.score-value.risk-critical { color: var(--red); }
+	.score-value.grade-a {
+		color: var(--green);
+	}
+	.score-value.grade-b {
+		color: var(--blue);
+	}
+	.score-value.grade-c {
+		color: var(--yellow);
+	}
+	.score-value.grade-d {
+		color: var(--orange);
+	}
+	.score-value.grade-f {
+		color: var(--red);
+	}
+	.score-value.risk-low {
+		color: var(--green);
+	}
+	.score-value.risk-medium {
+		color: var(--yellow);
+	}
+	.score-value.risk-high {
+		color: var(--orange);
+	}
+	.score-value.risk-critical {
+		color: var(--red);
+	}
 
 	/* Findings Section */
-	.findings-section, .issues-section, .passed-section {
+	.findings-section,
+	.issues-section,
+	.passed-section {
 		margin-bottom: 1.5rem;
 	}
 
@@ -1614,6 +2211,473 @@
 		color: var(--red);
 	}
 
+	/* Security Cards Section */
+	.security-cards {
+		display: grid;
+		grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+		gap: 1.5rem;
+		margin-bottom: 1.5rem;
+	}
+
+	.security-card {
+		background: var(--bg1);
+		border-radius: 0.75rem;
+		overflow: hidden;
+		border: 1px solid var(--bg2);
+		transition: border-color 0.2s ease;
+	}
+
+	.security-card:hover {
+		border-color: var(--bg3);
+	}
+
+	.security-card.error {
+		border-color: rgba(251, 73, 52, 0.3);
+	}
+
+	.card-header {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		padding: 1rem 1.25rem;
+		background: var(--bg2);
+		border-bottom: 1px solid var(--bg3);
+	}
+
+	.card-title {
+		display: flex;
+		align-items: center;
+		gap: 0.75rem;
+	}
+
+	.card-title h3 {
+		font-size: 0.9375rem;
+		font-weight: 600;
+		color: var(--fg2);
+		margin: 0;
+	}
+
+	.card-badge {
+		font-size: 0.6875rem;
+		font-weight: 600;
+		padding: 0.25rem 0.625rem;
+		border-radius: 0.25rem;
+		text-transform: uppercase;
+		letter-spacing: 0.025em;
+	}
+
+	.card-badge.success {
+		background: rgba(184, 187, 38, 0.2);
+		color: var(--green);
+	}
+
+	.card-badge.warning {
+		background: rgba(250, 189, 47, 0.2);
+		color: var(--yellow);
+	}
+
+	.card-badge.danger {
+		background: rgba(251, 73, 52, 0.2);
+		color: var(--red);
+	}
+
+	.card-badge.info {
+		background: rgba(131, 165, 152, 0.2);
+		color: var(--aqua);
+	}
+
+	.card-badge.risk-low {
+		background: rgba(184, 187, 38, 0.2);
+		color: var(--green);
+	}
+
+	.card-badge.risk-medium {
+		background: rgba(250, 189, 47, 0.2);
+		color: var(--yellow);
+	}
+
+	.card-badge.risk-high {
+		background: rgba(254, 128, 25, 0.2);
+		color: var(--orange);
+	}
+
+	.card-badge.risk-critical {
+		background: rgba(251, 73, 52, 0.2);
+		color: var(--red);
+	}
+
+	.card-body {
+		padding: 1.25rem;
+		display: flex;
+		flex-direction: column;
+		gap: 1rem;
+	}
+
+	.finding-item {
+		padding: 0.875rem;
+		background: var(--bg2);
+		border-radius: 0.5rem;
+		border-left: 3px solid var(--bg3);
+	}
+
+	.finding-item.risk-critical {
+		border-left-color: var(--red);
+		background: rgba(251, 73, 52, 0.05);
+	}
+
+	.finding-item.risk-high {
+		border-left-color: var(--orange);
+		background: rgba(254, 128, 25, 0.05);
+	}
+
+	.finding-item.risk-medium {
+		border-left-color: var(--yellow);
+		background: rgba(250, 189, 47, 0.05);
+	}
+
+	.finding-item.risk-low {
+		border-left-color: var(--green);
+		background: rgba(184, 187, 38, 0.05);
+	}
+
+	.finding-header-inline {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		margin-bottom: 0.5rem;
+	}
+
+	.finding-risk-label {
+		font-size: 0.625rem;
+		font-weight: 600;
+		text-transform: uppercase;
+		letter-spacing: 0.05em;
+		color: var(--fg3);
+	}
+
+	.finding-desc {
+		font-size: 0.875rem;
+		color: var(--fg2);
+		line-height: 1.5;
+		margin-bottom: 0.5rem;
+	}
+
+	.finding-evidence {
+		display: block;
+		font-family: ui-monospace, monospace;
+		font-size: 0.75rem;
+		padding: 0.5rem;
+		background: var(--bg0);
+		border-radius: 0.25rem;
+		color: var(--fg3);
+		overflow-x: auto;
+		margin-top: 0.5rem;
+	}
+
+	.finding-mitigation {
+		font-size: 0.8125rem;
+		color: var(--aqua);
+		margin-top: 0.5rem;
+		padding-top: 0.5rem;
+		border-top: 1px solid var(--bg3);
+	}
+
+	.endpoints-list {
+		display: flex;
+		flex-direction: column;
+		gap: 0.5rem;
+	}
+
+	.endpoint-item code {
+		display: block;
+		font-family: ui-monospace, monospace;
+		font-size: 0.8125rem;
+		padding: 0.5rem 0.75rem;
+		background: var(--bg2);
+		border-radius: 0.375rem;
+		color: var(--aqua);
+	}
+
+	.findings-list {
+		display: flex;
+		flex-direction: column;
+		gap: 0.75rem;
+		margin-top: 0.75rem;
+	}
+
+	.tech-grid {
+		display: grid;
+		grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+		gap: 0.75rem;
+	}
+
+	.tech-item {
+		display: flex;
+		flex-direction: column;
+		gap: 0.25rem;
+		padding: 0.75rem;
+		background: var(--bg2);
+		border-radius: 0.375rem;
+	}
+
+	.tech-name {
+		font-size: 0.875rem;
+		font-weight: 500;
+		color: var(--fg2);
+	}
+
+	.tech-version {
+		font-size: 0.75rem;
+		font-family: ui-monospace, monospace;
+		color: var(--fg4);
+	}
+
+	.emails-list {
+		display: flex;
+		flex-direction: column;
+		gap: 0.5rem;
+	}
+
+	.email-item {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		padding: 0.5rem 0.75rem;
+		background: var(--bg2);
+		border-radius: 0.375rem;
+	}
+
+	.email-item a {
+		color: var(--aqua);
+		text-decoration: none;
+		font-size: 0.875rem;
+	}
+
+	.email-item a:hover {
+		text-decoration: underline;
+	}
+
+	.dns-section {
+		margin-bottom: 1rem;
+	}
+
+	.dns-section:last-child {
+		margin-bottom: 0;
+	}
+
+	.dns-title {
+		font-size: 0.8125rem;
+		font-weight: 600;
+		color: var(--fg3);
+		margin-bottom: 0.5rem;
+	}
+
+	.dns-records {
+		display: flex;
+		flex-direction: column;
+		gap: 0.5rem;
+	}
+
+	.dns-record {
+		display: block;
+		font-family: ui-monospace, monospace;
+		font-size: 0.75rem;
+		padding: 0.5rem 0.75rem;
+		background: var(--bg2);
+		border-radius: 0.375rem;
+		color: var(--fg3);
+		word-break: break-all;
+	}
+
+	.cert-section {
+		margin-bottom: 1rem;
+	}
+
+	.cert-section:last-child {
+		margin-bottom: 0;
+	}
+
+	.cert-title {
+		font-size: 0.8125rem;
+		font-weight: 600;
+		color: var(--fg3);
+		margin-bottom: 0.75rem;
+	}
+
+	.san-list {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.5rem;
+	}
+
+	.san-item {
+		font-size: 0.75rem;
+		padding: 0.375rem 0.625rem;
+		background: var(--bg2);
+		border-radius: 0.25rem;
+		color: var(--fg3);
+		font-family: ui-monospace, monospace;
+	}
+
+	.cert-info-grid {
+		display: grid;
+		grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+		gap: 0.75rem;
+		margin-bottom: 1rem;
+	}
+
+	.cert-info-item {
+		display: flex;
+		flex-direction: column;
+		gap: 0.25rem;
+	}
+
+	.cert-label {
+		font-size: 0.6875rem;
+		color: var(--fg4);
+		text-transform: uppercase;
+		letter-spacing: 0.025em;
+	}
+
+	.cert-value {
+		font-size: 0.8125rem;
+		color: var(--fg2);
+	}
+
+	.cert-value.mono {
+		font-family: ui-monospace, monospace;
+		color: var(--fg3);
+	}
+
+	.cert-value :global(.inline-icon) {
+		vertical-align: middle;
+		margin-right: 0.25rem;
+	}
+
+	.cert-value :global(.inline-icon.success) {
+		color: var(--green);
+	}
+
+	.cert-value :global(.inline-icon.danger) {
+		color: var(--red);
+	}
+
+	.cipher-list {
+		display: flex;
+		flex-direction: column;
+		gap: 0.5rem;
+	}
+
+	.cipher-item {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		padding: 0.5rem 0.75rem;
+		background: var(--bg2);
+		border-radius: 0.375rem;
+		font-size: 0.75rem;
+	}
+
+	.cipher-item.weak {
+		background: rgba(251, 73, 52, 0.1);
+		border-left: 2px solid var(--red);
+	}
+
+	.cipher-name {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		color: var(--fg3);
+		font-family: ui-monospace, monospace;
+	}
+
+	:global(.cipher-icon-weak) {
+		color: var(--red);
+		flex-shrink: 0;
+	}
+
+	:global(.cipher-icon-good) {
+		color: var(--green);
+		flex-shrink: 0;
+	}
+
+	.cipher-details {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+	}
+
+	.cipher-strength {
+		color: var(--fg4);
+		font-size: 0.6875rem;
+	}
+
+	.cipher-fs {
+		font-size: 0.625rem;
+		font-weight: 600;
+		padding: 0.125rem 0.375rem;
+		background: rgba(184, 187, 38, 0.2);
+		color: var(--green);
+		border-radius: 0.25rem;
+	}
+
+	.cipher-more {
+		text-align: center;
+		font-size: 0.75rem;
+		color: var(--fg4);
+		padding: 0.5rem;
+	}
+
+	.ipv6-list {
+		display: flex;
+		flex-direction: column;
+		gap: 0.5rem;
+	}
+
+	.ipv6-item {
+		display: block;
+		font-family: ui-monospace, monospace;
+		font-size: 0.75rem;
+		padding: 0.5rem 0.75rem;
+		background: var(--bg2);
+		border-radius: 0.375rem;
+		color: var(--aqua);
+	}
+
+	.error-item {
+		padding: 0.75rem;
+		background: var(--bg2);
+		border-radius: 0.5rem;
+		border-left: 3px solid var(--red);
+	}
+
+	.error-header {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		margin-bottom: 0.5rem;
+	}
+
+	.error-component {
+		font-size: 0.75rem;
+		font-weight: 600;
+		color: var(--orange);
+		text-transform: uppercase;
+		letter-spacing: 0.05em;
+	}
+
+	.error-timestamp {
+		font-size: 0.6875rem;
+		color: var(--fg4);
+	}
+
+	.error-message {
+		font-size: 0.8125rem;
+		color: var(--fg3);
+		line-height: 1.5;
+		font-family: ui-monospace, monospace;
+	}
+
 	/* Responsive */
 	@media (max-width: 1200px) {
 		.findings-grid {
@@ -1622,6 +2686,10 @@
 
 		.score-cards {
 			grid-template-columns: repeat(2, 1fr);
+		}
+
+		.security-cards {
+			grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
 		}
 	}
 
