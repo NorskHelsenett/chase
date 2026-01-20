@@ -1,6 +1,7 @@
 <script>
 	import { AlertTriangle, Lock, Info, Shield, ShieldAlert, ArrowRight } from 'lucide-svelte';
 	import { fade, slide } from 'svelte/transition';
+	import ChecksGrid from './ChecksGrid.svelte';
 
 	export let loading = false;
 	export let results = {};
@@ -150,22 +151,7 @@
 			{/if}
 		</div>
 
-		{#if results.headers.passed.length > 0}
-			<div class="section">
-				<h3 class="section-title success">
-					<Shield size={20} />
-					<span>Passed Checks</span>
-				</h3>
-				<div class="passed-list">
-					{#each results.headers.passed as check}
-						<div class="passed-item">
-							<span class="passed-dot"></span>
-							<span>{check}</span>
-						</div>
-					{/each}
-				</div>
-			</div>
-		{/if}
+		<ChecksGrid checks={results.headers.passed} />
 	</div>
 {/if}
 
@@ -425,26 +411,6 @@
 	.success-message {
 		font-size: 0.875rem;
 		color: #4ade80;
-	}
-
-	.passed-list {
-		display: flex;
-		flex-direction: column;
-		gap: 0.5rem;
-	}
-
-	.passed-item {
-		display: flex;
-		align-items: center;
-		gap: 0.5rem;
-		color: #9ca3af;
-	}
-
-	.passed-dot {
-		width: 6px;
-		height: 6px;
-		border-radius: 50%;
-		background: #22c55e;
 	}
 
 	@keyframes pulse {

@@ -6,7 +6,7 @@ import (
 	"time"
 )
 
-const defaultServiceTimeout = 45 * time.Second
+const defaultServiceTimeout = 3 * time.Minute
 
 func serviceTimeout() time.Duration {
 	raw := os.Getenv("SCREENSHOT_SERVICE_TIMEOUT_SECONDS")

@@ -33,6 +33,7 @@ func (s *Scanner) checkFileExposure(ctx context.Context, domain string) (*FileEx
 		ExposedFiles: make([]ExposedFile, 0),
 		Risk:         RiskLow,
 		Evidence:     make(map[string]string),
+		Checks:       make([]FileCheck, 0),
 	}
 
 	commonFiles := []FileSignature{
@@ -297,6 +298,10 @@ func (s *Scanner) checkFileExposure(ctx context.Context, domain string) (*FileEx
 	var mu sync.Mutex
 	highestRisk := RiskLow
 	totalChecked := 0
+	checkState := make(map[string]bool, len(commonFiles))
+	for _, file := range commonFiles {
+		checkState[file.path] = true
+	}
 
 	for _, file := range commonFiles {
 		wg.Add(1)
@@ -319,6 +324,7 @@ func (s *Scanner) checkFileExposure(ctx context.Context, domain string) (*FileEx
 					highestRisk = f.risk
 				}
 				totalChecked++
+				checkState[f.path] = false
 				mu.Unlock()
 			}
 		}(file)
@@ -334,7 +340,23 @@ func (s *Scanner) checkFileExposure(ctx context.Context, domain string) (*FileEx
 	}
 
 	analysis.Risk = highestRisk
+	analysis.Checks = buildFileChecks(commonFiles, checkState)
 	return analysis, nil
+}
+
+func buildFileChecks(files []FileSignature, state map[string]bool) []FileCheck {
+	checks := make([]FileCheck, 0, len(files))
+	for _, file := range files {
+		passed, ok := state[file.path]
+		if !ok {
+			passed = true
+		}
+		checks = append(checks, FileCheck{
+			Path:   file.path,
+			Passed: passed,
+		})
+	}
+	return checks
 }
 
 func (s *Scanner) validateFile(ctx context.Context, domain string, file FileSignature) (bool, string) {

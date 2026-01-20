@@ -65,6 +65,7 @@ type FileExposureAnalysis struct {
 	ExposedFiles []ExposedFile     `json:"exposedFiles"`
 	Risk         RiskLevel         `json:"risk"`
 	Evidence     map[string]string `json:"evidence"`
+	Checks       []FileCheck       `json:"checks"`
 }
 
 type SecretExposureAnalysis struct {
@@ -84,6 +85,11 @@ type ExposedFile struct {
 	Type        string    `json:"type"`
 	Description string    `json:"description"`
 	Risk        RiskLevel `json:"risk"`
+}
+
+type FileCheck struct {
+	Path   string `json:"path"`
+	Passed bool   `json:"passed"`
 }
 
 type RiskLevel string
@@ -137,6 +143,7 @@ type HeadersAnalysis struct {
 	CORSFindings   []Finding `json:"corsFindings,omitempty"`
 	Passed         []string  `json:"passed"`
 	Risk           RiskLevel `json:"risk"`
+	Checks         []HeaderCheck `json:"checks"`
 }
 
 type CertificateAnalysis struct {
@@ -175,6 +182,7 @@ type AdminPagesAnalysis struct {
 	Findings        []Finding         `json:"findings"`
 	Recommendations []string          `json:"recommendations"`
 	Evidence        map[string]string `json:"evidence"`
+	Checks          []AdminCheck      `json:"checks"`
 }
 
 type SwaggerAnalysis struct {
@@ -183,6 +191,22 @@ type SwaggerAnalysis struct {
 	Risk            RiskLevel `json:"risk"`
 	Findings        []Finding `json:"findings"`
 	Recommendations []string  `json:"recommendations"`
+	Checks          []SwaggerCheck `json:"checks"`
+}
+
+type AdminCheck struct {
+	Path   string `json:"path"`
+	Passed bool   `json:"passed"`
+}
+
+type SwaggerCheck struct {
+	Path   string `json:"path"`
+	Passed bool   `json:"passed"`
+}
+
+type HeaderCheck struct {
+	Name   string `json:"name"`
+	Passed bool   `json:"passed"`
 }
 
 type APIExposureAnalysis struct {

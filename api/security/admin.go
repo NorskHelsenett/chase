@@ -33,6 +33,7 @@ func (s *Scanner) checkAdminPages(ctx context.Context, domain string) (*AdminPag
 		Findings:        make([]Finding, 0),
 		Recommendations: defaultRecommendations(),
 		Evidence:        make(map[string]string),
+		Checks:          make([]AdminCheck, 0),
 	}
 
 	adminPages := []AdminPageSignature{
@@ -68,6 +69,10 @@ func (s *Scanner) checkAdminPages(ctx context.Context, domain string) (*AdminPag
 	var wg sync.WaitGroup
 	var mu sync.Mutex
 	totalChecked := 0
+	checkState := make(map[string]bool, len(adminPages))
+	for _, page := range adminPages {
+		checkState[page.path] = true
+	}
 
 	for _, page := range adminPages {
 		wg.Add(1)
@@ -86,6 +91,7 @@ func (s *Scanner) checkAdminPages(ctx context.Context, domain string) (*AdminPag
 				})
 				analysis.Evidence[p.path] = evidence
 				totalChecked++
+				checkState[p.path] = false
 				mu.Unlock()
 			}
 		}(page)
@@ -97,13 +103,30 @@ func (s *Scanner) checkAdminPages(ctx context.Context, domain string) (*AdminPag
 	if s.detectFalsePositivesAdmin(analysis, len(adminPages), totalChecked) {
 		analysis.Risk = RiskLow
 		analysis.Evidence["false_positive"] = "High detection rate suggests potential false positives. Manual verification recommended."
+		analysis.Checks = buildAdminChecks(adminPages, checkState)
 		return analysis, nil
 	}
 
 	// Set risk level based on validated findings
 	analysis.Risk = s.calculateRisk(analysis.Findings)
+	analysis.Checks = buildAdminChecks(adminPages, checkState)
 
 	return analysis, nil
+}
+
+func buildAdminChecks(pages []AdminPageSignature, state map[string]bool) []AdminCheck {
+	checks := make([]AdminCheck, 0, len(pages))
+	for _, page := range pages {
+		passed, ok := state[page.path]
+		if !ok {
+			passed = true
+		}
+		checks = append(checks, AdminCheck{
+			Path:   page.path,
+			Passed: passed,
+		})
+	}
+	return checks
 }
 
 func (s *Scanner) validateAdminPage(ctx context.Context, domain string, page AdminPageSignature) (bool, string) {

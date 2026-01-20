@@ -7,6 +7,7 @@
 	import Certificate from './scan/Certificate.svelte';
 	import Headers from './scan/Headers.svelte';
 	import SecretExposure from './scan/SecretExposure.svelte';
+	import ChecksGrid from './scan/ChecksGrid.svelte';
 
 	export let domain: string = '';
 	export let searchResults = {};
@@ -302,6 +303,8 @@
 						{/each}
 					</ul>
 				</div>
+
+				<ChecksGrid checks={results.adminPages.checks} />
 			</div>
 		{/if}
 	</section>
@@ -364,6 +367,8 @@
 						{/each}
 					</ul>
 				</div>
+
+				<ChecksGrid checks={results.swagger.checks} />
 			</div>
 		{/if}
 	</section>
@@ -580,6 +585,8 @@
 				{:else}
 					<div class="text-green-400">No sensitive files exposed</div>
 				{/if}
+
+				<ChecksGrid checks={results.fileExposure.checks} />
 			</div>
 		</div>
 	{/if}

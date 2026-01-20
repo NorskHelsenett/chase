@@ -86,6 +86,7 @@ func (s *Scanner) checkSwaggerDocs(ctx context.Context, domain string) (*Swagger
 		Exposed:   false,
 		Risk:      RiskLow,
 		Findings:  make([]Finding, 0),
+		Checks:    make([]SwaggerCheck, 0),
 		Recommendations: []string{
 			"Restrict access to API documentation",
 			"Implement authentication for documentation access",
@@ -97,6 +98,10 @@ func (s *Scanner) checkSwaggerDocs(ctx context.Context, domain string) (*Swagger
 
 	var wg sync.WaitGroup
 	var mu sync.Mutex
+	checkState := make(map[string]bool, len(swaggerPaths))
+	for _, path := range swaggerPaths {
+		checkState[path] = true
+	}
 
 	for _, path := range swaggerPaths {
 		wg.Add(1)
@@ -120,6 +125,7 @@ func (s *Scanner) checkSwaggerDocs(ctx context.Context, domain string) (*Swagger
 						Evidence:    fmt.Sprintf("Path %s returned valid Swagger %s documentation", p, docType),
 						Mitigation:  "Restrict access to API documentation in production",
 					})
+					checkState[p] = false
 					mu.Unlock()
 				}
 			}
@@ -131,8 +137,24 @@ func (s *Scanner) checkSwaggerDocs(ctx context.Context, domain string) (*Swagger
 	if analysis.Exposed {
 		analysis.Risk = RiskHigh
 	}
+	analysis.Checks = buildSwaggerChecks(swaggerPaths, checkState)
 
 	return analysis, nil
+}
+
+func buildSwaggerChecks(paths []string, state map[string]bool) []SwaggerCheck {
+	checks := make([]SwaggerCheck, 0, len(paths))
+	for _, path := range paths {
+		passed, ok := state[path]
+		if !ok {
+			passed = true
+		}
+		checks = append(checks, SwaggerCheck{
+			Path:   path,
+			Passed: passed,
+		})
+	}
+	return checks
 }
 
 type swaggerTask struct{}

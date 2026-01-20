@@ -1,6 +1,7 @@
 <script>
 	import { Key, AlertTriangle, Shield, CheckCircle, XCircle, FileCode, Eye } from 'lucide-svelte';
 	import { fade, slide } from 'svelte/transition';
+	import ChecksGrid from './ChecksGrid.svelte';
 
 	export let loading = false;
 	export let results = {};
@@ -34,8 +35,13 @@
 		return source;
 	}
 
-	// Only show passed checks
-	$: passedChecks = (results?.secretExposure?.checks || []).filter((check) => check.passed);
+	// Combine checks and sources into a single array for ChecksGrid
+	$: allChecks = (() => {
+		const checks = (results?.secretExposure?.checks || []);
+		if (checks.length > 0) return checks;
+		// Fallback to sources if no checks provided
+		return (results?.secretExposure?.sources || []).map(s => ({ name: getSourceLabel(s), passed: true }));
+	})();
 </script>
 
 {#if loading}
@@ -138,38 +144,7 @@
 		{/if}
 
 		<!-- Security Checks Grid -->
-		<div class="section">
-			<h3 class="section-title">
-				<Shield size={14} />
-				<span>Security Checks</span>
-			</h3>
-
-			<div class="checks-grid">
-				{#each passedChecks as check}
-					<div class="check-item">
-						<CheckCircle size={14} class="check-icon passed" />
-						<span class="check-name passed">{check.name}</span>
-					</div>
-				{/each}
-
-				<!-- Show sources as checked items if no explicit checks provided -->
-				{#if !passedChecks.length && results.secretExposure.sources?.length > 0}
-					{#each results.secretExposure.sources as source}
-						<div class="check-item">
-							<CheckCircle size={14} class="check-icon passed" />
-							<span class="check-name passed">{getSourceLabel(source)}</span>
-						</div>
-					{/each}
-				{/if}
-			</div>
-
-			{#if !passedChecks.length && !results.secretExposure.sources?.length}
-				<div class="success-message">
-					<CheckCircle size={14} />
-					<span>No exposed secrets detected</span>
-				</div>
-			{/if}
-		</div>
+		<ChecksGrid checks={allChecks} />
 	</div>
 {/if}
 
@@ -297,30 +272,6 @@
 		}
 	}
 
-	.checks-grid {
-		display: grid;
-		grid-template-columns: repeat(3, max-content);
-		gap: 0.25rem 2rem;
-	}
-
-	@media (min-width: 640px) {
-		.checks-grid {
-			grid-template-columns: repeat(4, max-content);
-		}
-	}
-
-	@media (min-width: 900px) {
-		.checks-grid {
-			grid-template-columns: repeat(5, max-content);
-		}
-	}
-
-	@media (min-width: 1200px) {
-		.checks-grid {
-			grid-template-columns: repeat(6, max-content);
-		}
-	}
-
 	.check-item {
 		display: flex;
 		align-items: center;
@@ -329,29 +280,18 @@
 		font-size: 0.8125rem;
 		color: #d1d5db;
 		white-space: nowrap;
-	}
-
-	.check-item.clickable {
+		background: none;
+		border: none;
 		cursor: pointer;
 		transition: color 0.15s ease;
 	}
 
-	.check-item.clickable:hover {
+	.check-item:hover {
 		color: #fff;
 	}
 
-	.check-item.clickable:hover .check-name {
+	.check-item:hover .check-name {
 		text-decoration: underline;
-	}
-
-	:global(.check-icon.passed) {
-		color: #22c55e;
-		flex-shrink: 0;
-	}
-
-	:global(.check-icon.failed) {
-		color: #ef4444;
-		flex-shrink: 0;
 	}
 
 	:global(.check-icon.risk-critical) {
@@ -365,14 +305,6 @@
 	}
 	:global(.check-icon.risk-low) {
 		color: #22c55e;
-	}
-
-	.check-name {
-		color: #d1d5db;
-	}
-
-	.check-name.passed {
-		color: #9ca3af;
 	}
 
 	.check-name.failed {

@@ -100,6 +100,7 @@ func (s *Scanner) checkSecurityHeaders(ctx context.Context, domain string) (*Hea
 		Passed:         make([]string, 0),
 		Risk:           RiskLow,
 		Title:          title,
+		Checks:         make([]HeaderCheck, 0),
 	}
 
 	headerChecks := map[string]HeaderRequirement{
@@ -315,6 +316,7 @@ func (s *Scanner) checkSecurityHeaders(ctx context.Context, domain string) (*Hea
 
 	score := 100
 	highestRisk := RiskLow
+	checkState := make(map[string]bool, len(headerChecks))
 
 	for header, check := range headerChecks {
 		value := resp.Header.Get(header)
@@ -356,6 +358,8 @@ func (s *Scanner) checkSecurityHeaders(ctx context.Context, domain string) (*Hea
 		case StatusGood:
 			analysis.Passed = append(analysis.Passed, fmt.Sprintf("%s: %s", header, value))
 		}
+
+		checkState[check.name] = status == StatusGood
 	}
 
 	if corsFindings := analyzeCORSHeaders(resp.Header); len(corsFindings) > 0 {
@@ -379,8 +383,30 @@ func (s *Scanner) checkSecurityHeaders(ctx context.Context, domain string) (*Hea
 
 	analysis.Score = calculateGrade(score)
 	analysis.Risk = highestRisk
+	analysis.Checks = buildHeaderChecks(headerChecks, checkState)
 
 	return analysis, nil
+}
+
+func buildHeaderChecks(checks map[string]HeaderRequirement, state map[string]bool) []HeaderCheck {
+	names := make([]string, 0, len(checks))
+	for _, check := range checks {
+		names = append(names, check.name)
+	}
+	sort.Strings(names)
+
+	results := make([]HeaderCheck, 0, len(names))
+	for _, name := range names {
+		passed, ok := state[name]
+		if !ok {
+			passed = false
+		}
+		results = append(results, HeaderCheck{
+			Name:   name,
+			Passed: passed,
+		})
+	}
+	return results
 }
 
 // Helper function to parse header directives into a map
