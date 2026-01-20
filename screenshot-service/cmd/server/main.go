@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -27,6 +28,30 @@ func main() {
 		WriteTimeout: 90 * time.Second,
 		IdleTimeout:  120 * time.Second,
 	}
+
+	go func() {
+		healthURL := "http://127.0.0.1:" + port + "/http://127.0.0.1:" + port + "/healthz/.html"
+		var lastErr error
+
+		for attempt := 1; attempt <= 5; attempt++ {
+			resp, err := http.Get(healthURL)
+			if err == nil {
+				_ = resp.Body.Close()
+				if resp.StatusCode == http.StatusOK {
+					log.Printf("Warmup health check OK at %s", healthURL)
+					return
+				}
+				err = fmt.Errorf("unexpected status %s", resp.Status)
+			}
+
+			lastErr = err
+			time.Sleep(time.Duration(attempt) * 500 * time.Millisecond)
+		}
+
+		if lastErr != nil {
+			log.Printf("Warmup health check failed: %v", lastErr)
+		}
+	}()
 
 	// Graceful shutdown
 	go func() {

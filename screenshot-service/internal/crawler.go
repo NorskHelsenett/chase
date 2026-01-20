@@ -242,12 +242,7 @@ func (c *Crawler) Crawl(ctx context.Context, targetURL string, waitTime time.Dur
 			document.head.appendChild(style);
 		}`)
 
-		// Capture screenshot
-		quality := 90
-		screenshot, err := page.Screenshot(fullPageScreenshot, &proto.PageCaptureScreenshot{
-			Format:  proto.PageCaptureScreenshotFormatPng,
-			Quality: &quality,
-		})
+		screenshot, err := c.captureScreenshotWithRetry(page, fullPageScreenshot)
 		if err != nil {
 			result.Error = fmt.Sprintf("failed to capture screenshot: %v", err)
 			return result, err
@@ -258,6 +253,24 @@ func (c *Crawler) Crawl(ctx context.Context, targetURL string, waitTime time.Dur
 	}
 
 	return result, nil
+}
+
+func (c *Crawler) captureScreenshotWithRetry(page *rod.Page, fullPage bool) ([]byte, error) {
+	quality := 90
+	screenshot, err := page.Screenshot(fullPage, &proto.PageCaptureScreenshot{
+		Format:  proto.PageCaptureScreenshotFormatPng,
+		Quality: &quality,
+	})
+	if err == nil {
+		return screenshot, nil
+	}
+
+	time.Sleep(500 * time.Millisecond)
+	_ = c.waitForRender(page, 1*time.Second)
+	return page.Screenshot(fullPage, &proto.PageCaptureScreenshot{
+		Format:  proto.PageCaptureScreenshotFormatPng,
+		Quality: &quality,
+	})
 }
 
 // Close closes the browser
