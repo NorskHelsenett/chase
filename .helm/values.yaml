@@ -24,7 +24,7 @@ chase:
   - name: DATA_FOLDER
     value: "/data"
   - name: SCREENSHOT_SERVICE_URL
-    value: "http://screenshotr-service:8080"
+    value: "http://screenshotr-service:11235"
   services:
   - name: http
     port: 8080
@@ -48,6 +48,13 @@ screenshotr:
   deployment: deployment
   replicaCount: 1
   tag: ""
+  env:
+  - name: PORT
+    value: "11235"
+  - name: CHROME_BIN
+    value: "/usr/bin/chromium-browser"
+  - name: CHROME_PATH
+    value: "/usr/lib/chromium/"
   resources:
     requests:
       memory: "128Mi"    # Request 512 MiB of memory
@@ -55,22 +62,19 @@ screenshotr:
     limits:
       memory: "2048Mi"   # Limit to 1 GiB of memory
       cpu: "500m"        # Limit to 0.5 CPU cores
+  livenessProbe:
+    httpGet:
+      path: /healthz
+      port: 11235
+    periodSeconds: 30
+  readinessProbe:
+    httpGet:
+      path: /healthz
+      port: 11235
+    periodSeconds: 30
   services:
   - name: web
-    port: 8080
-  - name: geckodriver
-    port: 4444
-  env:
-  - name: MOZ_HEADLESS
-    value: "1"
-  - name: FIREFOX_BIN
-    value: "/usr/lib/firefox-esr/firefox-esr"
-  - name: MOZ_DISABLE_CONTENT_SANDBOX
-    value: "1"
-  - name: GECKO_DRIVER_PORT
-    value: "4444"
-  - name: GECKO_DRIVER_HOST
-    value: "127.0.0.1"
+    port: 11235
   mounts:
   - name: dshm
     inMemory: true
