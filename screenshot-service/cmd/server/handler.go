@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -26,6 +27,7 @@ type Handler struct {
 
 const defaultCrawlTimeout = 10 * time.Second
 const defaultPreflightTimeout = 500 * time.Millisecond
+const defaultQueueTimeout = 500 * time.Millisecond
 
 func NewHandler() *Handler {
 	poolSize := crawlPoolSize()
@@ -163,8 +165,20 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), crawlTimeout())
 	defer cancel()
 
-	crawler, err := h.acquireCrawler(ctx)
+	queueCtx, queueCancel := withQueueTimeout(ctx)
+	defer queueCancel()
+
+	crawler, err := h.acquireCrawler(queueCtx)
 	if err != nil {
+		if errors.Is(err, context.DeadlineExceeded) {
+			w.Header().Set("Retry-After", retryAfterSeconds())
+			http.Error(w, "Crawler busy", http.StatusServiceUnavailable)
+			return
+		}
+		if errors.Is(err, context.Canceled) {
+			http.Error(w, "Request canceled", http.StatusRequestTimeout)
+			return
+		}
 		log.Printf("Failed to create crawler: %v", err)
 		http.Error(w, "Failed to initialize crawler", http.StatusInternalServerError)
 		return
@@ -372,6 +386,35 @@ func preflightTimeout() time.Duration {
 	}
 
 	return defaultPreflightTimeout
+}
+
+func queueTimeout() time.Duration {
+	raw := strings.TrimSpace(os.Getenv("CRAWLER_QUEUE_TIMEOUT_MS"))
+	if raw == "" {
+		return defaultQueueTimeout
+	}
+
+	if millis, err := strconv.Atoi(raw); err == nil && millis >= 0 {
+		return time.Duration(millis) * time.Millisecond
+	}
+
+	return defaultQueueTimeout
+}
+
+func withQueueTimeout(ctx context.Context) (context.Context, context.CancelFunc) {
+	timeout := queueTimeout()
+	if timeout <= 0 {
+		return context.WithCancel(ctx)
+	}
+	return context.WithTimeout(ctx, timeout)
+}
+
+func retryAfterSeconds() string {
+	seconds := int(crawlTimeout().Seconds())
+	if seconds <= 0 {
+		seconds = int(defaultCrawlTimeout.Seconds())
+	}
+	return strconv.Itoa(seconds)
 }
 
 func crawlPoolSize() int {
