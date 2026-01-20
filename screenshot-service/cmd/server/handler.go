@@ -132,7 +132,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Crawl the URL
-	waitTime := 2 * time.Second
+	waitTime := 1 * time.Second
 	captureScreenshot := format == "png"
 	result, err := crawler.Crawl(r.Context(), targetURL, waitTime, captureScreenshot, fullPageScreenshot, viewportWidth, viewportHeight)
 	if err != nil || result.Error != "" {

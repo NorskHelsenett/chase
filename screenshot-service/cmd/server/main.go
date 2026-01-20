@@ -11,6 +11,8 @@ import (
 	"time"
 )
 
+const warmupBackoffBase = 500 * time.Millisecond
+
 func main() {
 	port := os.Getenv("PORT")
 	if port == "" {
@@ -45,7 +47,7 @@ func main() {
 			}
 
 			lastErr = err
-			time.Sleep(time.Duration(attempt) * 500 * time.Millisecond)
+			time.Sleep(time.Duration(attempt) * warmupBackoffBase)
 		}
 
 		if lastErr != nil {

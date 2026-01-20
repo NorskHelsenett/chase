@@ -44,6 +44,15 @@ type Crawler struct {
 	consentRemover *ConsentRemover
 }
 
+const (
+	readyStatePollInterval  = 100 * time.Millisecond
+	fontsReadyPollInterval  = 100 * time.Millisecond
+	pageSettledStableWindow = 300 * time.Millisecond
+	pageSettledPollInterval = 100 * time.Millisecond
+	lazyLoadScrollInterval  = 150 * time.Millisecond
+	preScreenshotRenderWait = 750 * time.Millisecond
+)
+
 // NewCrawler creates a new crawler instance
 func NewCrawler() (*Crawler, error) {
 	// Find Chrome binary - check common locations
@@ -158,7 +167,7 @@ func (c *Crawler) Crawl(ctx context.Context, targetURL string, waitTime time.Dur
 
 	waitTimeout := waitTime
 	if waitTimeout <= 0 {
-		waitTimeout = 2 * time.Second
+		waitTimeout = 1 * time.Second
 	}
 
 	if err := c.waitForRender(page, waitTimeout); err != nil {
@@ -168,45 +177,12 @@ func (c *Crawler) Crawl(ctx context.Context, targetURL string, waitTime time.Dur
 	// Remove cookie consent banners (best effort - may not work on all sites)
 	_ = c.consentRemover.RemoveConsent(page)
 
-	// Check if this is a YouTube video and expand content
-	if isYouTubePage(page) {
-		// Click the "...more" button to expand description if it exists
-		_, _ = page.Eval(`() => {
-			const expandButton = document.querySelector('tp-yt-paper-button#expand, #expand, button[aria-label*="more"]');
-			if (expandButton) {
-				expandButton.click();
-			}
-		}`)
-		_ = c.waitForRender(page, 1*time.Second)
-	}
-
 	// Extract metadata before getting HTML
 	result.Title = c.extractTitle(page)
 	result.Author = c.extractAuthor(page)
 	result.PublishedAt = c.extractPublishedDate(page)
 	result.OGImage = c.extractOGImage(page)
-
-	// Check if this is a YouTube video - extract description differently
-	if isYouTubePage(page) {
-		// Extract full description from expanded content
-		if desc, err := page.Eval(`() => {
-			// Try to get the expanded description content
-			const descEl = document.querySelector('ytd-text-inline-expander #content, #description-inline-expander #content, #description');
-			if (descEl) {
-				return descEl.textContent?.trim() || '';
-			}
-			// Fallback to meta description
-			const meta = document.querySelector('meta[property="og:description"]');
-			return meta ? meta.content : '';
-		}`); err == nil && desc.Value.Str() != "" {
-			result.Description = desc.Value.Str()
-		} else {
-			result.Description = c.extractDescription(page)
-		}
-		c.extractYouTubeMetadata(page, result)
-	} else {
-		result.Description = c.extractDescription(page)
-	}
+	result.Description = c.extractDescription(page)
 
 	// Extract full HTML without cleaning to preserve the original document
 	htmlResult, err := page.Eval(`() => {
@@ -233,7 +209,7 @@ func (c *Crawler) Crawl(ctx context.Context, targetURL string, waitTime time.Dur
 
 	if captureScreenshot {
 		_ = c.triggerLazyLoad(page, waitTimeout)
-		_ = c.waitForRender(page, 1*time.Second)
+		_ = c.waitForRender(page, preScreenshotRenderWait)
 
 		_, _ = page.Eval(`() => {
 			const style = document.createElement('style');
@@ -286,7 +262,7 @@ func (c *Crawler) waitForReadyState(page *rod.Page, deadline time.Time) error {
 		if err == nil && state.Value.Str() == "complete" {
 			return nil
 		}
-		time.Sleep(100 * time.Millisecond)
+		time.Sleep(readyStatePollInterval)
 	}
 	return fmt.Errorf("readyState not complete")
 }
@@ -300,15 +276,12 @@ func (c *Crawler) waitForFontsReady(page *rod.Page, deadline time.Time) error {
 		if err == nil && result.Value.Bool() {
 			return nil
 		}
-		time.Sleep(100 * time.Millisecond)
+		time.Sleep(fontsReadyPollInterval)
 	}
 	return fmt.Errorf("fonts not loaded")
 }
 
 func (c *Crawler) waitForPageSettled(page *rod.Page, deadline time.Time) error {
-	const stableWindow = 300 * time.Millisecond
-	const pollInterval = 100 * time.Millisecond
-
 	var stableSince time.Time
 	var lastScrollHeight int
 	var lastTotal int
@@ -327,7 +300,7 @@ func (c *Crawler) waitForPageSettled(page *rod.Page, deadline time.Time) error {
 			return { scrollHeight, total, incomplete, visible };
 		}`)
 		if err != nil {
-			time.Sleep(pollInterval)
+			time.Sleep(pageSettledPollInterval)
 			continue
 		}
 
@@ -337,7 +310,7 @@ func (c *Crawler) waitForPageSettled(page *rod.Page, deadline time.Time) error {
 		hasVisible = result.Value.Get("visible").Bool()
 
 		if scrollHeight == lastScrollHeight && total == lastTotal && incomplete == lastIncomplete {
-			if !stableSince.IsZero() && time.Since(stableSince) >= stableWindow && hasVisible && scrollHeight > 0 && incomplete == 0 {
+			if !stableSince.IsZero() && time.Since(stableSince) >= pageSettledStableWindow && hasVisible && scrollHeight > 0 && incomplete == 0 {
 				return nil
 			}
 		} else {
@@ -347,7 +320,7 @@ func (c *Crawler) waitForPageSettled(page *rod.Page, deadline time.Time) error {
 		lastScrollHeight = scrollHeight
 		lastTotal = total
 		lastIncomplete = incomplete
-		time.Sleep(pollInterval)
+		time.Sleep(pageSettledPollInterval)
 	}
 
 	return fmt.Errorf("page not settled")
@@ -387,7 +360,7 @@ func (c *Crawler) triggerLazyLoad(page *rod.Page, timeout time.Duration) error {
 
 		lastHeight = scrollHeight
 		_, _ = page.Eval(`() => window.scrollBy(0, window.innerHeight * 0.9)`)
-		time.Sleep(150 * time.Millisecond)
+		time.Sleep(lazyLoadScrollInterval)
 	}
 
 	_, _ = page.Eval(`() => window.scrollTo(0, 0)`)
