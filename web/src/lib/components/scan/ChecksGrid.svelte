@@ -3,9 +3,14 @@
 
 	export let checks = [];
 
-	// Normalize checks - handle both string arrays and object arrays
+	// Normalize checks - handle string arrays, and objects with "name" or "path"
 	$: passedChecks = (checks || [])
-		.map((check) => (typeof check === 'string' ? { name: check, passed: true } : check))
+		.map((check) => {
+			if (typeof check === 'string') {
+				return { name: check, passed: true };
+			}
+			return { ...check, name: check.name || check.path };
+		})
 		.filter((check) => check.passed);
 </script>
 
@@ -23,28 +28,29 @@
 <style>
 	.checks-grid {
 		display: grid;
-		grid-template-columns: repeat(3, max-content);
+		grid-template-columns: repeat(3, minmax(0, max-content));
 		gap: 0.25rem 2rem;
 		margin-top: 1rem;
 		padding-top: 1rem;
 		border-top: 1px solid #2b2b2b;
+		overflow: hidden;
 	}
 
 	@media (min-width: 640px) {
 		.checks-grid {
-			grid-template-columns: repeat(4, max-content);
+			grid-template-columns: repeat(4, minmax(0, max-content));
 		}
 	}
 
 	@media (min-width: 900px) {
 		.checks-grid {
-			grid-template-columns: repeat(5, max-content);
+			grid-template-columns: repeat(5, minmax(0, max-content));
 		}
 	}
 
 	@media (min-width: 1200px) {
 		.checks-grid {
-			grid-template-columns: repeat(6, max-content);
+			grid-template-columns: repeat(6, minmax(0, max-content));
 		}
 	}
 
@@ -54,7 +60,7 @@
 		gap: 0.375rem;
 		padding: 0.25rem 0;
 		font-size: 0.8125rem;
-		white-space: nowrap;
+		min-width: 0;
 	}
 
 	:global(.check-icon) {
@@ -64,5 +70,8 @@
 
 	.check-name {
 		color: #9ca3af;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
 	}
 </style>

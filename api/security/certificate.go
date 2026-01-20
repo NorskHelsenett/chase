@@ -83,9 +83,11 @@ func (s *Scanner) checkCertificate(ctx context.Context, domain string) (*Certifi
 		NegotiatedProtocol: state.NegotiatedProtocol,
 		PreferredCipher:    tls.CipherSuiteName(state.CipherSuite),
 		CTEnabled:          len(state.SignedCertificateTimestamps) > 0,
+		Checks:             make([]CertificateCheck, 0),
 	}
 
-	if len(state.OCSPResponse) > 0 {
+	ocspStapled := len(state.OCSPResponse) > 0
+	if ocspStapled {
 		analysis.RevocationStatus = "Stapled OCSP response present"
 	} else {
 		analysis.RevocationStatus = "OCSP stapling not enabled"
@@ -117,7 +119,7 @@ func (s *Scanner) checkCertificate(ctx context.Context, domain string) (*Certifi
 		})
 	}
 
-	if len(state.OCSPResponse) == 0 {
+	if !ocspStapled {
 		analysis.Warnings = append(analysis.Warnings, Finding{
 			Description: "OCSP stapling disabled",
 			Risk:        RiskLow,
@@ -169,6 +171,7 @@ func (s *Scanner) checkCertificate(ctx context.Context, domain string) (*Certifi
 	}
 
 	// Original key strength check
+	keyStrengthOK := true
 	switch pub := cert.PublicKey.(type) {
 	case *rsa.PublicKey:
 		keyBits := pub.N.BitLen()
@@ -179,6 +182,7 @@ func (s *Scanner) checkCertificate(ctx context.Context, domain string) (*Certifi
 				Evidence:    fmt.Sprintf("Key size: %d bits", keyBits),
 				Mitigation:  "Use at least 2048-bit RSA key",
 			})
+			keyStrengthOK = false
 			if analysis.Risk < RiskHigh {
 				analysis.Risk = RiskHigh
 			}
@@ -192,6 +196,7 @@ func (s *Scanner) checkCertificate(ctx context.Context, domain string) (*Certifi
 				Evidence:    fmt.Sprintf("Curve size: %d bits", curveBits),
 				Mitigation:  "Use at least a 256-bit ECDSA curve",
 			})
+			keyStrengthOK = false
 			if analysis.Risk < RiskHigh {
 				analysis.Risk = RiskHigh
 			}
@@ -202,8 +207,27 @@ func (s *Scanner) checkCertificate(ctx context.Context, domain string) (*Certifi
 
 	// Updated grade calculation
 	analysis.Grade = calculateGradeCertificate(analysis)
+	analysis.Checks = buildCertificateChecks(analysis, tlsVersions, tlsVerificationErr, ocspStapled, keyStrengthOK)
 
 	return analysis, nil
+}
+
+func buildCertificateChecks(analysis *CertificateAnalysis, tlsVersions []string, tlsVerificationErr error, ocspStapled bool, keyStrengthOK bool) []CertificateCheck {
+	expirationDays := time.Until(analysis.ValidUntil).Hours() / 24
+
+	checks := []CertificateCheck{
+		{Name: "TLS 1.2 supported", Passed: containsString(tlsVersions, "TLS 1.2")},
+		{Name: "TLS 1.3 supported", Passed: containsString(tlsVersions, "TLS 1.3")},
+		{Name: "TLS 1.0 disabled", Passed: !containsString(tlsVersions, "TLS 1.0")},
+		{Name: "TLS 1.1 disabled", Passed: !containsString(tlsVersions, "TLS 1.1")},
+		{Name: "Certificate Transparency SCTs", Passed: analysis.CTEnabled},
+		{Name: "OCSP stapling enabled", Passed: ocspStapled},
+		{Name: "Certificate not expired", Passed: expirationDays >= 0},
+		{Name: "Certificate expires >30 days", Passed: expirationDays >= 30},
+		{Name: "Public key strength", Passed: keyStrengthOK},
+		{Name: "TLS verification", Passed: tlsVerificationErr == nil},
+	}
+	return checks
 }
 
 func containsString(values []string, candidate string) bool {

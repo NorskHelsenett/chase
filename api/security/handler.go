@@ -46,6 +46,11 @@ type Screenshot struct {
 	MIMEType  string
 }
 
+type ReportStatusResponse struct {
+	Status ScanStatus     `json:"status"`
+	Report *SecurityReport `json:"report"`
+}
+
 func SecurityScanHandler(c *gin.Context) {
 	domain := c.Param("domain")
 	if domain == "" {
@@ -79,19 +84,7 @@ func SecurityScanHandler(c *gin.Context) {
 		return
 	case report := <-resultChan:
 		// Already in correct format, just add domain-specific context
-		if len(report.Headers.Passed) > 0 {
-			report.Headers.Passed = append(report.Headers.Passed,
-				fmt.Sprintf("Domain %s implements basic security measures", domain))
-		}
-
-		if len(report.Certificate.Findings) == 0 {
-			report.Certificate.Findings = append(report.Certificate.Findings, Finding{
-				Description: fmt.Sprintf("%s uses modern encryption standards", domain),
-				Risk:        RiskLow,
-				Evidence:    "Strong encryption detected in certificate",
-				Mitigation:  "No action needed",
-			})
-		}
+		augmentSecurityReport(domain, report)
 
 		if err := storeSecurityReport(report); err != nil {
 			c.JSON(500, gin.H{
@@ -107,6 +100,22 @@ func SecurityScanHandler(c *gin.Context) {
 			"error": "Scan timed out",
 		})
 		return
+	}
+}
+
+func augmentSecurityReport(domain string, report *SecurityReport) {
+	if len(report.Headers.Passed) > 0 {
+		report.Headers.Passed = append(report.Headers.Passed,
+			fmt.Sprintf("Domain %s implements basic security measures", domain))
+	}
+
+	if len(report.Certificate.Findings) == 0 {
+		report.Certificate.Findings = append(report.Certificate.Findings, Finding{
+			Description: fmt.Sprintf("%s uses modern encryption standards", domain),
+			Risk:        RiskLow,
+			Evidence:    "Strong encryption detected in certificate",
+			Mitigation:  "No action needed",
+		})
 	}
 }
 func ScreenshotHandler(c *gin.Context) {
@@ -189,6 +198,14 @@ func LastSecurityScanHandler(c *gin.Context) {
 		return
 	}
 
+	if status := getScanStatus(server.URL); status != nil && status.State == "running" {
+		c.JSON(202, ReportStatusResponse{
+			Status: *status,
+			Report: nil,
+		})
+		return
+	}
+
 	// Check if security scan exists
 	var securityReport SecurityReportRecord
 	err := db.Where("server_url = ?", server.URL).
@@ -197,9 +214,12 @@ func LastSecurityScanHandler(c *gin.Context) {
 
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			// No existing scan found - trigger new security scan
-			c.Params = append(c.Params, gin.Param{Key: "domain", Value: server.URL})
-			SecurityScanHandler(c)
+			status := markScanRunning(server.URL)
+			go runBackgroundScan(server.URL)
+			c.JSON(202, ReportStatusResponse{
+				Status: *status,
+				Report: nil,
+			})
 			return
 		}
 		// Database error
@@ -214,7 +234,34 @@ func LastSecurityScanHandler(c *gin.Context) {
 		return
 	}
 
-	c.JSON(200, report)
+	c.JSON(200, ReportStatusResponse{
+		Status: ScanStatus{
+			State:       "done",
+			CompletedAt: securityReport.CreatedAt,
+		},
+		Report: &report,
+	})
+}
+
+func runBackgroundScan(serverURL string) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer cancel()
+
+	scanner := NewScanner(0)
+	report, err := scanner.ScanWebsite(ctx, serverURL)
+	if err != nil {
+		markScanFailed(serverURL, err)
+		return
+	}
+
+	augmentSecurityReport(serverURL, report)
+
+	if err := storeSecurityReport(report); err != nil {
+		markScanFailed(serverURL, err)
+		return
+	}
+
+	clearScanStatus(serverURL)
 }
 
 var (

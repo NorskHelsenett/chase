@@ -305,12 +305,18 @@ func (s *Scanner) checkSecretExposure(ctx context.Context, domain string) (*Secr
 		if err != nil {
 			continue
 		}
-		body, scriptType, err := s.fetchServiceContent(ctx, absolute, "/.html", maxSecretScanBytes)
-		if err != nil || len(body) == 0 {
-			continue
-		}
-		if strings.Contains(strings.ToLower(scriptType), "html") || isLikelyHTML(body) {
-			continue
+		body, err := s.fetchDirectContent(ctx, absolute, maxSecretScanBytes)
+		if err != nil || len(body) == 0 || isLikelyHTML(body) {
+			if isJavaScriptAsset(absolute) {
+				continue
+			}
+			body, scriptType, serviceErr := s.fetchServiceContent(ctx, absolute, "/.html", maxSecretScanBytes)
+			if serviceErr != nil || len(body) == 0 {
+				continue
+			}
+			if strings.Contains(strings.ToLower(scriptType), "html") || isLikelyHTML(body) {
+				continue
+			}
 		}
 		source := absolute
 		scanSecretContent(string(body), source, analysis, seen, checkState)
@@ -319,6 +325,29 @@ func (s *Scanner) checkSecretExposure(ctx context.Context, domain string) (*Secr
 
 	analysis.Checks = buildSecretChecks(checkState)
 	return analysis, nil
+}
+
+func (s *Scanner) fetchDirectContent(ctx context.Context, targetURL string, limit int64) ([]byte, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, targetURL, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	resp, err := s.doRequest(s.client(true, false), req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("direct fetch returned status %d", resp.StatusCode)
+	}
+
+	content, err := io.ReadAll(io.LimitReader(resp.Body, limit))
+	if err != nil {
+		return nil, err
+	}
+	return content, nil
 }
 
 func (s *Scanner) fetchServiceContent(ctx context.Context, targetURL, suffix string, limit int64) ([]byte, string, error) {
@@ -415,6 +444,17 @@ func resolveScriptURL(baseURL, src string) (string, error) {
 		return "", err
 	}
 	return base.ResolveReference(ref).String(), nil
+}
+
+func isJavaScriptAsset(targetURL string) bool {
+	parsed, err := url.Parse(targetURL)
+	if err != nil {
+		return true
+	}
+	path := strings.ToLower(parsed.Path)
+	return strings.HasSuffix(path, ".js") ||
+		strings.HasSuffix(path, ".mjs") ||
+		strings.HasSuffix(path, ".cjs")
 }
 
 func scanSecretContent(content, source string, analysis *SecretExposureAnalysis, seen map[string]struct{}, checkState map[string]bool) {

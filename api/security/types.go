@@ -166,6 +166,7 @@ type CertificateAnalysis struct {
 	RevocationStatus   string    `json:"revocationStatus"`
 	NegotiatedProtocol string    `json:"alpnProtocol"`
 	PreferredCipher    string    `json:"preferredCipher"`
+	Checks             []CertificateCheck `json:"checks"`
 }
 
 type Cipher struct {
@@ -174,6 +175,11 @@ type Cipher struct {
 	Strength    int    `json:"strength"`
 	Forward     bool   `json:"forwardSecrecy"`
 	Weak        bool   `json:"weak"`
+}
+
+type CertificateCheck struct {
+	Name   string `json:"name"`
+	Passed bool   `json:"passed"`
 }
 
 type AdminPagesAnalysis struct {
@@ -213,10 +219,22 @@ type APIExposureAnalysis struct {
 	Endpoints []string  `json:"endpoints"`
 	Risk      RiskLevel `json:"risk"`
 	Findings  []Finding `json:"findings"`
+	Checks    []APIExposureCheck `json:"checks"`
+}
+
+type APIExposureCheck struct {
+	Path   string `json:"path"`
+	Passed bool   `json:"passed"`
 }
 
 type HealthProbeAnalysis struct {
 	Paths    map[string]int `json:"paths"`
 	Risk     RiskLevel      `json:"risk"`
 	Findings []Finding      `json:"findings"`
+	Checks   []HealthCheck  `json:"checks"`
+}
+
+type HealthCheck struct {
+	Path   string `json:"path"`
+	Passed bool   `json:"passed"`
 }

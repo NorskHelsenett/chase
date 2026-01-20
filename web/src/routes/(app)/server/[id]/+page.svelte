@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
+	import { onMount, onDestroy } from 'svelte';
 	import { goto } from '$app/navigation';
 	import type { Server } from '$lib/models';
 	import StatusIndicator from '$lib/components/server/StatusIndicator.svelte';
@@ -15,6 +15,8 @@
 	let isLoadingResults = true;
 	let error: string | null = null;
 	let searchResults = null;
+	let reportStatus: { state: string; startedAt: string; completedAt: string } | null = null;
+	let pollInterval: ReturnType<typeof setInterval> | null = null;
 
 	$: if (data.id) {
 		serverID = data.id;
@@ -25,12 +27,35 @@
 		fetchServerReport(serverID);
 	});
 
+	onDestroy(() => {
+		if (pollInterval) {
+			clearInterval(pollInterval);
+		}
+	});
+
 	async function fetchServerReport(id: number) {
 		try {
 			const response = await fetch(`/api/servers/${id}/report`);
-			if (!response.ok) throw new Error('Failed to fetch server data');
-			searchResults = await response.json();
-		} finally {
+			if (!response.ok) throw new Error('Failed to fetch report');
+
+			const data = await response.json();
+			reportStatus = data.status;
+
+			if (data.status?.state === 'done') {
+				searchResults = data.report;
+				isLoadingResults = false;
+				if (pollInterval) {
+					clearInterval(pollInterval);
+					pollInterval = null;
+				}
+			} else {
+				// Poll every 2 seconds while report is generating
+				if (!pollInterval) {
+					pollInterval = setInterval(() => fetchServerReport(id), 2000);
+				}
+			}
+		} catch (e) {
+			error = e instanceof Error ? e.message : 'Failed to fetch report';
 			isLoadingResults = false;
 		}
 	}
@@ -214,7 +239,11 @@
 	{#if isLoading || isLoadingResults}
 		<div class="loading-state">
 			<div class="loading-spinner"></div>
-			<span>Loading security report...</span>
+			{#if reportStatus?.state === 'running'}
+				<span>Generating security report...</span>
+			{:else}
+				<span>Loading security report...</span>
+			{/if}
 		</div>
 	{:else if error}
 		<div class="error-state">
