@@ -1,4 +1,4 @@
-name: Screenshot utility
+name: Screenshot utility (Go)
 
 on:
   push:
@@ -37,11 +37,12 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build and push Docker image
+      - name: Build and push Go Docker image
         uses: docker/build-push-action@v4
         id: build-docker-image
         with:
           context: screenshot-service
+          file: screenshot-service/Dockerfile
           platforms: linux/amd64,linux/arm64
           push: true
           tags: ${{ steps.meta.outputs.tags }}

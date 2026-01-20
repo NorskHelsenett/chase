@@ -29,7 +29,7 @@
 			const options = {
 				chart: {
 					type: 'area',
-					height: 400,
+					height: 350,
 					toolbar: {
 						show: false
 					},
@@ -44,41 +44,19 @@
 					}
 				},
 				stroke: {
-					width: 3, // Slightly thicker line
-					colors: ['#4ade80'],
+					width: 2,
+					colors: ['#22c55e'],
 					lineCap: 'round',
-					// Added curve smoothness
 					curve: 'smooth',
 					smoothing: 0.35
 				},
 				fill: {
-					type: 'gradient',
-					gradient: {
-						shadeIntensity: 1,
-						opacityFrom: 0.25, // Slightly increased opacity
-						opacityTo: 0.05, // Added slight opacity at the end
-						stops: [0, 95, 100],
-						colorStops: [
-							{
-								offset: 0,
-								color: '#4ade80',
-								opacity: 0.25
-							},
-							{
-								offset: 95,
-								color: '#4ade80',
-								opacity: 0.05
-							},
-							{
-								offset: 100,
-								color: '#4ade80',
-								opacity: 0
-							}
-						]
-					}
+					type: 'solid',
+					colors: ['#22c55e'],
+					opacity: 0.08
 				},
 				grid: {
-					borderColor: '#333',
+					borderColor: '#2b2b2b',
 					strokeDashArray: 3,
 					xaxis: {
 						lines: {
@@ -98,7 +76,7 @@
 					type: 'datetime',
 					labels: {
 						style: {
-							colors: '#666'
+							colors: '#9ca3af'
 						},
 						datetimeFormatter: {
 							hour: 'HH:mm'
@@ -126,7 +104,7 @@
 					tickAmount: 6,
 					labels: {
 						style: {
-							colors: '#666'
+							colors: '#9ca3af'
 						},
 						formatter: (value: number) => Math.round(value)
 					}
@@ -168,7 +146,7 @@
 				tickAmount: 6,
 				labels: {
 					style: {
-						colors: '#666'
+						colors: '#9ca3af'
 					}
 				}
 			},
@@ -192,36 +170,72 @@
 	});
 </script>
 
-<div class="bg-[#202020] rounded-lg p-4">
+<div class="graph-wrapper">
 	{#if browser}
 		<div bind:this={chartElement}></div>
 	{:else}
-		<div class="h-[400px] flex items-center justify-center text-gray-400">Loading chart...</div>
+		<div class="graph-loading">
+			<div class="loading-spinner"></div>
+			<span>Loading chart...</span>
+		</div>
 	{/if}
 </div>
 
 <style>
+	.graph-wrapper {
+		background: transparent;
+	}
+
+	.graph-loading {
+		height: 350px;
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		justify-content: center;
+		gap: 1rem;
+		color: #9ca3af;
+		font-size: 0.875rem;
+	}
+
+	.loading-spinner {
+		width: 1.5rem;
+		height: 1.5rem;
+		border: 2px solid #2b2b2b;
+		border-top-color: #22c55e;
+		border-radius: 50%;
+		animation: spin 0.8s linear infinite;
+	}
+
+	@keyframes spin {
+		to { transform: rotate(360deg); }
+	}
+
 	:global(.apexcharts-tooltip-box) {
-		background: #2a2a2a !important;
-		padding: 8px 12px !important;
-		border-radius: 6px;
-		box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25) !important;
+		background: #2b2b2b !important;
+		padding: 0.5rem 0.75rem !important;
+		border-radius: 0.375rem;
 	}
 
 	:global(.apexcharts-tooltip-box .timestamp) {
-		color: #999;
-		font-size: 0.9em;
-		margin-bottom: 4px;
+		color: #9ca3af;
+		font-size: 0.75rem;
+		margin-bottom: 0.25rem;
+	}
+
+	:global(.apexcharts-tooltip-box .value) {
+		color: #22c55e;
+		font-weight: 600;
+		font-size: 0.875rem;
 	}
 
 	:global(.apexcharts-tooltip-box .average) {
-		color: #4ade80;
+		color: #22c55e;
 		font-weight: 500;
 		margin-bottom: 2px;
 	}
 
 	:global(.apexcharts-tooltip-box .range) {
-		color: #888;
-		font-size: 0.9em;
+		color: #9ca3af;
+		font-size: 0.75rem;
 	}
 </style>

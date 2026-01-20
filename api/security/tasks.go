@@ -40,6 +40,7 @@ func defaultScanTasks() []ScanTask {
 		newInfrastructureTask(),
 		newDNSTask(),
 		newFileExposureTask(),
+		newSecretExposureTask(),
 		newAPITask(),
 		newHealthTask(),
 	}

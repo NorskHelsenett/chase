@@ -1,5 +1,13 @@
-// utils.go
 package security
+
+import "strings"
+
+func isLikelyHTML(content []byte) bool {
+	lower := strings.ToLower(string(content))
+	return strings.Contains(lower, "<!doctype html") ||
+		strings.Contains(lower, "<html") ||
+		strings.Contains(lower, "<head") && strings.Contains(lower, "<body")
+}
 
 func calculateGrade(score int) string {
 	switch {

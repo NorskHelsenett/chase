@@ -3,6 +3,7 @@
 	import type { Server } from '$lib/models';
 	import { goto } from '$app/navigation';
 	import { fade, scale } from 'svelte/transition';
+	import { Monitor } from 'lucide-svelte';
 
 	export let sites: Server[] = [];
 
@@ -17,7 +18,6 @@
 		| null = null;
 	let sortDirection: 'asc' | 'desc' = 'asc';
 
-	// Helper function to convert grade to numeric value for sorting
 	function gradeToNumber(grade: string): number {
 		const grades = {
 			'A+': 7,
@@ -32,7 +32,6 @@
 		return grades[grade as keyof typeof grades] || 0;
 	}
 
-	// Helper function to convert risk level to numeric value
 	function riskToNumber(risk: string): number {
 		const risks = {
 			critical: 4,
@@ -44,7 +43,6 @@
 		return risks[risk.toLowerCase() as keyof typeof risks] || 0;
 	}
 
-	// Helper function to calculate uptime percentage from ping results
 	function getUptimePercentage(server: Server): number {
 		const pings = server.ping_results || [];
 		if (pings.length === 0) return 0;
@@ -109,14 +107,12 @@
 		const sortedPings = [...(server.ping_results || [])].sort(
 			(a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
 		);
-		// Match your row logic
 		return !sortedPings.length || sortedPings[0]?.error || sortedPings[0]?.status_code >= 400
 			? false
 			: true;
 	}
 
 	function getLatestGrade(server: Server, type: 'header' | 'cert'): string {
-		// First try the new fields, fall back to security object if not available
 		if (type === 'header') {
 			return server.header_score || server.security?.headerRisk || '';
 		} else {
@@ -125,113 +121,63 @@
 	}
 
 	function getLatestRisk(server: Server, type: 'adminrisk' | 'apirisk'): string {
-		// First try the new fields, fall back to security object if not available
 		if (type === 'adminrisk') {
-			// Convert risk levels to lowercase for consistent display
 			return server.admin_risk?.toLowerCase() || server.security?.adminRisk || '';
 		} else {
 			return server.api_risk?.toLowerCase() || server.security?.apiRisk || '';
 		}
 	}
+
+	function getSortIndicator(field: typeof sortField): string {
+		if (sortField !== field) return '↕';
+		return sortDirection === 'asc' ? '↑' : '↓';
+	}
 </script>
 
-<div class="bg-[#202020] rounded-lg p-4">
+<div class="table-card">
 	{#if sites.length === 0}
-		<div class="col-span-full py-16 text-center">
-			<div
-				in:scale={{ duration: 400 }}
-				class="mx-auto mb-5 w-16 h-16 rounded-full bg-green-500/10 flex items-center justify-center"
-			>
-				<svg
-					xmlns="http://www.w3.org/2000/svg"
-					width="32"
-					height="32"
-					viewBox="0 0 24 24"
-					fill="none"
-					stroke="currentColor"
-					stroke-width="1.5"
-					stroke-linecap="round"
-					stroke-linejoin="round"
-					class="text-green-500/70"
-				>
-					<rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
-					<line x1="8" y1="21" x2="16" y2="21"></line>
-					<line x1="12" y1="17" x2="12" y2="21"></line>
-				</svg>
+		<div class="empty-state">
+			<div class="empty-icon" in:scale={{ duration: 400 }}>
+				<Monitor size={32} />
 			</div>
-			<p in:fade={{ duration: 300, delay: 100 }} class="text-lg font-medium text-green-400 mb-2">
+			<p class="empty-title" in:fade={{ duration: 300, delay: 100 }}>
 				No servers found
 			</p>
-			<p in:fade={{ duration: 300, delay: 200 }} class="text-sm text-gray-400 max-w-md mx-auto">
+			<p class="empty-description" in:fade={{ duration: 300, delay: 200 }}>
 				Try adjusting your search filters or add a new server to monitor
 			</p>
 		</div>
 	{:else}
-		<table class="w-full border-spacing-4">
+		<table class="monitor-table">
 			<thead>
-				<tr class="text-gray-400 font-medium">
-					<th
-						class="text-left px-2 font-medium cursor-pointer hover:text-gray-200 transition-colors group"
-						on:click={() => toggleSort('status')}
-					>
-						Status
-						<span class="ml-1 opacity-0 group-hover:opacity-100 transition-opacity">
-							{sortField === 'status' ? (sortDirection === 'asc' ? '↑' : '↓') : '↕'}
-						</span>
+				<tr>
+					<th class="sortable" on:click={() => toggleSort('status')}>
+						<span>Status</span>
+						<span class="sort-indicator">{getSortIndicator('status')}</span>
 					</th>
-					<th
-						class="text-left font-medium w-[30%] cursor-pointer hover:text-gray-200 transition-colors group"
-						on:click={() => toggleSort('url')}
-					>
-						Domain
-						<span class="ml-1 opacity-0 group-hover:opacity-100 transition-opacity">
-							{sortField === 'url' ? (sortDirection === 'asc' ? '↑' : '↓') : '↕'}
-						</span>
+					<th class="sortable col-domain" on:click={() => toggleSort('url')}>
+						<span>Domain</span>
+						<span class="sort-indicator">{getSortIndicator('url')}</span>
 					</th>
-					<th
-						class="text-left font-medium cursor-pointer hover:text-gray-200 transition-colors group"
-						on:click={() => toggleSort('header')}
-					>
-						Header
-						<span class="ml-1 opacity-0 group-hover:opacity-100 transition-opacity">
-							{sortField === 'header' ? (sortDirection === 'asc' ? '↑' : '↓') : '↕'}
-						</span>
+					<th class="sortable" on:click={() => toggleSort('header')}>
+						<span>Header</span>
+						<span class="sort-indicator">{getSortIndicator('header')}</span>
 					</th>
-					<th
-						class="text-left font-medium cursor-pointer hover:text-gray-200 transition-colors group"
-						on:click={() => toggleSort('cert')}
-					>
-						Cert
-						<span class="ml-1 opacity-0 group-hover:opacity-100 transition-opacity">
-							{sortField === 'cert' ? (sortDirection === 'asc' ? '↑' : '↓') : '↕'}
-						</span>
+					<th class="sortable" on:click={() => toggleSort('cert')}>
+						<span>Cert</span>
+						<span class="sort-indicator">{getSortIndicator('cert')}</span>
 					</th>
-					<th
-						class="text-left font-medium cursor-pointer hover:text-gray-200 transition-colors group"
-						on:click={() => toggleSort('adminRisk')}
-					>
-						Admin Risk
-						<span class="ml-1 opacity-0 group-hover:opacity-100 transition-opacity">
-							{sortField === 'adminRisk' ? (sortDirection === 'asc' ? '↑' : '↓') : '↕'}
-						</span>
+					<th class="sortable" on:click={() => toggleSort('adminRisk')}>
+						<span>Admin Risk</span>
+						<span class="sort-indicator">{getSortIndicator('adminRisk')}</span>
 					</th>
-					<th
-						class="text-left font-medium cursor-pointer hover:text-gray-200 transition-colors group"
-						on:click={() => toggleSort('apiRisk')}
-					>
-						API Risk
-						<span class="ml-1 opacity-0 group-hover:opacity-100 transition-opacity">
-							{sortField === 'apiRisk' ? (sortDirection === 'asc' ? '↑' : '↓') : '↕'}
-						</span>
+					<th class="sortable" on:click={() => toggleSort('apiRisk')}>
+						<span>API Risk</span>
+						<span class="sort-indicator">{getSortIndicator('apiRisk')}</span>
 					</th>
-					<th
-						class="text-left font-medium cursor-pointer hover:text-gray-200 transition-colors group"
-						on:click={() => toggleSort('uptime')}
-					>
-						Uptime
-						<span class="ml-1 opacity-0 group-hover:opacity-100 transition-opacity">
-							{sortField === 'uptime' ? (sortDirection === 'asc' ? '↑' : '↓') : '↕'}
-						</span>
+					<th class="sortable" on:click={() => toggleSort('uptime')}>
+						<span>Uptime</span>
+						<span class="sort-indicator">{getSortIndicator('uptime')}</span>
 					</th>
 				</tr>
 			</thead>
@@ -239,7 +185,7 @@
 				{#each sites as site}
 					<tr
 						data-server-id={site.ID}
-						class="group transition-colors duration-200 ease-in-out cursor-pointer"
+						class="clickable-row"
 						on:click={() => goto(`/server/${site.ID}`)}
 					>
 						<MonitorRow server={site} hover={true} />
@@ -249,3 +195,90 @@
 		</table>
 	{/if}
 </div>
+
+<style>
+	.table-card {
+		background: #202020;
+		border-radius: 0.5rem;
+		padding: 1rem;
+	}
+
+	.empty-state {
+		padding: 4rem 1rem;
+		text-align: center;
+	}
+
+	.empty-icon {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 4rem;
+		height: 4rem;
+		margin: 0 auto 1.25rem;
+		border-radius: 50%;
+		background: rgba(34, 197, 94, 0.1);
+		color: rgba(34, 197, 94, 0.7);
+	}
+
+	.empty-title {
+		font-size: 1.125rem;
+		font-weight: 500;
+		color: #4ade80;
+		margin-bottom: 0.5rem;
+	}
+
+	.empty-description {
+		font-size: 0.875rem;
+		color: #9ca3af;
+		max-width: 28rem;
+		margin: 0 auto;
+	}
+
+	.monitor-table {
+		width: 100%;
+		border-collapse: separate;
+		border-spacing: 0 0.25rem;
+	}
+
+	.monitor-table thead tr {
+		color: #9ca3af;
+	}
+
+	.monitor-table th {
+		text-align: left;
+		padding: 0.5rem;
+		font-size: 0.75rem;
+		font-weight: 500;
+		text-transform: uppercase;
+		letter-spacing: 0.025em;
+	}
+
+	.monitor-table th.sortable {
+		cursor: pointer;
+		transition: color 0.15s ease;
+		user-select: none;
+	}
+
+	.monitor-table th.sortable:hover {
+		color: #e5e7eb;
+	}
+
+	.monitor-table th.col-domain {
+		width: 30%;
+	}
+
+	.sort-indicator {
+		margin-left: 0.25rem;
+		opacity: 0;
+		transition: opacity 0.15s ease;
+	}
+
+	.monitor-table th.sortable:hover .sort-indicator {
+		opacity: 1;
+	}
+
+	.clickable-row {
+		cursor: pointer;
+		transition: background-color 0.15s ease;
+	}
+</style>

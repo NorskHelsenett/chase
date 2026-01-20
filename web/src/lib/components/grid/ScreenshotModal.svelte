@@ -506,20 +506,29 @@
 															)}">{currentReport.headers?.score || 'N/A'}</span
 														>
 													</div>
-
 													<div class="flex items-center gap-2 p-3 bg-[#1a1a1a]">
-														<Scale size={18} class="text-green-400" />
+														<svg
+															viewBox="0 0 24 24"
+															fill="none"
+															stroke="currentColor"
+															stroke-width="2"
+															class="text-green-400 w-[18px] h-[18px]"
+															><path
+																d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"
+															></path></svg
+														>
 														<span class="text-sm font-medium">Certificate</span>
 													</div>
 													<div class="p-3 bg-[#1a1a1a] flex justify-end items-center">
-														<span
-															in:scale={{ duration: 200, delay: 250 }}
-															class="font-medium px-2 py-1 rounded-md bg-gray-800/80 shadow-inner {getScoreColor(
-																currentReport.certificate?.grade
-															)}">{currentReport.certificate?.grade || 'N/A'}</span
-														>
+														<div class="rounded-md bg-gray-800/80 shadow-inner p-1">
+															<span
+																in:scale={{ duration: 200, delay: 250 }}
+																class="font-medium px-2 py-1 {getScoreColor(
+																	currentReport.certificate?.grade
+																)}">{currentReport.certificate?.grade || 'N/A'}</span
+															>
+														</div>
 													</div>
-
 													<div class="flex items-center gap-2 p-3 bg-[#1a1a1a]">
 														<ServerIcon size={18} class="text-green-400" />
 														<span class="text-sm font-medium">Infrastructure</span>
@@ -542,7 +551,6 @@
 															{getStatusCode()}
 														</span>
 													</div>
-
 													<div class="flex items-center gap-2 p-3 bg-[#1a1a1a]">
 														<FileText size={18} class="text-green-400" />
 														<span class="text-sm font-medium">robots.txt</span>

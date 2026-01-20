@@ -1,52 +1,57 @@
 {
-  "version": "0.2.0",
-  "configurations": [
-    {
-        "command": "npm run dev",
-        "name": "Run npm debug",
-        "request": "launch",
-        "type": "node-terminal",
-        "cwd": "${workspaceFolder}/web",
-    },
-      {
-          "name": "Go Debug",
-          "type": "go",
-          "request": "launch",
-          "mode": "debug",
-          "program": "${workspaceFolder}/api",
-          "env": {
-              "DATA_FOLDER": "${workspaceFolder}/.debug/data",
-              "OIDC_REDIRECT_URL":"http://localhost:5173/api/callback",
-              "OIDC_ISSUER_URL": "http://host.containers.internal:9999",
-              "OIDC_CLIENT_ID": "CHASE",
-              "OIDC_CLIENT_SECRET": "chase-secret"
-          },
-          "envFile": "${workspaceFolder}/api/.env",
-        //   "preLaunchTask": "ensure-debug-dir",
-          "args": [],
-          "showLog": true,
-          "trace": "verbose",
-          "buildFlags": "-tags=debug"
-      },
-      {
-          "name": "Firefox: Debug SvelteKit",
-          "type": "firefox",
-          "request": "launch",
-          "reAttach": true,
-          "url": "http://localhost:5173",
-          "webRoot": "${workspaceFolder}/web",
-          "pathMappings": [
-              {
-                  "url": "webpack:///src",
-                  "path": "${workspaceFolder}/web/src"
-              }
-          ]
-      }
-  ],
-  "compounds": [
-      {
-          "name": "Full Stack: Go + SvelteKit",
-          "configurations": ["Go Debug", "Run npm debug", "Firefox: Debug SvelteKit"]
-      }
-  ]
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "command": "npm run dev",
+            "name": "Run npm debug",
+            "request": "launch",
+            "type": "node-terminal",
+            "cwd": "${workspaceFolder}/web",
+        },
+        {
+            "name": "Go Debug",
+            "type": "go",
+            "request": "launch",
+            "mode": "debug",
+            "program": "${workspaceFolder}/api",
+            "env": {
+                "DATA_FOLDER": "${workspaceFolder}/.debug/data",
+                "OIDC_REDIRECT_URL": "http://localhost:5173/api/callback",
+                "OIDC_ISSUER_URL": "http://host.containers.internal:9999",
+                "OIDC_CLIENT_ID": "CHASE",
+                "OIDC_CLIENT_SECRET": "chase-secret",
+                "SCREENSHOT_SERVICE_URL": "http://host.containers.internal:11235",
+            },
+            "envFile": "${workspaceFolder}/api/.env",
+            //   "preLaunchTask": "ensure-debug-dir",
+            "args": [],
+            "showLog": true,
+            "trace": "verbose",
+            "buildFlags": "-tags=debug"
+        },
+        {
+            "name": "Firefox: Debug SvelteKit",
+            "type": "firefox",
+            "request": "launch",
+            "reAttach": true,
+            "url": "http://localhost:5173",
+            "webRoot": "${workspaceFolder}/web",
+            "pathMappings": [
+                {
+                    "url": "webpack:///src",
+                    "path": "${workspaceFolder}/web/src"
+                }
+            ]
+        }
+    ],
+    "compounds": [
+        {
+            "name": "Full Stack: Go + SvelteKit",
+            "configurations": [
+                "Go Debug",
+                "Run npm debug",
+                "Firefox: Debug SvelteKit"
+            ]
+        }
+    ]
 }

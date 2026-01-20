@@ -19,6 +19,8 @@ services:
     volumes:
       - app_data:/data
     user: "101:101"
+    extra_hosts:
+      - "host.containers.internal:host-gateway"
 
   screenshot:
     build:
@@ -37,6 +39,8 @@ services:
         reservations:
           memory: 512M
     user: "1001:1001"
+    extra_hosts:
+      - "host.containers.internal:host-gateway"
     healthcheck:
       test: ["CMD", "wget", "--spider", "http://localhost:8080/healthz"]
       interval: 30s

@@ -141,26 +141,25 @@ const pingSuccessful = (ping: PingResult) => ping.status_code > 0 && ping.status
 	});
 </script>
 
-<div class="flex justify-between items-center bg-[#202020] rounded-lg p-4">
-	<div class="flex items-center gap-2">
-		<div class="flex gap-1">
-			{#if aggregatedDays.length < 50}
-				{#each Array(50 - aggregatedDays.length) as _}
-					<div class="w-2 h-6 rounded-sm bg-green-200/20"></div>
-				{/each}
-			{/if}
-			{#each aggregatedDays as day}
-				<div
-					class={`w-2 h-6 rounded-sm transition-colors duration-200 cursor-pointer ${getStatusColor(day.uptime)}`}
-					on:mouseenter={(e) => showTooltip(e, day)}
-					on:mouseleave={hideTooltip}
-				></div>
+<div class="status-container">
+	<div class="status-bars">
+		{#if aggregatedDays.length < 50}
+			{#each Array(50 - aggregatedDays.length) as _}
+				<div class="status-bar empty"></div>
 			{/each}
-		</div>
+		{/if}
+		{#each aggregatedDays as day}
+			<div
+				class="status-bar {getStatusColor(day.uptime)}"
+				on:mouseenter={(e) => showTooltip(e, day)}
+				on:mouseleave={hideTooltip}
+			></div>
+		{/each}
 	</div>
 
-	<div class={`px-3 py-1 mx-2 ${getStatusClasses(status)} rounded-full text-sm font-medium`}>
-		{status.toUpperCase()}
+	<div class="status-indicator {status}">
+		<span class="status-dot"></span>
+		<span class="status-text">{status === 'up' ? 'Operational' : 'Degraded'}</span>
 	</div>
 </div>
 
@@ -169,55 +168,107 @@ const pingSuccessful = (ping: PingResult) => ping.status_code > 0 && ping.status
 </div>
 
 <style>
-	@keyframes pulse-ring {
-		0% {
-			transform: scale(0.95);
-			box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.7);
-		}
-		70% {
-			transform: scale(1);
-			box-shadow: 0 0 0 10px rgba(34, 197, 94, 0);
-		}
-		100% {
-			transform: scale(0.95);
-			box-shadow: 0 0 0 0 rgba(34, 197, 94, 0);
-		}
+	.status-container {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 1rem;
+		padding: 0.5rem 0;
 	}
 
-	.status-pulse {
-		position: relative;
-		isolation: isolate;
-		transform-origin: center;
-		will-change: transform;
+	.status-bars {
+		display: flex;
+		gap: 3px;
+		flex: 1;
 	}
 
-	.status-pulse::before {
-		content: '';
-		position: absolute;
-		inset: -4px;
-		border-radius: 9999px;
-		background: rgba(34, 197, 94, 0.7);
-		animation: pulse-ring 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
-		z-index: -1;
+	.status-bar {
+		width: 100%;
+		max-width: 8px;
+		height: 24px;
+		border-radius: 2px;
+		transition: opacity 0.15s ease;
+		cursor: pointer;
+	}
+
+	.status-bar:hover {
+		opacity: 0.75;
+	}
+
+	.status-bar.empty {
+		background: #2b2b2b;
+	}
+
+	.status-bar.bg-green-400 {
+		background: #22c55e;
+	}
+
+	.status-bar.bg-green-500 {
+		background: #16a34a;
+	}
+
+	.status-bar.bg-green-700 {
+		background: #15803d;
+	}
+
+	.status-bar.bg-red-600 {
+		background: #dc2626;
+	}
+
+	.status-indicator {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		padding: 0.375rem 0.75rem;
+		border-radius: 0.25rem;
+		font-size: 0.6875rem;
+		font-weight: 500;
+		text-transform: uppercase;
+		letter-spacing: 0.03em;
+		white-space: nowrap;
+		background: #2b2b2b;
+	}
+
+	.status-indicator.up {
+		color: #22c55e;
+	}
+
+	.status-indicator.down {
+		color: #ef4444;
+	}
+
+	.status-dot {
+		width: 6px;
+		height: 6px;
+		border-radius: 50%;
+		background: currentColor;
+	}
+
+	.status-indicator.up .status-dot {
+		animation: pulse-dot 2s ease-in-out infinite;
+	}
+
+	@keyframes pulse-dot {
+		0%, 100% { opacity: 1; }
+		50% { opacity: 0.4; }
 	}
 
 	.tooltip {
 		display: none;
 		position: absolute;
-		background: #2a2a2a;
-		color: #999;
-		padding: 8px 12px;
-		border-radius: 6px;
-		font-size: 0.9em;
+		background: #2b2b2b;
+		color: #d1d5db;
+		padding: 0.5rem 0.75rem;
+		border-radius: 0.375rem;
+		font-size: 0.75rem;
 		white-space: pre-line;
 		max-width: 200px;
 		z-index: 50;
-		box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
 	}
 
 	.tooltip-arrow {
 		position: absolute;
-		background: #2a2a2a;
+		background: #2b2b2b;
 		width: 8px;
 		height: 8px;
 		transform: rotate(45deg);

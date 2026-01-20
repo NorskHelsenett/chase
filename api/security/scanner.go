@@ -14,6 +14,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -330,7 +331,15 @@ func (r *SecurityReport) addError(component string, err error) {
 	}
 	r.ScanErrors = append(r.ScanErrors, ScanError{
 		Component: component,
-		Error:     err.Error(),
+		Error:     sanitizeScanError(err.Error()),
 		Timestamp: time.Now(),
 	})
+}
+
+func sanitizeScanError(message string) string {
+	if message == "" {
+		return message
+	}
+	re := regexp.MustCompile(`https?://[^\s"']+`)
+	return re.ReplaceAllString(message, "[REDACTED_URL]")
 }

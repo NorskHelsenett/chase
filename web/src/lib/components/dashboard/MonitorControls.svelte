@@ -3,7 +3,7 @@
 	import { createEventDispatcher } from 'svelte';
 	import ServerDialog from '../ServerDialog.svelte';
 	import CustomSelect from '../ui/CustomSelect.svelte';
-	import { Filter, Download } from 'lucide-svelte';
+	import { Filter, Download, X, RefreshCw, Plus } from 'lucide-svelte';
 
 	const dispatch = createEventDispatcher();
 
@@ -58,47 +58,33 @@
 	}
 </script>
 
-<div class="bg-[#202020] rounded-lg p-4 mb-4">
-	<div class="flex items-center justify-between gap-4">
+<div class="controls-card">
+	<div class="controls-row">
 		<!-- Search -->
-		<div class="flex-1 relative">
+		<div class="search-wrapper">
 			<input
 				type="text"
 				bind:value={searchQuery}
 				on:input={handleSearch}
 				placeholder="Search domains..."
-				class="w-full px-4 py-2 bg-[#2b2b2b] rounded-lg text-gray-200 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-green-500"
+				class="search-input"
 			/>
 			{#if searchQuery}
 				<button
-					class="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-200 transition-colors p-1"
+					class="search-clear"
 					on:click={() => {
 						searchQuery = '';
 						handleSearch();
 					}}
 					aria-label="Clear search"
 				>
-					<svg
-						xmlns="http://www.w3.org/2000/svg"
-						width="16"
-						height="16"
-						viewBox="0 0 24 24"
-						fill="none"
-						stroke="currentColor"
-						stroke-width="2"
-						stroke-linecap="round"
-						stroke-linejoin="round"
-					>
-						<circle cx="12" cy="12" r="10" />
-						<line x1="15" y1="9" x2="9" y2="15" />
-						<line x1="9" y1="9" x2="15" y2="15" />
-					</svg>
+					<X size={14} />
 				</button>
 			{/if}
 		</div>
 
 		<!-- Filter dropdown -->
-		<div class="relative flex items-center z-10">
+		<div class="filter-wrapper">
 			<CustomSelect
 				bind:value={filterStatus}
 				icon={Filter}
@@ -129,51 +115,32 @@
 		</div>
 
 		<!-- Control buttons -->
-		<div class="flex gap-3">
+		<div class="button-group">
 			<button
 				on:click={() => dispatch('export')}
 				disabled={isLoading}
-				class="px-4 py-2 bg-[#2b2b2b] hover:bg-[#333] rounded-lg text-gray-200 flex items-center gap-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+				class="btn btn-secondary icon-only"
 				title="Export current view as CSV"
 			>
-				<Download class="w-4 h-4" />
+				<Download size={16} />
 			</button>
 
 			<button
 				on:click={handleRefresh}
 				disabled={isLoading}
-				class="px-4 py-2 bg-[#2b2b2b] hover:bg-[#333] rounded-lg text-gray-200 flex items-center gap-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+				class="btn btn-secondary"
 			>
-				<svg
-					class="w-4 h-4 {isLoading ? 'animate-spin' : ''}"
-					fill="none"
-					stroke="currentColor"
-					viewBox="0 0 24 24"
-				>
-					<path
-						stroke-linecap="round"
-						stroke-linejoin="round"
-						stroke-width="2"
-						d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-					/>
-				</svg>
-				{isLoading ? 'Refreshing...' : 'Refresh'}
+				<RefreshCw size={16} class={isLoading ? 'spinning' : ''} />
+				<span>{isLoading ? 'Refreshing...' : 'Refresh'}</span>
 			</button>
 
 			<button
 				on:click={() => (showDialog = true)}
 				disabled={isLoading}
-				class="px-4 py-2 bg-green-600 hover:bg-green-700 rounded-lg text-white flex items-center gap-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+				class="btn btn-primary"
 			>
-				<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-					<path
-						stroke-linecap="round"
-						stroke-linejoin="round"
-						stroke-width="2"
-						d="M12 4v16m8-8H4"
-					/>
-				</svg>
-				Add Server
+				<Plus size={16} />
+				<span>Add Server</span>
 			</button>
 		</div>
 	</div>
@@ -187,3 +154,143 @@
 	on:submit={handleDialogSubmit}
 	on:close={onClose}
 />
+
+<style>
+	.controls-card {
+		background: #202020;
+		border-radius: 0.5rem;
+		padding: 1rem;
+		margin-bottom: 1rem;
+	}
+
+	.controls-row {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 1rem;
+	}
+
+	.search-wrapper {
+		flex: 1;
+		position: relative;
+	}
+
+	.search-input {
+		width: 100%;
+		padding: 0.5rem 1rem;
+		background: #2b2b2b;
+		border: none;
+		border-radius: 0.5rem;
+		color: #e5e7eb;
+		font-size: 0.875rem;
+		transition: box-shadow 0.15s ease;
+	}
+
+	.search-input::placeholder {
+		color: #9ca3af;
+	}
+
+	.search-input:focus {
+		outline: none;
+		box-shadow: 0 0 0 2px #22c55e;
+	}
+
+	.search-clear {
+		position: absolute;
+		right: 0.5rem;
+		top: 50%;
+		transform: translateY(-50%);
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 1.5rem;
+		height: 1.5rem;
+		background: transparent;
+		border: none;
+		border-radius: 0.25rem;
+		color: #9ca3af;
+		cursor: pointer;
+		transition: color 0.15s ease;
+	}
+
+	.search-clear:hover {
+		color: #e5e7eb;
+	}
+
+	.filter-wrapper {
+		position: relative;
+		display: flex;
+		align-items: center;
+		z-index: 10;
+	}
+
+	.button-group {
+		display: flex;
+		gap: 0.75rem;
+	}
+
+	.btn {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		padding: 0.5rem 1rem;
+		border: none;
+		border-radius: 0.5rem;
+		font-size: 0.875rem;
+		font-weight: 500;
+		cursor: pointer;
+		transition: background-color 0.15s ease, opacity 0.15s ease;
+	}
+
+	.btn:disabled {
+		opacity: 0.5;
+		cursor: not-allowed;
+	}
+
+	.btn-secondary {
+		background: #2b2b2b;
+		color: #e5e7eb;
+	}
+
+	.btn-secondary:hover:not(:disabled) {
+		background: #333;
+	}
+
+	.btn-primary {
+		background: #16a34a;
+		color: white;
+	}
+
+	.btn-primary:hover:not(:disabled) {
+		background: #15803d;
+	}
+
+	.btn.icon-only {
+		padding: 0.5rem;
+	}
+
+	:global(.spinning) {
+		animation: spin 1s linear infinite;
+	}
+
+	@keyframes spin {
+		from { transform: rotate(0deg); }
+		to { transform: rotate(360deg); }
+	}
+
+	@media (max-width: 768px) {
+		.controls-row {
+			flex-wrap: wrap;
+		}
+
+		.search-wrapper {
+			width: 100%;
+			flex: none;
+		}
+
+		.button-group {
+			width: 100%;
+			justify-content: flex-end;
+		}
+	}
+</style>

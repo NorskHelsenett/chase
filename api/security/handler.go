@@ -1,8 +1,7 @@
 package security
 
 import (
-	"bytes"
-	"encoding/base64"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -47,11 +46,9 @@ type Screenshot struct {
 	MIMEType  string
 }
 
-type screenshotResponse struct {
-	Success   bool   `json:"success"`
-	Image     string `json:"image"`      // base64 encoded
-	ImageType string `json:"image_type"` // e.g., "image/png"
-	Error     string `json:"error,omitempty"`
+type ReportStatusResponse struct {
+	Status ScanStatus     `json:"status"`
+	Report *SecurityReport `json:"report"`
 }
 
 func SecurityScanHandler(c *gin.Context) {
@@ -87,19 +84,7 @@ func SecurityScanHandler(c *gin.Context) {
 		return
 	case report := <-resultChan:
 		// Already in correct format, just add domain-specific context
-		if len(report.Headers.Passed) > 0 {
-			report.Headers.Passed = append(report.Headers.Passed,
-				fmt.Sprintf("Domain %s implements basic security measures", domain))
-		}
-
-		if len(report.Certificate.Findings) == 0 {
-			report.Certificate.Findings = append(report.Certificate.Findings, Finding{
-				Description: fmt.Sprintf("%s uses modern encryption standards", domain),
-				Risk:        RiskLow,
-				Evidence:    "Strong encryption detected in certificate",
-				Mitigation:  "No action needed",
-			})
-		}
+		augmentSecurityReport(domain, report)
 
 		if err := storeSecurityReport(report); err != nil {
 			c.JSON(500, gin.H{
@@ -115,6 +100,22 @@ func SecurityScanHandler(c *gin.Context) {
 			"error": "Scan timed out",
 		})
 		return
+	}
+}
+
+func augmentSecurityReport(domain string, report *SecurityReport) {
+	if len(report.Headers.Passed) > 0 {
+		report.Headers.Passed = append(report.Headers.Passed,
+			fmt.Sprintf("Domain %s implements basic security measures", domain))
+	}
+
+	if len(report.Certificate.Findings) == 0 {
+		report.Certificate.Findings = append(report.Certificate.Findings, Finding{
+			Description: fmt.Sprintf("%s uses modern encryption standards", domain),
+			Risk:        RiskLow,
+			Evidence:    "Strong encryption detected in certificate",
+			Mitigation:  "No action needed",
+		})
 	}
 }
 func ScreenshotHandler(c *gin.Context) {
@@ -197,6 +198,14 @@ func LastSecurityScanHandler(c *gin.Context) {
 		return
 	}
 
+	if status := getScanStatus(server.URL); status != nil && status.State == "running" {
+		c.JSON(202, ReportStatusResponse{
+			Status: *status,
+			Report: nil,
+		})
+		return
+	}
+
 	// Check if security scan exists
 	var securityReport SecurityReportRecord
 	err := db.Where("server_url = ?", server.URL).
@@ -205,9 +214,12 @@ func LastSecurityScanHandler(c *gin.Context) {
 
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			// No existing scan found - trigger new security scan
-			c.Params = append(c.Params, gin.Param{Key: "domain", Value: server.URL})
-			SecurityScanHandler(c)
+			status := markScanRunning(server.URL)
+			go runBackgroundScan(server.URL)
+			c.JSON(202, ReportStatusResponse{
+				Status: *status,
+				Report: nil,
+			})
 			return
 		}
 		// Database error
@@ -222,7 +234,34 @@ func LastSecurityScanHandler(c *gin.Context) {
 		return
 	}
 
-	c.JSON(200, report)
+	c.JSON(200, ReportStatusResponse{
+		Status: ScanStatus{
+			State:       "done",
+			CompletedAt: securityReport.CreatedAt,
+		},
+		Report: &report,
+	})
+}
+
+func runBackgroundScan(serverURL string) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer cancel()
+
+	scanner := NewScanner(0)
+	report, err := scanner.ScanWebsite(ctx, serverURL)
+	if err != nil {
+		markScanFailed(serverURL, err)
+		return
+	}
+
+	augmentSecurityReport(serverURL, report)
+
+	if err := storeSecurityReport(report); err != nil {
+		markScanFailed(serverURL, err)
+		return
+	}
+
+	clearScanStatus(serverURL)
 }
 
 var (
@@ -265,21 +304,14 @@ func captureAndSendScreenshot(c *gin.Context, domain string, fullSize bool, wait
 		return err
 	}
 
-	// Create request body with correct parameter name 'fullpage' instead of 'full_size'
-	jsonData, err := json.Marshal(map[string]interface{}{
-		"url":       domain,
-		"wait_time": wait,
-		"fullpage":  fullSize,
-	})
-	if err != nil {
-		return fmt.Errorf("failed to create request: %v", err)
-	}
-
 	// Get screenshot service URL
 	serviceURL := os.Getenv("SCREENSHOT_SERVICE_URL")
 	if serviceURL == "" {
-		serviceURL = "http://screenshot:8080"
+		serviceURL = "http://screenshot:11235"
 	}
+	serviceURL = strings.TrimRight(serviceURL, "/")
+	targetURL := strings.TrimRight(domain, "/")
+	requestURL := fmt.Sprintf("%s/%s/.png", serviceURL, targetURL)
 
 	// Retry logic with exponential backoff
 	maxRetries := 3
@@ -295,17 +327,21 @@ func captureAndSendScreenshot(c *gin.Context, domain string, fullSize bool, wait
 		}
 
 		// Increase timeout for retries
-		timeout := 30 * time.Second
+		timeout := serviceTimeout()
 		if attempt > 0 {
-			timeout = 45 * time.Second
+			timeout += 15 * time.Second
 		}
 
 		client := &http.Client{Timeout: timeout}
-		resp, err = client.Post(
-			serviceURL+"/screenshot",
-			"application/json",
-			bytes.NewBuffer(jsonData),
-		)
+		ctx := context.Background()
+		if c != nil {
+			ctx = c.Request.Context()
+		}
+		req, reqErr := http.NewRequestWithContext(ctx, http.MethodGet, requestURL, nil)
+		if reqErr != nil {
+			return fmt.Errorf("failed to create request: %v", reqErr)
+		}
+		resp, err = client.Do(req)
 
 		if err == nil {
 			// Request succeeded, break retry loop
@@ -330,24 +366,15 @@ func captureAndSendScreenshot(c *gin.Context, domain string, fullSize bool, wait
 		return fmt.Errorf("screenshot service returned error status %d", resp.StatusCode)
 	}
 
-	// Parse response
-	var result screenshotResponse
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return fmt.Errorf("failed to parse response: %v", err)
+	imgData, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return fmt.Errorf("failed to read image: %v", err)
 	}
-
-	if !result.Success {
-		log.Printf("Screenshot failed for %s: %s", domain, result.Error)
+	if len(imgData) == 0 {
 		return fmt.Errorf("screenshot capture failed")
 	}
 
-	// Decode image
-	imgData, err := base64.StdEncoding.DecodeString(result.Image)
-	if err != nil {
-		return fmt.Errorf("failed to decode image: %v", err)
-	}
-
-	contentType := result.ImageType
+	contentType := resp.Header.Get("Content-Type")
 	if contentType == "" {
 		contentType = "image/png"
 	}
@@ -592,6 +619,7 @@ func determineOverallRisk(report *SecurityReport) RiskLevel {
 		report.Swagger.Risk,
 		report.Infrastructure.Risk,
 		report.FileExposure.Risk,
+		report.SecretExposure.Risk,
 	}
 
 	// Return highest risk level found
@@ -610,7 +638,8 @@ func generateReportSummary(report *SecurityReport) string {
 		len(report.Certificate.Findings) +
 		len(report.AdminPages.Findings) +
 		len(report.Swagger.Findings) +
-		len(report.Infrastructure.Findings)
+		len(report.Infrastructure.Findings) +
+		len(report.SecretExposure.Findings)
 
 	return fmt.Sprintf("Security scan completed at %s with %d findings",
 		report.ScanTimestamp.Format(time.RFC3339),

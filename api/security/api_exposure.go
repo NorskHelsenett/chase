@@ -111,6 +111,11 @@ func (s *Scanner) checkAPIExposures(ctx context.Context, domain string) (*APIExp
 		Endpoints: make([]string, 0),
 		Risk:      RiskLow,
 		Findings:  make([]Finding, 0),
+		Checks:    make([]APIExposureCheck, 0),
+	}
+	checkState := make(map[string]bool, len(probes))
+	for _, probe := range probes {
+		checkState[probe.Path] = false
 	}
 
 	for _, probe := range probes {
@@ -151,12 +156,25 @@ func (s *Scanner) checkAPIExposures(ctx context.Context, domain string) (*APIExp
 			if probe.Risk > analysis.Risk {
 				analysis.Risk = probe.Risk
 			}
+			checkState[probe.Path] = true
 		}
 	}
 
 	s.probeLoginEndpoints(ctx, domain, analysis)
+	analysis.Checks = buildAPIExposureChecks(probes, checkState)
 
 	return analysis, nil
+}
+
+func buildAPIExposureChecks(probes []apiProbe, state map[string]bool) []APIExposureCheck {
+	checks := make([]APIExposureCheck, 0, len(probes))
+	for _, probe := range probes {
+		checks = append(checks, APIExposureCheck{
+			Path:   probe.Path,
+			Passed: state[probe.Path],
+		})
+	}
+	return checks
 }
 
 func (s *Scanner) checkHealthProbes(ctx context.Context, domain string) (*HealthProbeAnalysis, error) {
@@ -174,6 +192,11 @@ func (s *Scanner) checkHealthProbes(ctx context.Context, domain string) (*Health
 		Paths:    make(map[string]int),
 		Risk:     RiskLow,
 		Findings: make([]Finding, 0),
+		Checks:   make([]HealthCheck, 0),
+	}
+	checkState := make(map[string]bool, len(paths))
+	for _, path := range paths {
+		checkState[path] = false
 	}
 
 	for _, path := range paths {
@@ -188,14 +211,19 @@ func (s *Scanner) checkHealthProbes(ctx context.Context, domain string) (*Health
 			continue
 		}
 
-		analysis.Paths[path] = resp.StatusCode
-		if resp.StatusCode >= 400 {
-			if isLikelySoft404(body) {
-				continue
-			}
+		if resp.StatusCode != http.StatusOK {
+			continue
+		}
+		if isLikelySoft404(body) {
 			continue
 		}
 
+		if !isLikelyHealthResponse(body, resp) {
+			continue
+		}
+
+		analysis.Paths[path] = resp.StatusCode
+		checkState[path] = true
 		if exposesDetails(body) {
 			analysis.Findings = append(analysis.Findings, Finding{
 				Description: "Health endpoint " + path + " exposes internal details",
@@ -209,7 +237,60 @@ func (s *Scanner) checkHealthProbes(ctx context.Context, domain string) (*Health
 		}
 	}
 
+	analysis.Checks = buildHealthChecks(paths, checkState)
 	return analysis, nil
+}
+
+func buildHealthChecks(paths []string, state map[string]bool) []HealthCheck {
+	checks := make([]HealthCheck, 0, len(paths))
+	for _, path := range paths {
+		passed := state[path]
+		checks = append(checks, HealthCheck{
+			Path:   path,
+			Passed: passed,
+		})
+	}
+	return checks
+}
+
+func isLikelyHealthResponse(body []byte, resp *http.Response) bool {
+	if isLikelyHTML(body) {
+		return false
+	}
+
+	contentType := strings.ToLower(resp.Header.Get("Content-Type"))
+	if strings.Contains(contentType, "text/html") || strings.Contains(contentType, "application/xhtml+xml") {
+		return false
+	}
+
+	trimmed := strings.TrimSpace(string(body))
+	if trimmed == "" {
+		return false
+	}
+
+	if strings.HasPrefix(trimmed, "{") || strings.HasPrefix(trimmed, "[") || strings.Contains(contentType, "application/json") {
+		var payload map[string]any
+		if err := json.Unmarshal(body, &payload); err == nil {
+			for key := range payload {
+				lowerKey := strings.ToLower(key)
+				if lowerKey == "status" || lowerKey == "health" || lowerKey == "components" || lowerKey == "details" {
+					return true
+				}
+			}
+			return len(payload) > 0
+		}
+	}
+
+	lower := strings.ToLower(trimmed)
+	if len(lower) <= 128 {
+		return strings.Contains(lower, "ok") ||
+			strings.Contains(lower, "healthy") ||
+			strings.Contains(lower, "ready") ||
+			strings.Contains(lower, "alive") ||
+			strings.Contains(lower, "up")
+	}
+
+	return false
 }
 
 func exposesDetails(body []byte) bool {
