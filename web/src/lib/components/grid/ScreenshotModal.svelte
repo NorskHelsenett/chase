@@ -405,7 +405,7 @@
 									</div>
 								{:else}
 									<img
-										src={`/api/screenshot/${currentSite.url.replace(/^(https?:\/\/)/, '')}`}
+										src={`/api/screenshot/${currentSite.url.replace(/^(https?:\/\/)/, '')}?cached=true`}
 										alt={`Screenshot of ${currentSite.url}`}
 										class="w-full h-full object-contain rounded-lg shadow-xl"
 										loading="lazy"

@@ -257,7 +257,7 @@
 					</div>
 				{/if}
 				<img
-					src={`/api/screenshot/${encodeURIComponent(data.query)}`}
+					src={`/api/screenshot/${encodeURIComponent(data.query)}?cached=true`}
 					alt="Website preview for {data.query}"
 					class="screenshot"
 					class:loaded={screenshotLoaded}

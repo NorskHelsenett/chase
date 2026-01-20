@@ -260,7 +260,7 @@
 			<!-- Screenshot (2/3) -->
 			<div class="hero-screenshot">
 				<img
-					src={`/api/screenshot/${encodeURIComponent(server.url)}`}
+					src={`/api/screenshot/${encodeURIComponent(server.url)}?cached=true`}
 					alt="Website preview"
 					class="screenshot-img"
 					on:error={(e) => e.target.style.display = 'none'}

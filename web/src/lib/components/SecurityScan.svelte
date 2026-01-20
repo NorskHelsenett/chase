@@ -149,7 +149,7 @@
 									{#key domain}
 										<div class="relative w-full h-full">
 											<img
-												src={`/api/screenshot/${encodeURIComponent(domain)}`}
+												src={`/api/screenshot/${encodeURIComponent(domain)}?cached=true`}
 												alt="Website preview"
 												class="absolute w-full h-full object-cover opacity-0 transition-opacity duration-300"
 												on:load={(e) => {
