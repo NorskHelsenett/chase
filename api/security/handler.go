@@ -465,21 +465,17 @@ func notifySecurityTxtExpiration(serverURL string, expiryDate time.Time) {
 	db := database.GetDB()
 	const securityTxtCooldown = 24 * time.Hour
 
-	// Look up the server ID and name from the URL
+	// Look up the server ID from the URL
 	var server struct {
-		ID   uint   `json:"id"`
-		URL  string `json:"url"`
-		Name string `json:"name"`
+		ID  uint   `json:"id"`
+		URL string `json:"url"`
 	}
-	if err := db.Table("servers").Select("id, url, name").Where("url = ?", serverURL).First(&server).Error; err != nil {
+	if err := db.Table("servers").Select("id, url").Where("url = ?", serverURL).First(&server).Error; err != nil {
 		log.Printf("Failed to find server for security.txt notification (URL: %s): %v", serverURL, err)
 		return
 	}
 
-	serverName := server.Name
-	if serverName == "" {
-		serverName = server.URL
-	}
+	serverName := server.URL
 
 	daysUntilExpiry := time.Until(expiryDate).Hours() / 24
 	daysLeft := int(daysUntilExpiry)
