@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/base64"
 	"log"
 	"net/http"
@@ -18,6 +19,8 @@ type Handler struct {
 	crawler   *internal.Crawler
 	crawlerMu sync.Mutex
 }
+
+const defaultCrawlTimeout = 30 * time.Second
 
 func NewHandler() *Handler {
 	return &Handler{
@@ -132,11 +135,14 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Crawl the URL
-	waitTime := 1 * time.Second
+	waitTime := 3 * time.Second
 	captureScreenshot := format == "png"
-	result, err := crawler.Crawl(r.Context(), targetURL, waitTime, captureScreenshot, fullPageScreenshot, viewportWidth, viewportHeight)
+	ctx, cancel := context.WithTimeout(r.Context(), crawlTimeout())
+	defer cancel()
+	result, err := crawler.Crawl(ctx, targetURL, waitTime, captureScreenshot, fullPageScreenshot, viewportWidth, viewportHeight)
 	if err != nil || result.Error != "" {
 		log.Printf("Error crawling %s: %v / %s", targetURL, err, result.Error)
+		h.resetCrawler("crawl failure")
 		http.Error(w, "Failed to crawl URL", http.StatusInternalServerError)
 		return
 	}
@@ -253,4 +259,37 @@ func (h *Handler) Close() error {
 	err := h.crawler.Close()
 	h.crawler = nil
 	return err
+}
+
+func (h *Handler) resetCrawler(reason string) {
+	h.crawlerMu.Lock()
+	defer h.crawlerMu.Unlock()
+
+	if h.crawler == nil {
+		return
+	}
+
+	if err := h.crawler.Close(); err != nil {
+		log.Printf("Crawler reset error (%s): %v", reason, err)
+	} else {
+		log.Printf("Crawler reset (%s)", reason)
+	}
+	h.crawler = nil
+}
+
+func crawlTimeout() time.Duration {
+	raw := strings.TrimSpace(os.Getenv("CRAWL_TIMEOUT"))
+	if raw == "" {
+		return defaultCrawlTimeout
+	}
+
+	if duration, err := time.ParseDuration(raw); err == nil && duration > 0 {
+		return duration
+	}
+
+	if seconds, err := strconv.Atoi(raw); err == nil && seconds > 0 {
+		return time.Duration(seconds) * time.Second
+	}
+
+	return defaultCrawlTimeout
 }

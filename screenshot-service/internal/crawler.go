@@ -156,7 +156,7 @@ func (c *Crawler) Crawl(ctx context.Context, targetURL string, waitTime time.Dur
 
 	waitTimeout := waitTime
 	if waitTimeout <= 0 {
-		waitTimeout = 1 * time.Second
+		waitTimeout = 3 * time.Second
 	}
 
 	if err := c.waitForRender(page, waitTimeout); err != nil {
