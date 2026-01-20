@@ -362,7 +362,7 @@
 								</div>
 							{:else}
 								<img
-									src={`/api/screenshot/${currentSite.url.replace(/^(https?:\/\/)/, '')}?cache=true`}
+									src={`/api/screenshot/${currentSite.url.replace(/^(https?:\/\/)/, '')}?cached=true`}
 									alt={`Screenshot of ${currentSite.url}`}
 									class="w-full h-full object-contain drop-shadow-2xl rounded-lg"
 									loading="lazy"
