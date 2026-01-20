@@ -29,8 +29,11 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// Log request
 	start := time.Now()
 	var logURL string
+	logRequest := true
 	defer func() {
-		log.Printf("[%s] %s %s - %s", r.Method, logURL, r.RemoteAddr, time.Since(start))
+		if logRequest {
+			log.Printf("[%s] %s %s - %s", r.Method, logURL, r.RemoteAddr, time.Since(start))
+		}
 	}()
 
 	path := strings.TrimPrefix(r.URL.Path, "/")
@@ -39,6 +42,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// Health check
 	if path == "" || path == "health" || path == "healthz" {
 		logURL = r.URL.Path
+		logRequest = false
 		if err := h.ensureCrawlerHealthy(); err != nil {
 			log.Printf("Crawler unhealthy: %v", err)
 			os.Exit(1)
