@@ -57,6 +57,8 @@ screenshotr:
       value: "/usr/lib/chromium/"
     - name: CRAWLER_POOL_SIZE
       value: "10"
+    - name: CRAWL_TIMEOUT
+      value: '7'
   resources:
     requests:
       memory: "128Mi" # Request 512 MiB of memory
