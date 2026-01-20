@@ -55,6 +55,8 @@ screenshotr:
       value: "/usr/bin/chromium-browser"
     - name: CHROME_PATH
       value: "/usr/lib/chromium/"
+    - name: CRAWLER_POOL_SIZE
+      value: "10"
   resources:
     requests:
       memory: "128Mi" # Request 512 MiB of memory

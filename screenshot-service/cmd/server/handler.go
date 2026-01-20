@@ -21,9 +21,11 @@ type Handler struct {
 	poolSize    int
 	poolCreated int
 	poolMu      sync.Mutex
+	httpClient  *http.Client
 }
 
-const defaultCrawlTimeout = 30 * time.Second
+const defaultCrawlTimeout = 10 * time.Second
+const defaultPreflightTimeout = 500 * time.Millisecond
 
 func NewHandler() *Handler {
 	poolSize := crawlPoolSize()
@@ -32,28 +34,32 @@ func NewHandler() *Handler {
 	}
 
 	return &Handler{
-		pool:     make(chan *internal.Crawler, poolSize),
-		poolSize: poolSize,
+		pool:       make(chan *internal.Crawler, poolSize),
+		poolSize:   poolSize,
+		httpClient: &http.Client{Timeout: preflightTimeout()},
 	}
 }
 
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// Log request
 	start := time.Now()
-	var logURL string
+	logURL := r.URL.String()
 	logRequest := true
+	recorder := &statusRecorder{ResponseWriter: w, statusCode: http.StatusOK}
 	defer func() {
 		if logRequest {
-			log.Printf("[%s] %s %s - %s", r.Method, logURL, r.RemoteAddr, time.Since(start))
+			log.Printf("[%s] %s %s - %d %s", r.Method, logURL, r.RemoteAddr, recorder.statusCode, time.Since(start))
 		}
 	}()
+
+	w = recorder
 
 	path := strings.TrimPrefix(r.URL.Path, "/")
 	query := r.URL.RawQuery
 
 	// Health check
 	if path == "" || path == "health" || path == "healthz" {
-		logURL = r.URL.Path
+		logURL = r.URL.String()
 		logRequest = false
 		if err := h.ensureCrawlerHealthy(r.Context()); err != nil {
 			log.Printf("Crawler unhealthy: %v", err)
@@ -89,13 +95,13 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		format = "html"
 		remainingQuery = query
 	} else {
-		logURL = r.URL.Path
+		logURL = r.URL.String()
 		http.Error(w, "Invalid format. Use: /.png or /.html", http.StatusBadRequest)
 		return
 	}
 
 	if targetURL == "" {
-		logURL = r.URL.Path
+		logURL = r.URL.String()
 		http.Error(w, "URL required. Usage: /jonas.grimsgaard.dev/.png or /https://example.com/.json", http.StatusBadRequest)
 		return
 	}
@@ -138,8 +144,20 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		targetURL = targetURL + "?" + remainingQuery
 	}
 
-	// Set log URL to the target URL being crawled
-	logURL = targetURL
+	// Keep log URL as the full request path for clarity.
+
+	// Preflight to get upstream status before launching a browser.
+	preflightStatusCode, err := h.preflightStatus(targetURL)
+	if err != nil {
+		log.Printf("Preflight failed %s (%s)", targetURL, format)
+		http.Error(w, "Failed to reach URL", statusFromCrawlError(err, "preflight failed"))
+		return
+	}
+	if preflightStatusCode >= 400 {
+		log.Printf("Preflight status %s (%s): %d", targetURL, format, preflightStatusCode)
+		http.Error(w, http.StatusText(preflightStatusCode), preflightStatusCode)
+		return
+	}
 
 	// Create or reuse crawler instance
 	ctx, cancel := context.WithTimeout(r.Context(), crawlTimeout())
@@ -161,7 +179,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	captureScreenshot := format == "png"
 	result, err = crawler.Crawl(ctx, targetURL, waitTime, captureScreenshot, fullPageScreenshot, viewportWidth, viewportHeight)
 	if err != nil || result.Error != "" {
-		log.Printf("Error crawling %s: %v / %s", targetURL, err, result.Error)
+		log.Printf("Error crawling %s (%s): %v / %s", targetURL, format, err, result.Error)
 		http.Error(w, "Failed to crawl URL", statusFromCrawlError(err, result.Error))
 		return
 	}
@@ -201,6 +219,16 @@ func (h *Handler) serveHTML(w http.ResponseWriter, result *internal.CrawlResult,
 	w.Header().Set("Cache-Control", "public, max-age=3600") // 1 hour
 	w.WriteHeader(statusCode)
 	w.Write([]byte(result.HTML))
+}
+
+type statusRecorder struct {
+	http.ResponseWriter
+	statusCode int
+}
+
+func (r *statusRecorder) WriteHeader(code int) {
+	r.statusCode = code
+	r.ResponseWriter.WriteHeader(code)
 }
 
 func isTruthyFlag(values url.Values, key string) bool {
@@ -333,6 +361,19 @@ func crawlTimeout() time.Duration {
 	return defaultCrawlTimeout
 }
 
+func preflightTimeout() time.Duration {
+	raw := strings.TrimSpace(os.Getenv("PREFLIGHT_TIMEOUT_MS"))
+	if raw == "" {
+		return defaultPreflightTimeout
+	}
+
+	if millis, err := strconv.Atoi(raw); err == nil && millis > 0 {
+		return time.Duration(millis) * time.Millisecond
+	}
+
+	return defaultPreflightTimeout
+}
+
 func crawlPoolSize() int {
 	raw := strings.TrimSpace(os.Getenv("CRAWLER_POOL_SIZE"))
 	if raw == "" {
@@ -376,6 +417,22 @@ func (h *Handler) acquireCrawler(ctx context.Context) (*internal.Crawler, error)
 	case <-ctx.Done():
 		return nil, ctx.Err()
 	}
+}
+
+func (h *Handler) preflightStatus(targetURL string) (int, error) {
+	req, err := http.NewRequest(http.MethodHead, targetURL, nil)
+	if err != nil {
+		return 0, err
+	}
+	req.Header.Set("User-Agent", "Mozilla/5.0")
+
+	resp, err := h.httpClient.Do(req)
+	if err != nil {
+		return 0, err
+	}
+	_ = resp.Body.Close()
+
+	return resp.StatusCode, nil
 }
 
 func (h *Handler) releaseCrawler(crawler *internal.Crawler, healthy bool) {
