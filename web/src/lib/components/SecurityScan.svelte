@@ -103,30 +103,9 @@
 		return maxRiskIssue;
 	}
 
-	$: hasScanErrors = !loading && results?.scanErrors?.length > 0;
 </script>
 
-{#if hasScanErrors}
-	<div class="bg-[#202020] rounded-lg p-6" transition:fade>
-		<div class="flex items-center gap-2 mb-6">
-			<AlertTriangle class="w-5 h-5 text-yellow-500" />
-			<h2 class="text-xl">Scan Issues</h2>
-		</div>
-
-		<div class="space-y-4">
-			{#each results.scanErrors as error}
-				<div class="p-3 bg-[#2b2b2b] rounded-lg">
-					<div class="font-medium text-yellow-500">{error.component}</div>
-					<div class="text-sm text-gray-400">{error.error}</div>
-					<div class="text-xs text-gray-500">
-						{new Date(error.timestamp).toLocaleString()}
-					</div>
-				</div>
-			{/each}
-		</div>
-	</div>
-{:else}
-	{#if !hideHero}
+{#if !hideHero}
 		<section class="mb-8">
 			{#if loading}
 				<div class="bg-[#202020] rounded-lg p-6 animate-pulse">
@@ -814,7 +793,6 @@
 			</div>
 		</div>
 	{/if}
-{/if}
 
 <style>
 	.w-autofill {
