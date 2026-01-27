@@ -281,6 +281,9 @@ func SetMaxParallelScreenshots(limit int) {
 	close(oldSemaphore)
 }
 
+// captureAndSendScreenshot captures a screenshot and sends it to the client.
+// Returns nil if the response was sent (success or 4xx error), or an error for 5xx/network failures
+// to allow the caller to fall back to cached screenshots.
 func captureAndSendScreenshot(c *gin.Context, domain string, fullSize bool, wait int) error {
 	// Acquire semaphore before starting screenshot operation
 	screenshotSemaphore <- struct{}{} // Block if max parallel operations reached
@@ -359,6 +362,25 @@ func captureAndSendScreenshot(c *gin.Context, domain string, fullSize bool, wait
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
 		log.Printf("Screenshot service returned status %d for %s: %s", resp.StatusCode, domain, string(body))
+
+		// Handle client errors (4xx) - these are legitimate responses about the target
+		if resp.StatusCode >= 400 && resp.StatusCode < 500 {
+			if c != nil {
+				switch resp.StatusCode {
+				case http.StatusNotFound:
+					c.JSON(404, gin.H{"error": "Target site not found"})
+				case http.StatusForbidden:
+					c.JSON(403, gin.H{"error": "Access to target site forbidden"})
+				case http.StatusTooManyRequests:
+					c.JSON(429, gin.H{"error": "Rate limited, please try again later"})
+				default:
+					c.JSON(resp.StatusCode, gin.H{"error": fmt.Sprintf("Unable to capture screenshot: %d", resp.StatusCode)})
+				}
+			}
+			return nil // Return nil since we've already sent the response
+		}
+
+		// Server errors (5xx) - return error to trigger cache fallback
 		return fmt.Errorf("screenshot service returned error status %d", resp.StatusCode)
 	}
 
