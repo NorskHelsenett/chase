@@ -257,6 +257,7 @@ function updateGraph() {
 			<div class="relative flex items-center z-10">
 				<CustomSelect
 					bind:value={statusFilter}
+					storageKey="chase-filter-status"
 					options={[
 						{
 							value: 'all',

@@ -146,6 +146,7 @@ $: if (hasMounted && activeFilter !== undefined && activeFilter !== lastActiveFi
 					<CustomSelect
 						bind:value={filterStatus}
 						icon={Filter}
+						storageKey="chase-filter-status"
 						options={[
 							{
 								value: 'all',

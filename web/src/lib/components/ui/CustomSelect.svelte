@@ -1,12 +1,14 @@
 <script lang="ts">
 	import { createEventDispatcher, onMount } from 'svelte';
 	import { slide, fade } from 'svelte/transition';
+	import { browser } from '$app/environment';
 	import { clickOutside } from '$lib/actions/clickOutside';
 
 	export let value = '';
 	export let options = [];
 	export let placeholder = 'Select...';
 	export let icon = null;
+	export let storageKey: string | null = null;
 
 	const dispatch = createEventDispatcher();
 
@@ -21,6 +23,9 @@
 	function handleSelect(option) {
 		selectedOption = option;
 		value = option.value;
+		if (storageKey && browser) {
+			localStorage.setItem(storageKey, option.value);
+		}
 		dispatch('change', { value: option.value });
 		isOpen = false;
 	}
@@ -34,6 +39,14 @@
 	}
 
 	onMount(() => {
+		if (storageKey && browser) {
+			const stored = localStorage.getItem(storageKey);
+			if (stored && options.some((opt) => opt.value === stored)) {
+				value = stored;
+				selectedOption = options.find((option) => option.value === stored) || null;
+				dispatch('change', { value: stored });
+			}
+		}
 		if (value && !selectedOption) {
 			selectedOption = options.find((option) => option.value === value) || null;
 		}
