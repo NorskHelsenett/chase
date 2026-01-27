@@ -18,11 +18,13 @@ import (
 )
 
 type Handler struct {
-	pool        chan *internal.Crawler
-	poolSize    int
-	poolCreated int
-	poolMu      sync.Mutex
-	httpClient  *http.Client
+	pool           chan *internal.Crawler
+	poolSize       int
+	poolCreated    int
+	poolMu         sync.Mutex
+	httpClient     *http.Client
+	requestCounts  map[*internal.Crawler]int
+	maxRequestsPerCrawler int
 }
 
 const defaultCrawlTimeout = 10 * time.Second
@@ -36,9 +38,11 @@ func NewHandler() *Handler {
 	}
 
 	return &Handler{
-		pool:       make(chan *internal.Crawler, poolSize),
-		poolSize:   poolSize,
-		httpClient: &http.Client{Timeout: preflightTimeout()},
+		pool:                  make(chan *internal.Crawler, poolSize),
+		poolSize:              poolSize,
+		httpClient:            &http.Client{Timeout: preflightTimeout()},
+		requestCounts:         make(map[*internal.Crawler]int),
+		maxRequestsPerCrawler: maxRequestsPerCrawler(),
 	}
 }
 
@@ -431,6 +435,20 @@ func crawlPoolSize() int {
 	return size
 }
 
+func maxRequestsPerCrawler() int {
+	raw := strings.TrimSpace(os.Getenv("MAX_REQUESTS_PER_CRAWLER"))
+	if raw == "" {
+		return 50 // Default: recycle browser after 50 requests
+	}
+
+	count, err := strconv.Atoi(raw)
+	if err != nil || count < 0 {
+		return 50
+	}
+
+	return count // 0 disables recycling
+}
+
 func (h *Handler) acquireCrawler(ctx context.Context) (*internal.Crawler, error) {
 	select {
 	case crawler := <-h.pool:
@@ -483,9 +501,19 @@ func (h *Handler) releaseCrawler(crawler *internal.Crawler, healthy bool) {
 		return
 	}
 
-	if !healthy {
+	h.poolMu.Lock()
+	h.requestCounts[crawler]++
+	count := h.requestCounts[crawler]
+	shouldRecycle := h.maxRequestsPerCrawler > 0 && count >= h.maxRequestsPerCrawler
+	h.poolMu.Unlock()
+
+	if !healthy || shouldRecycle {
+		if shouldRecycle {
+			log.Printf("Recycling crawler after %d requests", count)
+		}
 		_ = crawler.Close()
 		h.poolMu.Lock()
+		delete(h.requestCounts, crawler)
 		if h.poolCreated > 0 {
 			h.poolCreated--
 		}
@@ -498,6 +526,7 @@ func (h *Handler) releaseCrawler(crawler *internal.Crawler, healthy bool) {
 	default:
 		_ = crawler.Close()
 		h.poolMu.Lock()
+		delete(h.requestCounts, crawler)
 		if h.poolCreated > 0 {
 			h.poolCreated--
 		}
