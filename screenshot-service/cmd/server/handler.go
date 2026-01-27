@@ -463,7 +463,7 @@ func (h *Handler) acquireCrawler(ctx context.Context) (*internal.Crawler, error)
 }
 
 func (h *Handler) preflightStatus(targetURL string) (int, error) {
-	req, err := http.NewRequest(http.MethodHead, targetURL, nil)
+	req, err := http.NewRequest(http.MethodGet, targetURL, nil)
 	if err != nil {
 		return 0, err
 	}
