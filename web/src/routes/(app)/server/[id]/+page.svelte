@@ -271,9 +271,13 @@
 			<!-- Security Info (1/3) -->
 			<div class="hero-info">
 				<div class="hero-header">
-					<div class="server-url">
-						<span class="url-protocol">https://</span>
-						<span class="url-domain">{server.url}</span>
+					<div class="server-url-container">
+						<a href="https://{server.url}" target="_blank" rel="noopener noreferrer" class="server-url">
+							<span class="url-protocol">https://</span><span class="url-domain">{server.url}</span>
+							<svg class="external-link-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+								<path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6M15 3h6v6M10 14L21 3" />
+							</svg>
+						</a>
 					</div>
 					<ServerControls
 						{server}
@@ -482,10 +486,24 @@
 		gap: 1rem;
 	}
 
+	.server-url-container {
+		display: flex;
+		align-items: flex-start;
+	}
+
 	.server-url {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.5rem;
 		font-family: ui-monospace, monospace;
 		font-size: 0.875rem;
 		word-break: break-all;
+		text-decoration: none;
+		transition: opacity 0.15s;
+	}
+
+	.server-url:hover {
+		opacity: 0.8;
 	}
 
 	.url-protocol {
@@ -494,6 +512,18 @@
 
 	.url-domain {
 		color: #e5e7eb;
+	}
+
+	.external-link-icon {
+		width: 0.875rem;
+		height: 0.875rem;
+		flex-shrink: 0;
+		stroke: #6b7280;
+		transition: stroke 0.15s;
+	}
+
+	.server-url:hover .external-link-icon {
+		stroke: #9ca3af;
 	}
 
 	/* Security Grades */
