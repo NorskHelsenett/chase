@@ -60,16 +60,18 @@
 
 	// Stage definitions for progress display
 	// Backend sends progress 10-90% spread across ~12 tasks, then 100 at finalizing
-	// Map these to 8 UI stages for a cleaner display
+	// Map these to UI stages for a cleaner display
 	const scanStages = [
 		{ id: 'connecting', label: 'Connecting to target...', icon: Globe, minProgress: 0 },
-		{ id: 'headers', label: 'Analyzing security headers...', icon: Shield, minProgress: 15 },
-		{ id: 'certificate', label: 'Checking TLS/SSL certificate...', icon: Lock, minProgress: 30 },
-		{ id: 'dns', label: 'Scanning DNS records...', icon: Network, minProgress: 40 },
-		{ id: 'infrastructure', label: 'Probing infrastructure...', icon: Server, minProgress: 50 },
-		{ id: 'admin', label: 'Checking admin pages...', icon: Key, minProgress: 60 },
-		{ id: 'swagger', label: 'Analyzing API endpoints...', icon: Code, minProgress: 75 },
-		{ id: 'finalizing', label: 'Finalizing report...', icon: FileText, minProgress: 90 }
+		{ id: 'headers', label: 'Analyzing security headers...', icon: Shield, minProgress: 12 },
+		{ id: 'certificate', label: 'Checking TLS/SSL certificate...', icon: Lock, minProgress: 24 },
+		{ id: 'dns', label: 'Scanning DNS records...', icon: Network, minProgress: 36 },
+		{ id: 'infrastructure', label: 'Probing infrastructure...', icon: Server, minProgress: 48 },
+		{ id: 'admin', label: 'Checking admin pages...', icon: Key, minProgress: 56 },
+		{ id: 'swagger', label: 'Analyzing API endpoints...', icon: Code, minProgress: 64 },
+		{ id: 'files', label: 'Scanning for exposed files...', icon: Eye, minProgress: 72 },
+		{ id: 'secrets', label: 'Checking for secrets...', icon: Key, minProgress: 82 },
+		{ id: 'finalizing', label: 'Finalizing report...', icon: FileText, minProgress: 92 }
 	];
 
 	// Reactive: compute current UI stage based on progress and backend stage
