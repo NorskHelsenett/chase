@@ -125,8 +125,8 @@ func ScreenshotHandler(c *gin.Context) {
 		return
 	}
 
-	// Case-insensitive parameter parsing
-	cachedOnly := strings.ToLower(c.Query("cached")) == "true"
+	// Case-insensitive parameter parsing - cached=true means prefer cache, not require cache
+	preferCached := strings.ToLower(c.Query("cached")) == "true"
 
 	// Case-insensitive fullSize parameter
 	fullSizeParam := strings.ToLower(c.Query("fullSize"))
@@ -145,15 +145,11 @@ func ScreenshotHandler(c *gin.Context) {
 	// Try to get cached screenshot first for any request
 	cachedScreenshot, cacheErr := getRecentScreenshot(domain)
 
-	// If cachedOnly is requested, return cached or 404
-	if cachedOnly {
-		if cacheErr == nil {
-			c.Header("Cache-Control", "public, max-age=86400") // 24 hours
-			c.Header("Content-Type", cachedScreenshot.MIMEType)
-			c.Data(200, cachedScreenshot.MIMEType, cachedScreenshot.Data)
-			return
-		}
-		c.JSON(404, gin.H{"error": "No cached screenshot available"})
+	// If preferCached is set and cache exists, return it immediately
+	if preferCached && cacheErr == nil {
+		c.Header("Cache-Control", "public, max-age=86400") // 24 hours
+		c.Header("Content-Type", cachedScreenshot.MIMEType)
+		c.Data(200, cachedScreenshot.MIMEType, cachedScreenshot.Data)
 		return
 	}
 

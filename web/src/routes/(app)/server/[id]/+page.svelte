@@ -5,6 +5,7 @@
 	import StatusIndicator from '$lib/components/server/StatusIndicator.svelte';
 	import SecurityScan from '$lib/components/SecurityScan.svelte';
 	import ServerControls from '$lib/components/server/ServerControls.svelte';
+	import { ExternalLink } from 'lucide-svelte';
 
 	/** @type {import('./$types').PageData} */
 	export let data;
@@ -274,9 +275,7 @@
 					<div class="server-url-container">
 						<a href="https://{server.url}" target="_blank" rel="noopener noreferrer" class="server-url">
 							<span class="url-protocol">https://</span><span class="url-domain">{server.url}</span>
-							<svg class="external-link-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-								<path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6M15 3h6v6M10 14L21 3" />
-							</svg>
+							<ExternalLink class="external-link-icon" size={14} />
 						</a>
 					</div>
 					<ServerControls
@@ -514,16 +513,14 @@
 		color: #e5e7eb;
 	}
 
-	.external-link-icon {
-		width: 0.875rem;
-		height: 0.875rem;
+	.server-url :global(.external-link-icon) {
 		flex-shrink: 0;
-		stroke: #6b7280;
-		transition: stroke 0.15s;
+		color: #6b7280;
+		transition: color 0.15s;
 	}
 
-	.server-url:hover .external-link-icon {
-		stroke: #9ca3af;
+	.server-url:hover :global(.external-link-icon) {
+		color: #9ca3af;
 	}
 
 	/* Security Grades */
