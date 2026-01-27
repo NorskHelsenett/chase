@@ -84,12 +84,12 @@ screenshotr:
     inMemory: true
     mountPath: /dev/shm
     readOnly: false
-    storage: 128Mi
+    storage: 256Mi
   - name: tmp
     inMemory: true
     mountPath: /tmp
     readOnly: false
-    storage: 64Mi
+    storage: 256Mi
 
 certstream:
   enabled: false
