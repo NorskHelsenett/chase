@@ -55,6 +55,8 @@
 	let scanError = null;
 	let eventSource = null;
 	let scanComplete = false; // Track if scan completed successfully
+	let loadingScreenshotLoaded = false; // Track screenshot loading during scan
+	let loadingScreenshotError = false;
 
 	// Stage definitions for progress display
 	// Backend sends progress 10-90% spread across ~12 tasks, then 100 at finalizing
@@ -129,6 +131,8 @@
 		scanComplete = false;
 		searchTimestamp = Date.now();
 		screenshotLoaded = false;
+		loadingScreenshotLoaded = false;
+		loadingScreenshotError = false;
 
 		// Check for fresh cached result first (within 5 minutes)
 		const cached = searchHistory.getRecentSearch(query);
@@ -375,75 +379,102 @@
 <div class="page">
 	{#if loading}
 		<div class="loading-container" in:fade>
-			<!-- Enhanced Loading UI -->
-			<div class="scan-progress-container">
-				<!-- Progress Ring -->
-				<div class="progress-ring-container">
-					<svg class="progress-ring" viewBox="0 0 120 120">
-						<circle
-							class="progress-ring-bg"
-							cx="60"
-							cy="60"
-							r="52"
-							fill="none"
-							stroke-width="8"
-						/>
-						<circle
-							class="progress-ring-fill"
-							cx="60"
-							cy="60"
-							r="52"
-							fill="none"
-							stroke-width="8"
-							stroke-dasharray="327"
-							stroke-dashoffset={327 - (327 * scanProgress) / 100}
-							transform="rotate(-90 60 60)"
-						/>
-					</svg>
-					<div class="progress-percentage">
-						<span class="percentage-value">{scanProgress}</span>
-						<span class="percentage-symbol">%</span>
-					</div>
-				</div>
-
-				<!-- Current Stage Text -->
-				<div class="current-stage-text">
-					{#each stageStatuses as stage (stage.id)}
-						{#if stage.isActive}
-							<span in:fade={{ duration: 200 }}>{stage.label}</span>
-						{/if}
-					{/each}
-				</div>
-
-				<!-- Stage List -->
-				<div class="stages-list">
-					{#each stageStatuses as stage (stage.id)}
-						<div
-							class="stage-item"
-							class:completed={stage.isCompleted}
-							class:active={stage.isActive}
-							class:pending={stage.isPending}
-						>
-							<div class="stage-indicator">
-								{#if stage.isCompleted}
-									<CheckCircle size={16} />
-								{:else if stage.isActive}
-									<div class="stage-active-dot">
-										<Loader2 size={16} class="spinning" />
-									</div>
-								{:else}
-									<div class="stage-pending-dot"></div>
-								{/if}
-							</div>
-							<span class="stage-label">{stage.label.replace('...', '')}</span>
+			<!-- Enhanced Loading UI with Screenshot -->
+			<div class="loading-layout">
+				<!-- Screenshot Preview (loads in parallel) -->
+				<div class="loading-screenshot-container">
+					{#if !loadingScreenshotLoaded && !loadingScreenshotError}
+						<div class="loading-screenshot-placeholder">
+							<Loader2 size={32} class="spinning" />
+							<span>Loading preview...</span>
 						</div>
-					{/each}
+					{/if}
+					{#if loadingScreenshotError}
+						<div class="loading-screenshot-placeholder">
+							<Globe size={32} />
+							<span>{data.query}</span>
+						</div>
+					{/if}
+					<img
+						src={`/api/screenshot/${encodeURIComponent(data.query)}?cached=true`}
+						alt="Website preview for {data.query}"
+						class="loading-screenshot"
+						class:loaded={loadingScreenshotLoaded}
+						on:load={() => (loadingScreenshotLoaded = true)}
+						on:error={() => (loadingScreenshotError = true)}
+					/>
 				</div>
 
-				<!-- Target Domain -->
-				<div class="scan-target">
-					<Globe size={16} />
-					<span>Scanning <strong>{data.query}</strong></span>
+				<!-- Progress Panel -->
+				<div class="scan-progress-container">
+					<!-- Progress Ring -->
+					<div class="progress-ring-container">
+						<svg class="progress-ring" viewBox="0 0 120 120">
+							<circle
+								class="progress-ring-bg"
+								cx="60"
+								cy="60"
+								r="52"
+								fill="none"
+								stroke-width="8"
+							/>
+							<circle
+								class="progress-ring-fill"
+								cx="60"
+								cy="60"
+								r="52"
+								fill="none"
+								stroke-width="8"
+								stroke-dasharray="327"
+								stroke-dashoffset={327 - (327 * scanProgress) / 100}
+								transform="rotate(-90 60 60)"
+							/>
+						</svg>
+						<div class="progress-percentage">
+							<span class="percentage-value">{scanProgress}</span>
+							<span class="percentage-symbol">%</span>
+						</div>
+					</div>
+
+					<!-- Current Stage Text -->
+					<div class="current-stage-text">
+						{#each stageStatuses as stage (stage.id)}
+							{#if stage.isActive}
+								<span in:fade={{ duration: 200 }}>{stage.label}</span>
+							{/if}
+						{/each}
+					</div>
+
+					<!-- Stage List -->
+					<div class="stages-list">
+						{#each stageStatuses as stage (stage.id)}
+							<div
+								class="stage-item"
+								class:completed={stage.isCompleted}
+								class:active={stage.isActive}
+								class:pending={stage.isPending}
+							>
+								<div class="stage-indicator">
+									{#if stage.isCompleted}
+										<CheckCircle size={16} />
+									{:else if stage.isActive}
+										<div class="stage-active-dot">
+											<Loader2 size={16} class="spinning" />
+										</div>
+									{:else}
+										<div class="stage-pending-dot"></div>
+									{/if}
+								</div>
+								<span class="stage-label">{stage.label.replace('...', '')}</span>
+							</div>
+						{/each}
+					</div>
+
+					<!-- Target Domain -->
+					<div class="scan-target">
+						<Globe size={16} />
+						<span>Scanning <strong>{data.query}</strong></span>
+					</div>
 				</div>
 			</div>
 		</div>
@@ -1395,6 +1426,7 @@
 		justify-content: center;
 		min-height: 70vh;
 		gap: 1.5rem;
+		padding: 1.5rem;
 	}
 
 	/* Enhanced Loading UI */
@@ -1402,11 +1434,10 @@
 		display: flex;
 		flex-direction: column;
 		align-items: center;
-		gap: 2rem;
-		padding: 3rem;
+		gap: 1.5rem;
+		padding: 2rem;
 		background: var(--bg1);
 		border-radius: 1rem;
-		max-width: 500px;
 		width: 100%;
 	}
 
@@ -1541,6 +1572,58 @@
 
 	.scan-target strong {
 		color: var(--fg);
+	}
+
+	/* Loading Layout with Screenshot */
+	.loading-layout {
+		display: grid;
+		grid-template-columns: 1.5fr 1fr;
+		gap: 2rem;
+		width: 100%;
+		max-width: 1000px;
+	}
+
+	.loading-screenshot-container {
+		position: relative;
+		background: var(--bg1);
+		border-radius: 0.75rem;
+		overflow: hidden;
+		aspect-ratio: 16/9;
+	}
+
+	.loading-screenshot-placeholder {
+		position: absolute;
+		inset: 0;
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		justify-content: center;
+		gap: 0.75rem;
+		background: var(--bg1);
+		color: var(--fg4);
+		font-size: 0.875rem;
+	}
+
+	.loading-screenshot {
+		width: 100%;
+		height: 100%;
+		object-fit: cover;
+		opacity: 0;
+		transition: opacity 0.3s ease;
+	}
+
+	.loading-screenshot.loaded {
+		opacity: 1;
+	}
+
+	@media (max-width: 768px) {
+		.loading-layout {
+			grid-template-columns: 1fr;
+		}
+
+		.loading-screenshot-container {
+			max-height: 200px;
+		}
 	}
 
 	/* Error State */
