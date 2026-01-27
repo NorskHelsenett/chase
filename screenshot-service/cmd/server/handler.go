@@ -26,7 +26,7 @@ type Handler struct {
 }
 
 const defaultCrawlTimeout = 10 * time.Second
-const defaultPreflightTimeout = 500 * time.Millisecond
+const defaultPreflightTimeout = 2 * time.Second
 const defaultQueueTimeout = 500 * time.Millisecond
 
 func NewHandler() *Handler {
