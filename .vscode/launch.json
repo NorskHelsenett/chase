@@ -17,7 +17,7 @@
             "env": {
                 "DATA_FOLDER": "${workspaceFolder}/.debug/data",
                 "OIDC_REDIRECT_URL": "http://localhost:5173/api/callback",
-                "OIDC_ISSUER_URL": "http://host.containers.internal:9999",
+                "OIDC_ISSUER_URL": "http://localhost:23456",
                 "OIDC_CLIENT_ID": "CHASE",
                 "OIDC_CLIENT_SECRET": "chase-secret",
                 "SCREENSHOT_SERVICE_URL": "http://host.containers.internal:11235",

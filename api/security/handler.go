@@ -51,11 +51,44 @@ type ReportStatusResponse struct {
 	Report *SecurityReport `json:"report"`
 }
 
+// CacheDuration is the time window for considering cached results fresh
+const CacheDuration = 5 * time.Minute
+
+// getRecentCachedReport checks for a cached report within CacheDuration
+func getRecentCachedReport(domain string) (*SecurityReportRecord, error) {
+	db := database.GetDB()
+	var record SecurityReportRecord
+
+	// Normalize domain (strip protocol if present)
+	normalizedDomain := utils.StripProtocol(domain)
+
+	err := db.Where("server_url = ? AND created_at > ?", normalizedDomain, time.Now().Add(-CacheDuration)).
+		Order("created_at DESC").
+		First(&record).Error
+
+	if err != nil {
+		return nil, err
+	}
+	return &record, nil
+}
+
 func SecurityScanHandler(c *gin.Context) {
 	domain := c.Param("domain")
 	if domain == "" {
 		c.JSON(400, gin.H{"error": "domain parameter is required"})
 		return
+	}
+
+	// Check for recent cached result
+	if cached, err := getRecentCachedReport(domain); err == nil {
+		var report SecurityReport
+		if err := json.Unmarshal(cached.ReportData, &report); err == nil {
+			// Add cache age header
+			cacheAge := int(time.Since(cached.CreatedAt).Seconds())
+			c.Header("X-Cache-Age", strconv.Itoa(cacheAge))
+			c.JSON(200, report)
+			return
+		}
 	}
 
 	// Initialize scanner with timeout and error handling
@@ -101,6 +134,193 @@ func SecurityScanHandler(c *gin.Context) {
 		})
 		return
 	}
+}
+
+// SecurityScanSSEHandler provides Server-Sent Events for scan progress
+func SecurityScanSSEHandler(c *gin.Context) {
+	domain := c.Param("domain")
+	if domain == "" {
+		c.JSON(400, gin.H{"error": "domain parameter is required"})
+		return
+	}
+
+	// Set SSE headers
+	c.Header("Content-Type", "text/event-stream")
+	c.Header("Cache-Control", "no-cache")
+	c.Header("Connection", "keep-alive")
+	c.Header("X-Accel-Buffering", "no") // Disable nginx buffering
+
+	// Check for recent cached result first
+	if cached, err := getRecentCachedReport(domain); err == nil {
+		var report SecurityReport
+		if err := json.Unmarshal(cached.ReportData, &report); err == nil {
+			// Emit cached result immediately
+			cacheAge := int(time.Since(cached.CreatedAt).Seconds())
+			sendSSEEvent(c, "cache_age", cacheAge)
+			sendSSEEvent(c, "status", map[string]interface{}{
+				"stage":    "cached",
+				"progress": 100,
+			})
+			sendSSEEvent(c, "result", report)
+			return
+		}
+	}
+
+	// Check if a scan is already running for this domain
+	if status := getScanStatus(domain); status != nil && status.State == "running" {
+		// Wait for existing scan
+		sendSSEEvent(c, "status", map[string]interface{}{
+			"stage":    "waiting",
+			"progress": 0,
+			"message":  "Scan already in progress",
+		})
+
+		// Poll for completion
+		waitForExistingScan(c, domain)
+		return
+	}
+
+	// Mark scan as running
+	markScanRunning(domain)
+	defer clearScanStatus(domain)
+
+	// Start screenshot capture in parallel
+	go func() {
+		log.Printf("Starting parallel screenshot capture for %s", domain)
+		if err := captureAndSendScreenshot(nil, domain, false, 3); err != nil {
+			log.Printf("Parallel screenshot capture failed for %s: %v", domain, err)
+		} else {
+			log.Printf("Parallel screenshot capture completed for %s", domain)
+		}
+	}()
+
+	// Create scanner with progress callback
+	scanner := NewScanner(0)
+
+	// Create a channel for progress updates
+	progressChan := make(chan struct{ stage string; progress int }, 20)
+
+	scanner.SetProgressCallback(func(stage string, progress int) {
+		select {
+		case progressChan <- struct{ stage string; progress int }{stage, progress}:
+		default:
+			// Drop if channel is full to prevent blocking
+		}
+	})
+
+	// Create channels for result
+	resultChan := make(chan *SecurityReport)
+	errChan := make(chan error)
+
+	// Start scan in goroutine
+	go func() {
+		defer close(progressChan)
+		report, err := scanner.ScanWebsite(c.Request.Context(), domain)
+		if err != nil {
+			errChan <- err
+			return
+		}
+		resultChan <- report
+	}()
+
+	// Send progress updates via SSE
+	ticker := time.NewTicker(100 * time.Millisecond)
+	defer ticker.Stop()
+
+	ctx := c.Request.Context()
+
+	for {
+		select {
+		case <-ctx.Done():
+			sendSSEEvent(c, "error", "Connection closed")
+			return
+
+		case progress, ok := <-progressChan:
+			if ok {
+				sendSSEEvent(c, "status", map[string]interface{}{
+					"stage":    progress.stage,
+					"progress": progress.progress,
+				})
+				c.Writer.Flush()
+			}
+
+		case err := <-errChan:
+			markScanFailed(domain, err)
+			sendSSEEvent(c, "error", err.Error())
+			return
+
+		case report := <-resultChan:
+			augmentSecurityReport(domain, report)
+			if err := storeSecurityReport(report); err != nil {
+				sendSSEEvent(c, "error", fmt.Sprintf("Failed to store report: %v", err))
+				return
+			}
+			sendSSEEvent(c, "result", report)
+			return
+
+		case <-time.After(2 * time.Minute):
+			markScanFailed(domain, errors.New("scan timed out"))
+			sendSSEEvent(c, "error", "Scan timed out")
+			return
+
+		case <-ticker.C:
+			// Keep-alive ping
+			c.Writer.WriteString(": ping\n\n")
+			c.Writer.Flush()
+		}
+	}
+}
+
+// waitForExistingScan waits for an existing scan to complete and sends result
+func waitForExistingScan(c *gin.Context, domain string) {
+	ticker := time.NewTicker(500 * time.Millisecond)
+	defer ticker.Stop()
+
+	timeout := time.After(2 * time.Minute)
+	ctx := c.Request.Context()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-timeout:
+			sendSSEEvent(c, "error", "Timeout waiting for existing scan")
+			return
+		case <-ticker.C:
+			status := getScanStatus(domain)
+			if status == nil || status.State != "running" {
+				// Scan completed, try to get result
+				if cached, err := getRecentCachedReport(domain); err == nil {
+					var report SecurityReport
+					if err := json.Unmarshal(cached.ReportData, &report); err == nil {
+						sendSSEEvent(c, "result", report)
+						return
+					}
+				}
+				// Check if scan failed
+				if status != nil && status.State == "failed" {
+					sendSSEEvent(c, "error", status.Error)
+					return
+				}
+				sendSSEEvent(c, "error", "Scan completed but result not found")
+				return
+			}
+			// Send keep-alive
+			c.Writer.WriteString(": ping\n\n")
+			c.Writer.Flush()
+		}
+	}
+}
+
+// sendSSEEvent sends an SSE event
+func sendSSEEvent(c *gin.Context, event string, data interface{}) {
+	jsonData, err := json.Marshal(data)
+	if err != nil {
+		log.Printf("Error marshaling SSE data: %v", err)
+		return
+	}
+	c.Writer.WriteString(fmt.Sprintf("event: %s\ndata: %s\n\n", event, string(jsonData)))
+	c.Writer.Flush()
 }
 
 func augmentSecurityReport(domain string, report *SecurityReport) {

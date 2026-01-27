@@ -27,6 +27,9 @@ const (
 	defaultMaxConcurrentRequests = 8
 )
 
+// ProgressCallback is called during scan to report progress
+type ProgressCallback func(stage string, progress int)
+
 type Scanner struct {
 	timeout           time.Duration
 	strictTransport   *http.Transport
@@ -37,8 +40,9 @@ type Scanner struct {
 	tasks     []ScanTask
 	version   string
 
-	requestLimiter chan struct{}
-	options        ScannerOptions
+	requestLimiter   chan struct{}
+	options          ScannerOptions
+	progressCallback ProgressCallback
 }
 
 type requestOptions struct {
@@ -133,6 +137,18 @@ func (s *Scanner) SetMaxConcurrentRequests(n int) {
 		n = 1
 	}
 	s.requestLimiter = make(chan struct{}, n)
+}
+
+// SetProgressCallback sets a callback function to receive progress updates
+func (s *Scanner) SetProgressCallback(cb ProgressCallback) {
+	s.progressCallback = cb
+}
+
+// reportProgress sends a progress update if a callback is set
+func (s *Scanner) reportProgress(stage string, progress int) {
+	if s.progressCallback != nil {
+		s.progressCallback(stage, progress)
+	}
 }
 
 func (s *Scanner) applyOptions() {
@@ -299,6 +315,8 @@ func (s *Scanner) ScanWebsite(ctx context.Context, domain string) (*SecurityRepo
 		domain = "https://" + domain
 	}
 
+	s.reportProgress("connecting", 0)
+
 	var wg sync.WaitGroup
 	report := &SecurityReport{
 		ScanTimestamp: time.Now(),
@@ -309,6 +327,11 @@ func (s *Scanner) ScanWebsite(ctx context.Context, domain string) (*SecurityRepo
 
 	req := ScanRequest{Domain: domain}
 
+	// Track completed tasks for progress reporting
+	var completedMu sync.Mutex
+	completedTasks := 0
+	totalTasks := len(s.tasks)
+
 	for _, task := range s.tasks {
 		task := task
 		wg.Add(1)
@@ -317,11 +340,18 @@ func (s *Scanner) ScanWebsite(ctx context.Context, domain string) (*SecurityRepo
 			if err := task.Run(ctx, s, req, report); err != nil {
 				report.addError(task.Name(), err)
 			}
+			completedMu.Lock()
+			completedTasks++
+			// Progress: 10-90% spread across tasks
+			progress := 10 + (completedTasks * 80 / totalTasks)
+			s.reportProgress(task.Name(), progress)
+			completedMu.Unlock()
 		}()
 	}
 
 	wg.Wait()
 	s.appendTLSIssues(report)
+	s.reportProgress("finalizing", 100)
 	return report, nil
 }
 

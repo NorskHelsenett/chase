@@ -18,9 +18,11 @@
 	let searchResults = null;
 	let reportStatus: { state: string; startedAt: string; completedAt: string } | null = null;
 	let pollInterval: ReturnType<typeof setInterval> | null = null;
+	let screenshotLoading = true;
 
 	$: if (data.id) {
 		serverID = data.id;
+		screenshotLoading = true; // Reset when server changes
 	}
 
 	onMount(() => {
@@ -260,11 +262,22 @@
 		<section class="hero-section">
 			<!-- Screenshot (2/3) -->
 			<div class="hero-screenshot">
+				{#if screenshotLoading}
+					<div class="screenshot-loading">
+						<div class="screenshot-spinner"></div>
+						<span>Loading preview...</span>
+					</div>
+				{/if}
 				<img
 					src={`/api/screenshot/${encodeURIComponent(server.url)}?cached=true`}
 					alt="Website preview"
 					class="screenshot-img"
-					on:error={(e) => e.target.style.display = 'none'}
+					class:screenshot-loaded={!screenshotLoading}
+					on:load={() => screenshotLoading = false}
+					on:error={(e) => {
+						screenshotLoading = false;
+						e.currentTarget.style.display = 'none';
+					}}
 				/>
 				<div class="screenshot-overlay"></div>
 			</div>
@@ -459,6 +472,34 @@
 		height: 100%;
 		object-fit: cover;
 		object-position: top;
+		opacity: 0;
+		transition: opacity 0.3s ease;
+	}
+
+	.screenshot-img.screenshot-loaded {
+		opacity: 1;
+	}
+
+	.screenshot-loading {
+		position: absolute;
+		inset: 0;
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		justify-content: center;
+		gap: 1rem;
+		background: #2b2b2b;
+		color: #9ca3af;
+		font-size: 0.875rem;
+	}
+
+	.screenshot-spinner {
+		width: 2.5rem;
+		height: 2.5rem;
+		border: 3px solid #3b3b3b;
+		border-top-color: #22c55e;
+		border-radius: 50%;
+		animation: spin 1s linear infinite;
 	}
 
 	.screenshot-overlay {

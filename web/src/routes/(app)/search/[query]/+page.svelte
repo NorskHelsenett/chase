@@ -26,7 +26,8 @@
 		Database,
 		Fingerprint,
 		Bug,
-		ShieldAlert
+		ShieldAlert,
+		Loader2
 	} from 'lucide-svelte';
 	import { fade, fly, slide } from 'svelte/transition';
 	import { onMount, onDestroy } from 'svelte';
@@ -48,6 +49,54 @@
 		healthProbes: false
 	};
 
+	// SSE progress state
+	let scanProgress = 0;
+	let currentStage = 'connecting';
+	let scanError = null;
+	let eventSource = null;
+	let scanComplete = false; // Track if scan completed successfully
+
+	// Stage definitions for progress display
+	// Backend sends progress 10-90% spread across ~12 tasks, then 100 at finalizing
+	// Map these to 8 UI stages for a cleaner display
+	const scanStages = [
+		{ id: 'connecting', label: 'Connecting to target...', icon: Globe, minProgress: 0 },
+		{ id: 'headers', label: 'Analyzing security headers...', icon: Shield, minProgress: 15 },
+		{ id: 'certificate', label: 'Checking TLS/SSL certificate...', icon: Lock, minProgress: 30 },
+		{ id: 'dns', label: 'Scanning DNS records...', icon: Network, minProgress: 40 },
+		{ id: 'infrastructure', label: 'Probing infrastructure...', icon: Server, minProgress: 50 },
+		{ id: 'admin', label: 'Checking admin pages...', icon: Key, minProgress: 60 },
+		{ id: 'swagger', label: 'Analyzing API endpoints...', icon: Code, minProgress: 75 },
+		{ id: 'finalizing', label: 'Finalizing report...', icon: FileText, minProgress: 90 }
+	];
+
+	// Reactive: compute current UI stage based on progress and backend stage
+	$: currentUIStage = (() => {
+		// Special cases for explicit stages from backend
+		if (currentStage === 'connecting') return 'connecting';
+		if (currentStage === 'finalizing' || currentStage === 'cached') return 'finalizing';
+
+		// Find the appropriate stage based on progress percentage
+		for (let i = scanStages.length - 1; i >= 0; i--) {
+			if (scanProgress >= scanStages[i].minProgress) {
+				return scanStages[i].id;
+			}
+		}
+		return 'connecting';
+	})();
+
+	// Reactive: compute stage statuses based on currentUIStage and scanProgress
+	$: stageStatuses = scanStages.map((stage) => {
+		const stageIndex = scanStages.findIndex((s) => s.id === stage.id);
+		const currentIndex = scanStages.findIndex((s) => s.id === currentUIStage);
+		return {
+			...stage,
+			isCompleted: stageIndex < currentIndex,
+			isActive: stage.id === currentUIStage,
+			isPending: stageIndex > currentIndex
+		};
+	});
+
 	function updateRelativeTime() {
 		relativeTime = getRelativeTime(searchTimestamp);
 	}
@@ -58,22 +107,116 @@
 
 	onDestroy(() => {
 		if (timeInterval) clearInterval(timeInterval);
+		cleanupEventSource();
 	});
 
+	function cleanupEventSource() {
+		if (eventSource) {
+			eventSource.close();
+			eventSource = null;
+		}
+	}
+
 	async function fetchSearchResults(query) {
+		// Clean up any existing SSE connection
+		cleanupEventSource();
+
+		// Reset state
 		loading = true;
+		scanProgress = 0;
+		currentStage = 'connecting';
+		scanError = null;
+		scanComplete = false;
 		searchTimestamp = Date.now();
 		screenshotLoaded = false;
-		try {
-			const response = await fetch(`/api/security/${encodeURIComponent(query)}`);
-			const data = await response.json();
-			results = data;
-			searchHistory.addSearch(query, data);
-		} catch (error) {
-			console.error('Error fetching search results:', error);
-			results = null;
-		} finally {
+
+		// Check for fresh cached result first (within 5 minutes)
+		const cached = searchHistory.getRecentSearch(query);
+		if (cached) {
+			console.log('Using cached result from', new Date(cached.timestamp));
+			results = cached.results;
+			searchTimestamp = cached.timestamp;
 			loading = false;
+			return;
+		}
+
+		// Connect to SSE endpoint for real-time progress
+		try {
+			eventSource = new EventSource(`/api/security/${encodeURIComponent(query)}/stream`);
+
+			eventSource.addEventListener('status', (e) => {
+				try {
+					const status = JSON.parse(e.data);
+					currentStage = status.stage || 'connecting';
+					scanProgress = status.progress || 0;
+				} catch (err) {
+					console.error('Error parsing status event:', err);
+				}
+			});
+
+			eventSource.addEventListener('cache_age', (e) => {
+				try {
+					const cacheAge = JSON.parse(e.data);
+					console.log('Result from cache, age:', cacheAge, 'seconds');
+				} catch (err) {
+					console.error('Error parsing cache_age event:', err);
+				}
+			});
+
+			eventSource.addEventListener('result', (e) => {
+				try {
+					const data = JSON.parse(e.data);
+					results = data;
+					searchHistory.addSearch(query, data);
+					loading = false;
+					scanProgress = 100;
+					scanComplete = true; // Mark as complete before closing
+					cleanupEventSource();
+				} catch (err) {
+					console.error('Error parsing result event:', err);
+					scanError = 'Failed to parse scan results';
+					loading = false;
+					cleanupEventSource();
+				}
+			});
+
+			eventSource.addEventListener('error', (e) => {
+				try {
+					if (e.data) {
+						scanError = JSON.parse(e.data);
+					} else {
+						scanError = 'Connection error';
+					}
+				} catch {
+					scanError = 'Scan failed';
+				}
+				loading = false;
+				cleanupEventSource();
+			});
+
+			eventSource.onerror = () => {
+				// Don't set error if scan completed successfully, or we already have results/error
+				if (!scanComplete && !results && !scanError) {
+					scanError = 'Connection to server lost';
+					loading = false;
+				}
+				cleanupEventSource();
+			};
+		} catch (error) {
+			console.error('Error setting up SSE:', error);
+			// Fallback to regular fetch
+			try {
+				const response = await fetch(`/api/security/${encodeURIComponent(query)}`);
+				const data = await response.json();
+				results = data;
+				searchHistory.addSearch(query, data);
+			} catch (fetchError) {
+				console.error('Error fetching search results:', fetchError);
+				scanError = 'Failed to fetch results';
+				results = null;
+			} finally {
+				loading = false;
+			}
 		}
 	}
 
@@ -232,18 +375,87 @@
 <div class="page">
 	{#if loading}
 		<div class="loading-container" in:fade>
-			<div class="loading-grid">
-				<div class="skeleton skeleton-hero"></div>
-				<div class="skeleton-sidebar">
-					<div class="skeleton skeleton-title"></div>
-					<div class="skeleton skeleton-grade"></div>
-					<div class="skeleton skeleton-stats"></div>
+			<!-- Enhanced Loading UI -->
+			<div class="scan-progress-container">
+				<!-- Progress Ring -->
+				<div class="progress-ring-container">
+					<svg class="progress-ring" viewBox="0 0 120 120">
+						<circle
+							class="progress-ring-bg"
+							cx="60"
+							cy="60"
+							r="52"
+							fill="none"
+							stroke-width="8"
+						/>
+						<circle
+							class="progress-ring-fill"
+							cx="60"
+							cy="60"
+							r="52"
+							fill="none"
+							stroke-width="8"
+							stroke-dasharray="327"
+							stroke-dashoffset={327 - (327 * scanProgress) / 100}
+							transform="rotate(-90 60 60)"
+						/>
+					</svg>
+					<div class="progress-percentage">
+						<span class="percentage-value">{scanProgress}</span>
+						<span class="percentage-symbol">%</span>
+					</div>
+				</div>
+
+				<!-- Current Stage Text -->
+				<div class="current-stage-text">
+					{#each stageStatuses as stage (stage.id)}
+						{#if stage.isActive}
+							<span in:fade={{ duration: 200 }}>{stage.label}</span>
+						{/if}
+					{/each}
+				</div>
+
+				<!-- Stage List -->
+				<div class="stages-list">
+					{#each stageStatuses as stage (stage.id)}
+						<div
+							class="stage-item"
+							class:completed={stage.isCompleted}
+							class:active={stage.isActive}
+							class:pending={stage.isPending}
+						>
+							<div class="stage-indicator">
+								{#if stage.isCompleted}
+									<CheckCircle size={16} />
+								{:else if stage.isActive}
+									<div class="stage-active-dot">
+										<Loader2 size={16} class="spinning" />
+									</div>
+								{:else}
+									<div class="stage-pending-dot"></div>
+								{/if}
+							</div>
+							<span class="stage-label">{stage.label.replace('...', '')}</span>
+						</div>
+					{/each}
+				</div>
+
+				<!-- Target Domain -->
+				<div class="scan-target">
+					<Globe size={16} />
+					<span>Scanning <strong>{data.query}</strong></span>
 				</div>
 			</div>
-			<div class="skeleton-findings">
-				{#each Array(4) as _, i}
-					<div class="skeleton skeleton-card" style="animation-delay: {i * 100}ms"></div>
-				{/each}
+		</div>
+	{:else if scanError}
+		<div class="error-container" in:fade>
+			<div class="error-card">
+				<AlertTriangle size={48} />
+				<h2>Scan Failed</h2>
+				<p>{scanError}</p>
+				<button class="retry-button" on:click={() => fetchSearchResults(data.query)}>
+					Try Again
+				</button>
 			</div>
 		</div>
 	{:else if results}
@@ -1179,53 +1391,217 @@
 	.loading-container {
 		display: flex;
 		flex-direction: column;
+		align-items: center;
+		justify-content: center;
+		min-height: 70vh;
 		gap: 1.5rem;
 	}
 
-	.loading-grid {
-		display: grid;
-		grid-template-columns: 2fr 1fr;
-		gap: 1.5rem;
+	/* Enhanced Loading UI */
+	.scan-progress-container {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: 2rem;
+		padding: 3rem;
+		background: var(--bg1);
+		border-radius: 1rem;
+		max-width: 500px;
+		width: 100%;
 	}
 
+	.progress-ring-container {
+		position: relative;
+		width: 120px;
+		height: 120px;
+	}
+
+	.progress-ring {
+		width: 100%;
+		height: 100%;
+		transform: rotate(-90deg);
+	}
+
+	.progress-ring-bg {
+		stroke: var(--bg2);
+	}
+
+	.progress-ring-fill {
+		stroke: var(--aqua);
+		stroke-linecap: round;
+		transition: stroke-dashoffset 0.3s ease;
+	}
+
+	.progress-percentage {
+		position: absolute;
+		top: 50%;
+		left: 50%;
+		transform: translate(-50%, -50%);
+		display: flex;
+		align-items: baseline;
+		gap: 0.125rem;
+	}
+
+	.percentage-value {
+		font-size: 2rem;
+		font-weight: 700;
+		color: var(--fg);
+	}
+
+	.percentage-symbol {
+		font-size: 1rem;
+		color: var(--fg3);
+	}
+
+	.current-stage-text {
+		font-size: 1.125rem;
+		color: var(--aqua);
+		font-weight: 500;
+		min-height: 1.75rem;
+		text-align: center;
+	}
+
+	.stages-list {
+		display: flex;
+		flex-direction: column;
+		gap: 0.75rem;
+		width: 100%;
+		padding: 1rem;
+		background: var(--bg0);
+		border-radius: 0.5rem;
+	}
+
+	.stage-item {
+		display: flex;
+		align-items: center;
+		gap: 0.75rem;
+		padding: 0.5rem 0.75rem;
+		border-radius: 0.375rem;
+		transition: all 0.2s ease;
+	}
+
+	.stage-item.completed {
+		color: var(--green);
+	}
+
+	.stage-item.active {
+		background: rgba(142, 192, 124, 0.1);
+		color: var(--aqua);
+	}
+
+	.stage-item.pending {
+		color: var(--fg4);
+	}
+
+	.stage-indicator {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 20px;
+		height: 20px;
+	}
+
+	.stage-active-dot {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+	}
+
+	.stage-pending-dot {
+		width: 8px;
+		height: 8px;
+		border-radius: 50%;
+		background: var(--bg3);
+	}
+
+	.stage-label {
+		font-size: 0.875rem;
+	}
+
+	:global(.spinning) {
+		animation: spin 1s linear infinite;
+	}
+
+	@keyframes spin {
+		from {
+			transform: rotate(0deg);
+		}
+		to {
+			transform: rotate(360deg);
+		}
+	}
+
+	.scan-target {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		font-size: 0.875rem;
+		color: var(--fg3);
+	}
+
+	.scan-target strong {
+		color: var(--fg);
+	}
+
+	/* Error State */
+	.error-container {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		min-height: 70vh;
+	}
+
+	.error-card {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: 1rem;
+		padding: 3rem;
+		background: var(--bg1);
+		border-radius: 1rem;
+		text-align: center;
+		max-width: 400px;
+		border: 1px solid rgba(251, 73, 52, 0.3);
+	}
+
+	.error-card :global(svg) {
+		color: var(--red);
+	}
+
+	.error-card h2 {
+		font-size: 1.5rem;
+		color: var(--fg);
+		margin: 0;
+	}
+
+	.error-card p {
+		color: var(--fg3);
+		margin: 0;
+	}
+
+	.retry-button {
+		margin-top: 1rem;
+		padding: 0.75rem 1.5rem;
+		background: var(--aqua-dim);
+		color: var(--bg0);
+		border: none;
+		border-radius: 0.5rem;
+		font-size: 0.875rem;
+		font-weight: 600;
+		cursor: pointer;
+		transition: background 0.2s ease;
+	}
+
+	.retry-button:hover {
+		background: var(--aqua);
+	}
+
+	/* Old skeleton styles (kept for fallback) */
 	.skeleton {
 		background: linear-gradient(90deg, var(--bg1) 25%, var(--bg2) 50%, var(--bg1) 75%);
 		background-size: 200% 100%;
 		animation: shimmer 1.5s infinite;
 		border-radius: 0.5rem;
-	}
-
-	.skeleton-hero {
-		height: 320px;
-	}
-
-	.skeleton-sidebar {
-		display: flex;
-		flex-direction: column;
-		gap: 1rem;
-	}
-
-	.skeleton-title {
-		height: 2rem;
-		width: 80%;
-	}
-
-	.skeleton-grade {
-		height: 120px;
-	}
-
-	.skeleton-stats {
-		height: 80px;
-	}
-
-	.skeleton-findings {
-		display: grid;
-		grid-template-columns: repeat(4, 1fr);
-		gap: 1rem;
-	}
-
-	.skeleton-card {
-		height: 160px;
 	}
 
 	@keyframes shimmer {

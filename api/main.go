@@ -89,6 +89,7 @@ func setupRoutes(r *gin.Engine) {
 		api.GET("/logout", handlers.HandleLogout)
 
 		api.GET("/security/:domain", security.SecurityScanHandler)
+		api.GET("/security/:domain/stream", security.SecurityScanSSEHandler)
 		api.GET("/screenshot/:domain", security.ScreenshotHandler)
 		api.POST("/webhooks/servers", auth.RequireToken(), servers.AddServerFromWebhook)
 

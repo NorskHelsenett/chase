@@ -6,6 +6,11 @@
 	"image": "mcr.microsoft.com/devcontainers/go:1.25-bookworm",
 	"features": {
 		"ghcr.io/devcontainers/features/node:1": {},
+		"ghcr.io/jonasbg/mocc/mocc:1": {
+			"version": "latest",
+			"port": "23456",
+			"autostart": true
+		}
 		// "ghcr.io/devcontainers/features/kubectl-helm-minikube:1": {
 		// 	"version": "latest",
 		// 	"helm": "latest",
@@ -26,7 +31,11 @@
 	"portsAttributes": {
 		"8080": {
 			"onAutoForward": "ignore"
-		}
+		},
+		"23456": {
+			"label": "mOCC OIDC Provider",
+			"onAutoForward": "silent"
+		},
 	},
 	"runArgs": [
 		"--add-host=host.containers.internal:host-gateway"
