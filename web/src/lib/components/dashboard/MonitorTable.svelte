@@ -258,18 +258,15 @@
 	.table-card {
 		background: #202020;
 		border-radius: 0.5rem;
-		padding: 1rem;
+		padding: 0 1rem 1rem;
 	}
 
 	.virtual-scroll-container {
-		max-height: 80vh;
-		overflow-y: auto;
-		overflow-x: hidden;
 	}
 
-	.virtual-scroll-container thead {
+	.monitor-table thead tr {
 		position: sticky;
-		top: 0;
+		top: -1px;
 		z-index: 1;
 		background: #202020;
 	}

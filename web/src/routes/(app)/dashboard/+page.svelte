@@ -121,21 +121,62 @@
 	}
 </script>
 
-<div class="p-4 w-full">
-	<MonitorStats {stats} />
-	<MonitorControls
-		isLoading={$isLoading}
-		on:search={handleSearch}
-		on:refresh={handleRefresh}
-		on:filter={handleFilter}
-		on:export={handleExport}
-		on:serverAdded={() => fetchServers(true)}
-	/>
-	{#if $isLoading && filteredServers.length === 0}
-		<div class="flex justify-center items-center p-6">
-			<div class="animate-pulse text-gray-500">Loading server data...</div>
-		</div>
-	{:else}
-		<MonitorTable sites={filteredServers} />
-	{/if}
+<div class="dashboard">
+	<div class="dashboard-header">
+		<MonitorStats {stats} />
+		<MonitorControls
+			isLoading={$isLoading}
+			on:search={handleSearch}
+			on:refresh={handleRefresh}
+			on:filter={handleFilter}
+			on:export={handleExport}
+			on:serverAdded={() => fetchServers(true)}
+		/>
+	</div>
+	<div class="dashboard-table">
+		{#if $isLoading && filteredServers.length === 0}
+			<div class="flex justify-center items-center p-6">
+				<div class="animate-pulse text-gray-500">Loading server data...</div>
+			</div>
+		{:else}
+			<MonitorTable sites={filteredServers} />
+		{/if}
+	</div>
 </div>
+
+<style>
+	.dashboard {
+		display: flex;
+		flex-direction: column;
+		height: 100%;
+		padding: 1rem;
+		box-sizing: border-box;
+		overflow: hidden;
+	}
+
+	.dashboard-header {
+		flex-shrink: 0;
+	}
+
+	.dashboard-table {
+		flex: 1;
+		min-height: 0;
+		border-radius: 0.5rem;
+		overflow: auto;
+		scrollbar-width: thin;
+		scrollbar-color: #333 transparent;
+	}
+
+	.dashboard-table::-webkit-scrollbar {
+		width: 6px;
+	}
+
+	.dashboard-table::-webkit-scrollbar-track {
+		background: transparent;
+	}
+
+	.dashboard-table::-webkit-scrollbar-thumb {
+		background: #333;
+		border-radius: 3px;
+	}
+</style>
