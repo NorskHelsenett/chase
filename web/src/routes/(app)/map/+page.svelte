@@ -4,23 +4,29 @@
 	import { MapPin, Network, Globe } from 'lucide-svelte';
 	import 'leaflet/dist/leaflet.css';
 
+	type GeoInfo = {
+		ip: string;
+		country: string;
+		country_code: string;
+		city: string;
+		region: string;
+		lat: number;
+		lon: number;
+		org: string;
+		isp: string;
+		as: string;
+	};
+
+	type IPInfo = {
+		ip: string;
+		geo?: GeoInfo;
+	};
+
 	type ServerGeo = {
 		server_id: number;
 		url: string;
-		ip: string;
+		ips: IPInfo[];
 		status: string;
-		geo?: {
-			ip: string;
-			country: string;
-			country_code: string;
-			city: string;
-			region: string;
-			lat: number;
-			lon: number;
-			org: string;
-			isp: string;
-			as: string;
-		};
 	};
 
 	let servers: ServerGeo[] = [];
@@ -30,20 +36,22 @@
 	let map: any = null;
 	let view: 'map' | 'cluster' = 'map';
 
-	// Grouped data
+	// Flatten: group by IP across all servers
 	$: ipGroups = servers.reduce((acc, s) => {
-		if (!acc[s.ip]) acc[s.ip] = { ip: s.ip, geo: s.geo, servers: [] };
-		acc[s.ip].servers.push(s);
+		for (const ipInfo of (s.ips || [])) {
+			if (!acc[ipInfo.ip]) acc[ipInfo.ip] = { ip: ipInfo.ip, geo: ipInfo.geo, servers: [] };
+			acc[ipInfo.ip].servers.push(s);
+		}
 		return acc;
-	}, {} as Record<string, { ip: string; geo: ServerGeo['geo']; servers: ServerGeo[] }>);
+	}, {} as Record<string, { ip: string; geo?: GeoInfo; servers: ServerGeo[] }>);
 
 	$: locationGroups = Object.values(ipGroups).reduce((acc, group) => {
 		if (!group.geo) return acc;
 		const key = `${group.geo.lat},${group.geo.lon}`;
-		if (!acc[key]) acc[key] = { lat: group.geo.lat, lon: group.geo.lon, city: group.geo.city, country: group.geo.country, ips: [] };
+		if (!acc[key]) acc[key] = { lat: group.geo.lat, lon: group.geo.lon, city: group.geo.city, country: group.geo.country, country_code: group.geo.country_code, ips: [] };
 		acc[key].ips.push(group);
 		return acc;
-	}, {} as Record<string, { lat: number; lon: number; city: string; country: string; ips: typeof ipGroups[string][] }>);
+	}, {} as Record<string, { lat: number; lon: number; city: string; country: string; country_code: string; ips: typeof ipGroups[string][] }>);
 
 	let L: any = null;
 
@@ -76,6 +84,11 @@
 	onDestroy(() => {
 		if (map) { map.remove(); map = null; }
 	});
+
+	function getFlagEmoji(cc: string): string {
+		if (!cc || cc.length !== 2) return '';
+		return String.fromCodePoint(...[...cc.toUpperCase()].map(c => 0x1F1E6 + c.charCodeAt(0) - 65));
+	}
 
 	function buildMap(L: any) {
 		if (map) { map.remove(); map = null; }
@@ -186,6 +199,25 @@
 		<div class="error">{error}</div>
 	{:else if view === 'map'}
 		<div class="map-wrap" bind:this={mapContainer}></div>
+		{#if Object.keys(locationGroups).length > 0}
+			<div class="country-strip">
+				{#each Object.entries(
+					Object.values(locationGroups).reduce((acc, loc) => {
+						const cc = loc.country_code || '??';
+						if (!acc[cc]) acc[cc] = { country: loc.country, count: 0, cities: new Set() };
+						acc[cc].count += loc.ips.reduce((s, g) => s + g.servers.length, 0);
+						acc[cc].cities.add(loc.city);
+						return acc;
+					}, {})
+				).sort((a, b) => b[1].count - a[1].count) as [cc, info]}
+					<div class="country-chip">
+						<span class="country-flag">{getFlagEmoji(cc)}</span>
+						<span class="country-name">{info.country}</span>
+						<span class="country-count">{info.count}</span>
+					</div>
+				{/each}
+			</div>
+		{/if}
 	{:else}
 		<div class="clusters">
 			{#each Object.values(ipGroups).sort((a, b) => b.servers.length - a.servers.length) as group}
@@ -230,11 +262,14 @@
 	}
 
 	.page {
-		padding: 1.5rem;
-		width: 100%;
+		padding: 1rem;
+		/* width: 97%; */
+		height: 100%;
 		display: flex;
 		flex-direction: column;
-		gap: 1rem;
+		gap: 0.5rem;
+		overflow: hidden;
+		box-sizing: border-box;
 	}
 
 	.header {
@@ -291,8 +326,40 @@
 
 	.error { color: #ef4444; }
 
+	.country-strip {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.5rem;
+		padding: 0.75rem 0;
+	}
+
+	.country-chip {
+		display: flex;
+		align-items: center;
+		gap: 0.375rem;
+		padding: 0.375rem 0.625rem;
+		background: #202020;
+		border-radius: 0.375rem;
+		font-size: 0.8125rem;
+	}
+
+	.country-flag {
+		font-size: 1rem;
+	}
+
+	.country-name {
+		color: #d1d5db;
+	}
+
+	.country-count {
+		color: #6b7280;
+		font-size: 0.75rem;
+		font-variant-numeric: tabular-nums;
+	}
+
 	.map-wrap {
-		height: 80vh;
+		flex: 1;
+		min-height: 0;
 		border-radius: 0.5rem;
 		overflow: hidden;
 		background: #1a1a1a;

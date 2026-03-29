@@ -30,8 +30,10 @@
 	</nav>
 
 	<!-- Main content area -->
-	<main class="flex-grow overflow-auto p-4" style="margin-left: 200px;">
-		<div class="w-full flex items-center justify-center">
+	<main
+		style="margin-left: 200px; height: 98vh; position: fixed; width: calc(100% - 210px); overflow: hidden;"
+	>
+		<div class="w-full h-full overflow-auto">
 			<slot />
 		</div>
 	</main>

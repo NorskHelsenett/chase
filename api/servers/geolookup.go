@@ -28,12 +28,16 @@ type GeoResult struct {
 	AS          string  `json:"as"`
 }
 
+type IPInfo struct {
+	IP  string     `json:"ip"`
+	Geo *GeoResult `json:"geo,omitempty"`
+}
+
 type ServerGeo struct {
-	ServerID uint       `json:"server_id"`
-	URL      string     `json:"url"`
-	IP       string     `json:"ip"`
-	Geo      *GeoResult `json:"geo,omitempty"`
-	Status   string     `json:"status"`
+	ServerID uint     `json:"server_id"`
+	URL      string   `json:"url"`
+	IPs      []IPInfo `json:"ips"`
+	Status   string   `json:"status"`
 }
 
 var (
@@ -201,30 +205,31 @@ func GetServersGeo(c *gin.Context) {
 	results := make([]ServerGeo, 0, len(servers))
 
 	for _, srv := range servers {
-		var ip string
+		// Collect unique IPs: from ping detail + DNS resolution
+		ipSet := make(map[string]bool)
 
-		// Try to get IP from latest ping detail
+		// IP from latest ping detail
 		var ping PingResult
 		if err := db.Where("server_id = ? AND detail_id IS NOT NULL", srv.ID).
 			Preload("PingDetail").
 			Order("timestamp DESC").
-			First(&ping).Error; err == nil && ping.PingDetail != nil {
-			ip = ping.PingDetail.IP
+			First(&ping).Error; err == nil && ping.PingDetail != nil && ping.PingDetail.IP != "" {
+			ipSet[ping.PingDetail.IP] = true
 		}
 
-		// Fallback: resolve the domain via DNS
-		if ip == "" {
-			host := strings.TrimPrefix(strings.TrimPrefix(srv.URL, "https://"), "http://")
-			if resolved, err := net.LookupHost(host); err == nil && len(resolved) > 0 {
-				ip = resolved[0]
+		// All IPs from DNS resolution
+		host := strings.TrimPrefix(strings.TrimPrefix(srv.URL, "https://"), "http://")
+		if resolved, err := net.LookupHost(host); err == nil {
+			for _, ip := range resolved {
+				ipSet[ip] = true
 			}
 		}
 
-		if ip == "" {
+		if len(ipSet) == 0 {
 			continue
 		}
 
-		// Get latest ping for status (any ping, not just ones with detail)
+		// Determine status from latest ping
 		status := "unknown"
 		var latestPing PingResult
 		if err := db.Where("server_id = ?", srv.ID).
@@ -239,21 +244,24 @@ func GetServersGeo(c *gin.Context) {
 			}
 		}
 
-		sg := ServerGeo{
+		// Geo-locate each IP
+		ips := make([]IPInfo, 0, len(ipSet))
+		for ip := range ipSet {
+			info := IPInfo{IP: ip}
+			if geo, err := lookupGeo(ip); err == nil {
+				info.Geo = geo
+			} else {
+				log.Printf("Geo lookup failed for %s (%s): %v", srv.URL, ip, err)
+			}
+			ips = append(ips, info)
+		}
+
+		results = append(results, ServerGeo{
 			ServerID: srv.ID,
 			URL:      srv.URL,
-			IP:       ip,
+			IPs:      ips,
 			Status:   status,
-		}
-
-		geo, err := lookupGeo(ip)
-		if err != nil {
-			log.Printf("Geo lookup failed for %s (%s): %v", srv.URL, ip, err)
-		} else {
-			sg.Geo = geo
-		}
-
-		results = append(results, sg)
+		})
 	}
 
 	c.JSON(200, results)
