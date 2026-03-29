@@ -14,6 +14,31 @@
 	});
 </script>
 
+<style>
+	:global(.overflow-auto) {
+		scrollbar-width: thin;
+		scrollbar-color: #333 transparent;
+	}
+
+	:global(.overflow-auto::-webkit-scrollbar) {
+		width: 6px;
+		height: 6px;
+	}
+
+	:global(.overflow-auto::-webkit-scrollbar-track) {
+		background: transparent;
+	}
+
+	:global(.overflow-auto::-webkit-scrollbar-thumb) {
+		background: #333;
+		border-radius: 3px;
+	}
+
+	:global(.overflow-auto::-webkit-scrollbar-thumb:hover) {
+		background: #555;
+	}
+</style>
+
 <!-- Mobile view -->
 <div class="min-h-screen flex flex-col sm:hidden bg-background text-foreground overflow-auto">
 	<div class="flex-grow flex items-center justify-center p-4"></div>
