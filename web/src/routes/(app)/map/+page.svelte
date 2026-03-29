@@ -35,9 +35,14 @@
 	let mapContainer: HTMLDivElement;
 	let map: any = null;
 	let view: 'map' | 'cluster' = 'map';
+	let statusFilter: 'all' | 'up' | 'down' | 'unknown' = 'all';
+
+	$: filteredServers = statusFilter === 'all'
+		? servers
+		: servers.filter(s => s.status === statusFilter);
 
 	// Flatten: group by IP across all servers
-	$: ipGroups = servers.reduce((acc, s) => {
+	$: ipGroups = filteredServers.reduce((acc, s) => {
 		for (const ipInfo of (s.ips || [])) {
 			if (!acc[ipInfo.ip]) acc[ipInfo.ip] = { ip: ipInfo.ip, geo: ipInfo.geo, servers: [] };
 			acc[ipInfo.ip].servers.push(s);
@@ -71,7 +76,7 @@
 		}
 	});
 
-	$: if (!loading && L && servers.length > 0 && view === 'map' && mapContainer) {
+	$: if (!loading && L && filteredServers && view === 'map' && mapContainer) {
 		tick().then(() => buildMap(L));
 	}
 
@@ -183,13 +188,29 @@
 			<Globe size={24} />
 			Infrastructure Map
 		</h1>
-		<div class="view-toggle">
-			<button class:active={view === 'map'} on:click={() => view = 'map'}>
-				<MapPin size={14} /> Map
-			</button>
-			<button class:active={view === 'cluster'} on:click={() => view = 'cluster'}>
-				<Network size={14} /> IP Clusters
-			</button>
+		<div class="header-controls">
+			<div class="view-toggle">
+				<button class:active={statusFilter === 'all'} on:click={() => statusFilter = 'all'}>
+					All <span class="filter-count">{servers.length}</span>
+				</button>
+				<button class:active={statusFilter === 'up'} on:click={() => statusFilter = 'up'}>
+					Online <span class="filter-count">{servers.filter(s => s.status === 'up').length}</span>
+				</button>
+				<button class:active={statusFilter === 'down'} on:click={() => statusFilter = 'down'}>
+					Offline <span class="filter-count">{servers.filter(s => s.status === 'down').length}</span>
+				</button>
+				<button class:active={statusFilter === 'unknown'} on:click={() => statusFilter = 'unknown'}>
+					New <span class="filter-count">{servers.filter(s => s.status === 'unknown').length}</span>
+				</button>
+			</div>
+			<div class="view-toggle">
+				<button class:active={view === 'map'} on:click={() => view = 'map'}>
+					<MapPin size={14} /> Map
+				</button>
+				<button class:active={view === 'cluster'} on:click={() => view = 'cluster'}>
+					<Network size={14} /> IP Clusters
+				</button>
+			</div>
 		</div>
 	</div>
 
@@ -291,6 +312,17 @@
 	}
 
 	.title :global(svg) { color: #4ade80; }
+
+	.header-controls {
+		display: flex;
+		gap: 0.5rem;
+	}
+
+	.filter-count {
+		font-size: 0.6875rem;
+		color: #6b7280;
+		font-variant-numeric: tabular-nums;
+	}
 
 	.view-toggle {
 		display: flex;
