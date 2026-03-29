@@ -85,7 +85,7 @@
 		error = null;
 
 		try {
-			const response = await fetch(`/api/servers/${id}?limit=90`);
+			const response = await fetch(`/api/servers/${id}?limit=90&includeDetail=true`);
 			if (!response.ok) throw new Error('Failed to fetch server data');
 
 			const data: Server = await response.json();
@@ -240,7 +240,10 @@
 			).toFixed(decimals)
 		);
 
-		const certValidUntil = reportData?.certificate?.validUntil;
+		// Prefer live cert data from latest ping over cached report
+		const liveCertExpiry = latestPing?.detail?.cert_expiry_date;
+		const reportCertExpiry = reportData?.certificate?.validUntil;
+		const certValidUntil = liveCertExpiry || reportCertExpiry;
 
 		return {
 			currentResponse: latestPing?.response_time_ms || 0,
@@ -351,9 +354,13 @@
 								{searchResults.headers.issues.length} header issue{searchResults.headers.issues.length > 1 ? 's' : ''} detected
 							</li>
 						{/if}
-						<li class="finding-item {metrics.certDaysLeft < 30 ? 'warning' : 'success'}">
+						<li class="finding-item {metrics.certDaysLeft < 0 ? 'danger' : metrics.certDaysLeft < 30 ? 'warning' : 'success'}">
 							<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" /></svg>
-							Certificate expires in {metrics.certDaysLeft} days
+							{#if metrics.certDaysLeft < 0}
+								Certificate expired {Math.abs(metrics.certDaysLeft)} days ago
+							{:else}
+								Certificate expires in {metrics.certDaysLeft} days
+							{/if}
 						</li>
 						{#if searchResults.adminPages?.exposed?.length > 0}
 							<li class="finding-item danger">

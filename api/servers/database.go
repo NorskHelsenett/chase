@@ -123,7 +123,7 @@ func runMonitoring() {
 				txn.Commit()
 
 				// Broadcast ping result to SSE clients
-				BroadcastPing(server.ID, result)
+				BroadcastPing(server.ID, server.ExpectedStatusCode, result)
 
 				// Send notification if server was deactivated
 				if wasActive && !server.Active {

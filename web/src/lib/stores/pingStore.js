@@ -32,7 +32,12 @@ export function connectPingSSE() {
 	eventSource.addEventListener('ping', (e) => {
 		const ping = JSON.parse(e.data);
 		pingData.update((map) => {
-			const existing = map.get(ping.server_id) || { latest: null, days: [], expectedStatus: 0 };
+			const existing = map.get(ping.server_id) || { latest: null, days: [], expectedStatus: ping.expected_status };
+
+			// Update expected status if provided
+			if (ping.expected_status) {
+				existing.expectedStatus = ping.expected_status;
+			}
 
 			// Update latest ping
 			existing.latest = ping;

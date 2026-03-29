@@ -14,11 +14,12 @@ import (
 
 // PingEvent represents a single ping result for SSE streaming
 type PingEvent struct {
-	ServerID     uint      `json:"server_id"`
-	StatusCode   int       `json:"status_code"`
-	ResponseTime float64   `json:"response_time_ms"`
-	Error        string    `json:"error,omitempty"`
-	Timestamp    time.Time `json:"timestamp"`
+	ServerID       uint      `json:"server_id"`
+	StatusCode     int       `json:"status_code"`
+	ExpectedStatus int       `json:"expected_status"`
+	ResponseTime   float64   `json:"response_time_ms"`
+	Error          string    `json:"error,omitempty"`
+	Timestamp      time.Time `json:"timestamp"`
 }
 
 // DaySummary represents one day of aggregated ping results
@@ -55,13 +56,14 @@ func (h *pingHub) unsubscribe(ch chan []byte) {
 }
 
 // BroadcastPing sends a ping result to all connected SSE clients
-func BroadcastPing(serverID uint, result PingResult) {
+func BroadcastPing(serverID uint, expectedStatus int, result PingResult) {
 	evt := PingEvent{
-		ServerID:     serverID,
-		StatusCode:   result.StatusCode,
-		ResponseTime: result.ResponseTime,
-		Error:        result.Error,
-		Timestamp:    result.Timestamp,
+		ServerID:       serverID,
+		StatusCode:     result.StatusCode,
+		ExpectedStatus: expectedStatus,
+		ResponseTime:   result.ResponseTime,
+		Error:          result.Error,
+		Timestamp:      result.Timestamp,
 	}
 	data, err := json.Marshal(evt)
 	if err != nil {

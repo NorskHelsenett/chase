@@ -26,7 +26,7 @@ func checkServer(serverID uint, resultChan chan<- any) {
 	db.Create(&result)
 
 	// Broadcast to SSE clients
-	BroadcastPing(serverID, result)
+	BroadcastPing(serverID, server.ExpectedStatusCode, result)
 
 	if resultChan != nil {
 		resultChan <- result
