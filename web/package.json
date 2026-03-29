@@ -38,6 +38,7 @@
 		"@floating-ui/dom": "^1.6.12",
 		"apexcharts": "^5.3.5",
 		"date-fns": "^4.1.0",
+		"leaflet": "^1.9.4",
 		"lucide-svelte": "^0.546.0",
 		"md5": "^2.3.0",
 		"vis-network": "^10.0.2"

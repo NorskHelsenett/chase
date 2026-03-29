@@ -68,12 +68,12 @@
 		filteredServers = result;
 	}
 
-	// Compute stats from the filtered list
+	// Compute stats from the filtered list (only count servers with a known status)
 	$: stats = filteredServers.reduce(
 		(acc, server) => {
-			if (isServerUp(server)) {
+			if (server.status === 'up') {
 				acc.up += 1;
-			} else {
+			} else if (server.status === 'down' || server.status === 'stale') {
 				acc.down += 1;
 			}
 			if (server.secrets_count && server.secrets_count > 0) {

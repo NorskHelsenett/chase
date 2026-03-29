@@ -8,6 +8,7 @@
 		Grid,
 		Logs,
 		Share2,
+		Globe,
 		X
 	} from 'lucide-svelte';
 	import Avatar from './Avatar.svelte';
@@ -48,7 +49,8 @@
 			submenu: [
 				{ path: '/dashboard?active=true', icon: Logs, tooltip: 'Dashboard View' },
 				{ path: '/grid?active=true', icon: Grid, tooltip: 'Grid View' },
-				{ path: '/graph', icon: Share2, tooltip: 'Graph View' }
+				{ path: '/graph', icon: Share2, tooltip: 'Graph View' },
+				{ path: '/map', icon: Globe, tooltip: 'Infrastructure Map' }
 			]
 		},
 		{ path: '/settings', icon: Settings, tooltip: 'Settings', auth: true }
