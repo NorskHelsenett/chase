@@ -352,120 +352,98 @@
 				}
 			});
 
-		// Hide the loader only after the graph is laid out *and* a frame has been painted
-		network.once &&
-			network.once('stabilizationIterationsDone', () => {
+		function finalize() {
+			requestAnimationFrame(() => {
+				loading = false;
 				try {
-					network.stopSimulation?.();
+					resetHighlights();
+					network.unselectAll?.();
+					const nodeCount = nodeDataSet.length;
+					const scale = nodeCount > 3000 ? 0.08 : nodeCount > 2000 ? 0.10 : nodeCount > 1000 ? 0.13 : nodeCount > 500 ? 0.18 : nodeCount > 200 ? 0.23 : nodeCount > 100 ? 0.33 : nodeCount > 50 ? 0.43 : nodeCount > 20 ? 0.63 : 1.0;
+					network.fit?.({ animation: false });
+					network.moveTo?.({ scale, animation: false });
 				} catch {}
+			});
+		}
 
-				// Wait a tick so the canvas draws before removing the overlay
-				requestAnimationFrame(() => {
-					loading = false;
+		// Phase 1 done: refine with ForceAtlas2
+		network.once('stabilizationIterationsDone', () => {
+			try { network.stopSimulation?.(); } catch {}
+			finalize();
 
-					try {
-						resetHighlights();
-						network.unselectAll?.();
+			// Phase 2: brief FA2 refine for compact clusters
+			network.setOptions({
+				physics: {
+					enabled: true,
+					solver: 'forceAtlas2Based',
+					forceAtlas2Based: {
+						gravitationalConstant: -90,
+						centralGravity: 0.008,
+						springLength: 70,
+						springConstant: 0.12,
+						damping: 0.75,
+						avoidOverlap: 0.2
+					},
+					stabilization: { enabled: true, iterations: 60, fit: true },
+					adaptiveTimestep: true
+				}
+			});
 
-						// Option A (cleanest): force a no-op update to notify subscribers
-						graphData.update((v) => ({ ...v })); // re-triggers your subscribe -> updateData
-
-						// Option B (equivalent): call updateData directly
-						// const cur = get(graphData);
-						// updateData(cur.nodes, cur.edges);
-
-						// Dynamic zoom: zoom out more with many nodes
-						const nodeCount = nodeDataSet.length;
-						const scale = nodeCount > 3000 ? 0.08 : nodeCount > 2000 ? 0.10 : nodeCount > 1000 ? 0.13 : nodeCount > 500 ? 0.18 : nodeCount > 200 ? 0.23 : nodeCount > 100 ? 0.33 : nodeCount > 50 ? 0.43 : nodeCount > 20 ? 0.63 : 1.0;
-						network.fit?.({ animation: false });
-						network.moveTo?.({ scale, animation: false });
-					} catch {}
-				});
-
-				// Phase 2: brief FA2 refine, then freeze — yields compact clusters
+			network.once('stabilizationIterationsDone', () => {
+				// Phase 3: smooth cooldown
 				network.setOptions({
 					physics: {
 						enabled: true,
 						solver: 'forceAtlas2Based',
 						forceAtlas2Based: {
-							gravitationalConstant: -90,
-							centralGravity: 0.008, // tiny pull so clusters don't merge
-							springLength: 70, // shorter = tighter clusters
-							springConstant: 0.12, // stronger = tighter clusters
-							damping: 0.75,
-							avoidOverlap: 0.2
+							gravitationalConstant: -50,
+							centralGravity: 0.005,
+							springLength: 70,
+							springConstant: 0.08,
+							damping: 0.95,
+							avoidOverlap: 0.15
 						},
-						stabilization: { enabled: true, iterations: 60, fit: true },
+						stabilization: { enabled: true, iterations: 40, fit: false },
 						adaptiveTimestep: true
 					}
 				});
 
 				network.once('stabilizationIterationsDone', () => {
-					// Phase 3: Smooth cooldown with high damping for a nice ease-out effect
-					network.setOptions({
-						physics: {
-							enabled: true,
-							solver: 'forceAtlas2Based',
-							forceAtlas2Based: {
-								gravitationalConstant: -50,
-								centralGravity: 0.005,
-								springLength: 70,
-								springConstant: 0.08,
-								damping: 0.95, // Very high damping for smooth slowdown
-								avoidOverlap: 0.15
-							},
-							stabilization: { enabled: true, iterations: 40, fit: false },
-							adaptiveTimestep: true
-						}
-					});
-
-					network.once('stabilizationIterationsDone', () => {
-						// Now completely stop the physics simulation
-						try {
-							network.stopSimulation?.();
-						} catch {}
-
-						// Disable physics completely to prevent any wobbling
-						try {
-							network.setOptions({ physics: false });
-						} catch {}
-
-						// Store final positions to lock them in place
-						try {
-							network.storePositions();
-						} catch {}
-					});
+					// Switch to low-energy interactive physics (wobbly drag)
+					try { network.stopSimulation?.(); } catch {}
+					try { network.storePositions(); } catch {}
+					try {
+						network.setOptions({
+							physics: {
+								enabled: true,
+								solver: 'barnesHut',
+								barnesHut: {
+									gravitationalConstant: -2000,
+									centralGravity: 0.1,
+									springLength: 80,
+									springConstant: 0.04,
+									damping: 0.9,
+									avoidOverlap: 0.3
+								},
+								stabilization: false,
+								maxVelocity: 15,
+								minVelocity: 0.75
+							}
+						});
+					} catch {}
 				});
 			});
+		});
 
-		// Safety: if there are very few nodes and stabilization doesn't fire,
-		// fall back to first draw event and auto-start as well
-		network.once &&
-			network.once('afterDrawing', () => {
-				if (loading)
-					requestAnimationFrame(() => {
-						loading = false;
-						// mimic a filter change: re-emit the current graphData
-try {
-  resetHighlights();
-  network.unselectAll?.();
-
-  // Option A (cleanest): force a no-op update to notify subscribers
-  graphData.update(v => ({ ...v })); // re-triggers your subscribe -> updateData
-
-  // Option B (equivalent): call updateData directly
-  // const cur = get(graphData);
-  // updateData(cur.nodes, cur.edges);
-
-  // Dynamic zoom: zoom out more with many nodes
-  const nodeCount = nodeDataSet.length;
-  const scale = nodeCount > 3000 ? 0.08 : nodeCount > 2000 ? 0.10 : nodeCount > 1000 ? 0.13 : nodeCount > 500 ? 0.18 : nodeCount > 200 ? 0.23 : nodeCount > 100 ? 0.33 : nodeCount > 50 ? 0.43 : nodeCount > 20 ? 0.63 : 1.0;
-  network.fit?.({ animation: false });
-  network.moveTo?.({ scale, animation: false });
-} catch {}
-
-					});
-			});
+		// Safety timeout: if still loading after 8 seconds, force finish
+		setTimeout(() => {
+			if (loading) {
+				try { network.stopSimulation?.(); } catch {}
+				try { network.storePositions(); } catch {}
+				try { network.setOptions({ physics: false }); } catch {}
+				finalize();
+			}
+		}, 8000);
 
 		// --- Interactions ---
 		// Click: background clears; node click highlights whole subtree and opens site URLs

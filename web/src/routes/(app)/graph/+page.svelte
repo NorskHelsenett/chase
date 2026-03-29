@@ -118,7 +118,7 @@ function buildGraphData(serverList: Server[]) {
 			}
 		}
 
-		// 4. Add site and instance nodes, never adding site nodes that match groupHostnames
+		// 4. Add server nodes, connecting to their closest group
 	serverList.forEach((server, idx) => {
 			try {
 				const serverUrl = normalizeUrl(server.url);
@@ -127,77 +127,31 @@ function buildGraphData(serverList: Server[]) {
 				const allLevels = getAllDomainLevels(hostname);
 				const rootDomain = getRootDomain(hostname);
 
-				// Find the closest parent domain/group node (deepest level first)
-				let parentForInstance = null;
+				const isDown = server.status === 'down' || server.status === 'stale';
+				const statusText = server.status === 'up' ? 'Up' : server.status === 'down' ? 'Down' : server.status || 'Unknown';
+				const nodeId = `instance:${server.ID || idx}:${server.url}`;
+				const tooltip = `${server.url}\nStatus: ${statusText}${server.comment ? `\nNote: ${server.comment}` : ''}`;
+
+				addNode(nodeId, server.url, isDown ? 'error' : 'site', tooltip, isDown);
+
+				// Find the closest parent domain/group node
+				let parent = null;
 				for (let i = 0; i < allLevels.length; i++) {
 					if (groupHostnames.has(allLevels[i])) {
-						parentForInstance = `domain:${allLevels[i]}`;
+						parent = `domain:${allLevels[i]}`;
 						break;
 					}
 				}
-
-				if (!parentForInstance) {
-					// fallback to rootDomain, or create site node
-					if (groupHostnames.has(rootDomain)) {
-						parentForInstance = `domain:${rootDomain}`;
-					} else {
-						const siteNodeId = `site:${hostname}`;
-						const latestPing =
-							server.ping_results && server.ping_results.length > 0
-								? server.ping_results.sort(
-										(a: PingResult, b: PingResult) =>
-											new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
-									)[0]
-								: null;
-						// Calculate isDown for backwards compatibility
-						const isDown =
-							!latestPing || latestPing.error || latestPing.status_code !== server.expected_status;
-						// Generate statusText same way as for instances
-						const statusText = !latestPing ? 'Unknown' : isDown ? 'Down' : 'Up';
-						// Use statusText to determine up/down state
-						const nodeIsDown = statusText.toLowerCase() === 'down';
-
-						addNode(siteNodeId, hostname, nodeIsDown ? 'down' : 'up', server.url, nodeIsDown);
-						parentForInstance = siteNodeId;
-						// Optionally connect site to root domain node, if it exists
-						if (groupHostnames.has(rootDomain)) {
-							edges.push({ from: `domain:${rootDomain}`, to: siteNodeId });
-						}
-					}
+				if (!parent && groupHostnames.has(rootDomain)) {
+					parent = `domain:${rootDomain}`;
 				}
 
-				const instanceNodeId = `instance:${server.ID || idx}:${server.url}`;
-				const latestPing =
-					server.ping_results && server.ping_results.length > 0
-						? server.ping_results.sort(
-								(a: PingResult, b: PingResult) =>
-									new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
-							)[0]
-						: null;
-				// Calculate isDown for backwards compatibility, but we'll use statusText to determine the actual state
-				const isDown =
-					!latestPing || latestPing.error || latestPing.status_code !== server.expected_status;
-				const statusText = !latestPing ? 'Unknown' : isDown ? 'Down' : 'Up';
-
-				// Use statusText to determine up/down state instead of ping status
-				const nodeIsDown = statusText.toLowerCase() === 'down';
-				addNode(
-					instanceNodeId,
-					server.url,
-					nodeIsDown ? 'down' : 'site', // Use statusText to determine the group
-					`${server.url}\nStatus: ${statusText}\n${latestPing ? `Response: ${latestPing.status_code}` : ''}\n${server.comment ? `Note: ${server.comment}` : ''}`,
-					nodeIsDown
-				);
-				edges.push({ from: parentForInstance, to: instanceNodeId });
-				// ---
+				if (parent) {
+					edges.push({ from: parent, to: nodeId });
+				}
 			} catch (error) {
 				const errId = `error:${server.ID || idx}:${server.url}`;
-				addNode(
-					errId,
-					server.url,
-					'error',
-					`${server.url}\nInvalid URL format\nMissing protocol (http:// or https://)?`
-				);
+				addNode(errId, server.url, 'error', `${server.url}\nInvalid URL format`);
 			}
 		});
 
