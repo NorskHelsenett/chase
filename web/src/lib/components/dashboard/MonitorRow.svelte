@@ -96,8 +96,21 @@
 </td>
 
 <td class="cell cell-domain" class:hoverable={hover}>
-	<div class="domain-text">
-		{rowData.title}
+	<div class="domain-info">
+		{#if server.favicon}
+			<img
+				class="favicon"
+				src={server.favicon.startsWith('http') ? server.favicon : `https://${server.url}${server.favicon.startsWith('/') ? '' : '/'}${server.favicon}`}
+				alt=""
+				on:error={(e) => e.currentTarget.style.display = 'none'}
+			/>
+		{/if}
+		<div class="domain-text-wrap">
+			<span class="domain-text">{rowData.title}</span>
+			{#if server.site_title}
+				<span class="site-title">{server.site_title}</span>
+			{/if}
+		</div>
 	</div>
 </td>
 
@@ -175,12 +188,40 @@
 		color: #e5e7eb;
 	}
 
+	.domain-info {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		min-width: 0;
+	}
+
+	.favicon {
+		width: 16px;
+		height: 16px;
+		flex-shrink: 0;
+		border-radius: 2px;
+	}
+
+	.domain-text-wrap {
+		display: flex;
+		flex-direction: column;
+		min-width: 0;
+	}
+
 	.domain-text {
 		white-space: nowrap;
 		overflow: hidden;
 		text-overflow: ellipsis;
-		width: 100%;
-		max-width: 100%;
+		font-size: 0.8125rem;
+	}
+
+	.site-title {
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		font-size: 0.6875rem;
+		color: #6b7280;
+		line-height: 1.2;
 	}
 
 	.status-badge {

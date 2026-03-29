@@ -43,6 +43,10 @@ type serverSummary struct {
 	APIRisk             string    `json:"api_risk,omitempty"`
 	SecretsRisk         string    `json:"secrets_risk,omitempty"`
 	SecretsCount        int       `json:"secrets_count,omitempty"`
+	SiteTitle           string    `json:"site_title,omitempty"`
+	SiteDescription     string    `json:"site_description,omitempty"`
+	OGImage             string    `json:"og_image,omitempty"`
+	Favicon             string    `json:"favicon,omitempty"`
 }
 
 // GetServerResults handles the request to retrieve ping results for a specific server.
@@ -244,7 +248,13 @@ func GetServersWithSecurityStatus(c *gin.Context) {
 				var fullReport struct {
 					Headers struct {
 						Score string `json:"score"`
+						Title string `json:"title"`
 						Risk  string `json:"risk"`
+						Meta  struct {
+							Description string `json:"description"`
+							OGImage     string `json:"og_image"`
+							Favicon     string `json:"favicon"`
+						} `json:"meta"`
 					} `json:"headers"`
 					Certificate struct {
 						Grade string `json:"grade"`
@@ -271,6 +281,10 @@ func GetServersWithSecurityStatus(c *gin.Context) {
 					summaries[i].APIRisk = string(fullReport.Swagger.Risk)
 					summaries[i].SecretsRisk = string(fullReport.SecretExposure.Risk)
 					summaries[i].SecretsCount = len(fullReport.SecretExposure.Findings)
+					summaries[i].SiteTitle = fullReport.Headers.Title
+					summaries[i].SiteDescription = fullReport.Headers.Meta.Description
+					summaries[i].OGImage = fullReport.Headers.Meta.OGImage
+					summaries[i].Favicon = fullReport.Headers.Meta.Favicon
 				}
 			}
 		}

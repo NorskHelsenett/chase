@@ -35,6 +35,10 @@ export interface Server extends BaseModel {
 	api_risk?: string;
 	secrets_risk?: string;
 	secrets_count?: number;
+	site_title?: string;
+	site_description?: string;
+	og_image?: string;
+	favicon?: string;
 }
 
 interface Finding {

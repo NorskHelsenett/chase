@@ -72,26 +72,69 @@ func (s *Scanner) checkSecurityHeaders(ctx context.Context, domain string) (*Hea
 	}
 	defer resp.Body.Close()
 
-	// Parse HTML for title
+	// Parse HTML for title, meta tags, and OG data
 	doc, err := html.Parse(resp.Body)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse HTML: %w", err)
 	}
 
 	var title string
-	var findTitle func(*html.Node)
-	findTitle = func(n *html.Node) {
-		if n.Type == html.ElementNode && n.Data == "title" {
-			if n.FirstChild != nil {
-				title = n.FirstChild.Data
-				return
+	var meta SiteMetadata
+	var extractMeta func(*html.Node)
+	extractMeta = func(n *html.Node) {
+		if n.Type == html.ElementNode {
+			switch n.Data {
+			case "title":
+				if n.FirstChild != nil {
+					title = n.FirstChild.Data
+				}
+			case "meta":
+				var name, property, content string
+				for _, a := range n.Attr {
+					switch a.Key {
+					case "name":
+						name = a.Val
+					case "property":
+						property = a.Val
+					case "content":
+						content = a.Val
+					}
+				}
+				switch property {
+				case "og:title":
+					meta.OGTitle = content
+				case "og:description":
+					meta.OGDescription = content
+				case "og:image":
+					meta.OGImage = content
+				case "og:site_name":
+					meta.OGSiteName = content
+				case "og:type":
+					meta.OGType = content
+				}
+				if name == "description" {
+					meta.Description = content
+				}
+			case "link":
+				var rel, href string
+				for _, a := range n.Attr {
+					switch a.Key {
+					case "rel":
+						rel = a.Val
+					case "href":
+						href = a.Val
+					}
+				}
+				if (rel == "icon" || rel == "shortcut icon") && href != "" {
+					meta.Favicon = href
+				}
 			}
 		}
 		for c := n.FirstChild; c != nil; c = c.NextSibling {
-			findTitle(c)
+			extractMeta(c)
 		}
 	}
-	findTitle(doc)
+	extractMeta(doc)
 
 	analysis := &HeadersAnalysis{
 		Issues:         make([]Finding, 0),
@@ -100,6 +143,7 @@ func (s *Scanner) checkSecurityHeaders(ctx context.Context, domain string) (*Hea
 		Passed:         make([]string, 0),
 		Risk:           RiskLow,
 		Title:          title,
+		Meta:           meta,
 		Checks:         make([]HeaderCheck, 0),
 	}
 

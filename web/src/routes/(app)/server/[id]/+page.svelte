@@ -85,7 +85,7 @@
 		error = null;
 
 		try {
-			const response = await fetch(`/api/servers/${id}`);
+			const response = await fetch(`/api/servers/${id}?limit=90`);
 			if (!response.ok) throw new Error('Failed to fetch server data');
 
 			const data: Server = await response.json();

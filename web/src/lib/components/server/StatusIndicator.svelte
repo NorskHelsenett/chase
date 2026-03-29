@@ -1,10 +1,12 @@
 <script lang="ts">
-	import { onMount, afterUpdate } from 'svelte';
+	import { onMount } from 'svelte';
 	import { computePosition, autoPlacement, offset, shift, arrow } from '@floating-ui/dom';
 	import type { PingResult } from '$lib/models';
 
-export let pingResults: PingResult[] = [];
-export let expectedStatus: number = 200;
+	export let pingResults: PingResult[] = [];
+	export let expectedStatus: number = 200;
+
+	const MAX_DAYS = 90;
 
 	let status: 'up' | 'down' = 'down';
 	let tooltipElement: HTMLDivElement;
@@ -16,78 +18,64 @@ export let expectedStatus: number = 200;
 		uptime: number;
 		totalPings: number;
 		successfulPings: number;
-		timestamp: number;
 	};
 
-let aggregatedDays: AggregatedDay[] = [];
+	let aggregatedDays: AggregatedDay[] = [];
 
-const pingSuccessful = (ping: PingResult) => ping.status_code > 0 && ping.status_code === expectedStatus;
+	const pingSuccessful = (ping: PingResult) =>
+		ping.status_code > 0 && ping.status_code === expectedStatus;
 
 	$: {
-		// Only perform aggregation if we have more than 50 pings
-		if (pingResults.length > 50) {
-			const dailyPings = pingResults.reduce(
-				(acc, ping) => {
-					const date = new Date(ping.timestamp).toISOString().split('T')[0];
-					if (!acc[date]) {
-						acc[date] = {
-							date,
-							totalPings: 0,
-							successfulPings: 0,
-							timestamp: new Date(date).getTime() // Use start of day for consistent timestamp
-						};
-					}
-					acc[date].totalPings++;
-					if (pingSuccessful(ping)) {
-						acc[date].successfulPings++;
-					}
-					return acc;
-				},
-				{} as Record<string, AggregatedDay>
-			);
+		// Always aggregate by day
+		const dailyMap: Record<string, { total: number; success: number }> = {};
 
-			aggregatedDays = Object.values(dailyPings)
-				.map((day) => ({
-					...day,
-					uptime: (day.successfulPings / day.totalPings) * 100
-				}))
-				.sort((a, b) => a.timestamp - b.timestamp) // Sort ascending by date
-				.slice(-50); // Take last 50 days
-		} else {
-			// If we have 50 or fewer pings, use them directly without aggregation
-			aggregatedDays = pingResults
-				.map((ping) => ({
-					date: new Date(ping.timestamp).toISOString().split('T')[0],
-					uptime: pingSuccessful(ping) ? 100 : 0,
-					totalPings: 1,
-					successfulPings: pingSuccessful(ping) ? 1 : 0,
-					timestamp: ping.timestamp
-				}))
-				.sort((a, b) => a.timestamp - b.timestamp); // Sort ascending by date
+		for (const ping of pingResults) {
+			const date = new Date(ping.timestamp).toISOString().split('T')[0];
+			if (!dailyMap[date]) {
+				dailyMap[date] = { total: 0, success: 0 };
+			}
+			dailyMap[date].total++;
+			if (pingSuccessful(ping)) {
+				dailyMap[date].success++;
+			}
 		}
+
+		// Build a continuous range of days (last MAX_DAYS)
+		const today = new Date();
+		const allDays: AggregatedDay[] = [];
+		for (let i = MAX_DAYS - 1; i >= 0; i--) {
+			const d = new Date(today);
+			d.setDate(d.getDate() - i);
+			const date = d.toISOString().split('T')[0];
+			const entry = dailyMap[date];
+			allDays.push({
+				date,
+				totalPings: entry?.total ?? 0,
+				successfulPings: entry?.success ?? 0,
+				uptime: entry && entry.total > 0 ? (entry.success / entry.total) * 100 : -1
+			});
+		}
+		aggregatedDays = allDays;
 	}
 
-	$: status = aggregatedDays.length > 0 && aggregatedDays[0].uptime >= 99.9 ? 'up' : 'down';
+	// Status based on the most recent day
+	$: {
+		const latest = aggregatedDays.length > 0 ? aggregatedDays[aggregatedDays.length - 1] : null;
+		status = latest && latest.uptime >= 99.9 ? 'up' : 'down';
+	}
 
 	const getStatusColor = (uptime: number) => {
-		if (uptime >= 99.9) return 'bg-green-400';
-		if (uptime >= 99.0) return 'bg-green-500';
-		if (uptime >= 95) return 'bg-green-700';
-		return 'bg-red-600';
-	};
-
-	const getStatusClasses = (status: 'up' | 'down') => {
-		return status === 'up'
-			? 'bg-green-500/20 text-green-400 border border-green-500/30 status-pulse'
-			: 'bg-red-500/20 text-red-400 border border-red-500/30';
+		if (uptime < 0) return 'empty';
+		if (uptime >= 99.9) return 'bar-perfect';
+		if (uptime >= 99.0) return 'bar-good';
+		if (uptime >= 95) return 'bar-degraded';
+		return 'bar-down';
 	};
 
 	const formatTooltipContent = (day: AggregatedDay) => {
-		const date = new Date(day.timestamp).toLocaleDateString('en-US', {
-			month: 'short',
-			day: 'numeric'
-		});
-		return `${date} - Uptime: ${day.uptime.toFixed(2)}%\n${day.successfulPings}/${day.totalPings} successful pings`;
+		const d = new Date(day.date + 'T00:00:00');
+		const label = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+		return `${label} — ${day.uptime.toFixed(1)}%\n${day.successfulPings}/${day.totalPings} checks passed`;
 	};
 
 	const showTooltip = async (event: MouseEvent, day: AggregatedDay) => {
@@ -100,26 +88,16 @@ const pingSuccessful = (ping: PingResult) => ping.status_code > 0 && ping.status
 			placement: 'top',
 			middleware: [
 				offset(8),
-				autoPlacement({
-					allowedPlacements: ['top', 'bottom']
-				}),
+				autoPlacement({ allowedPlacements: ['top', 'bottom'] }),
 				shift({ padding: 5 }),
 				arrow({ element: arrowElement })
 			]
 		});
 
-		Object.assign(tooltipElement.style, {
-			left: `${x}px`,
-			top: `${y}px`
-		});
+		Object.assign(tooltipElement.style, { left: `${x}px`, top: `${y}px` });
 
-		// Handle arrow placement
 		const { x: arrowX, y: arrowY } = middlewareData.arrow;
-		const staticSide = {
-			top: 'bottom',
-			bottom: 'top'
-		}[placement.split('-')[0]];
-
+		const staticSide = { top: 'bottom', bottom: 'top' }[placement.split('-')[0]];
 		Object.assign(arrowElement.style, {
 			left: arrowX != null ? `${arrowX}px` : '',
 			top: arrowY != null ? `${arrowY}px` : '',
@@ -130,29 +108,19 @@ const pingSuccessful = (ping: PingResult) => ping.status_code > 0 && ping.status
 	};
 
 	const hideTooltip = () => {
-		tooltipElement.style.display = 'none';
+		if (tooltipElement) tooltipElement.style.display = 'none';
 		currentTarget = null;
 	};
 
-	// Cleanup on component unmount
-	onMount(() => {
-		return () => {
-			hideTooltip();
-		};
-	});
+	onMount(() => () => hideTooltip());
 </script>
 
 <div class="status-container">
 	<div class="status-bars">
-		{#if aggregatedDays.length < 50}
-			{#each Array(50 - aggregatedDays.length) as _}
-				<div class="status-bar empty"></div>
-			{/each}
-		{/if}
 		{#each aggregatedDays as day}
 			<div
 				class="status-bar {getStatusColor(day.uptime)}"
-				on:mouseenter={(e) => showTooltip(e, day)}
+				on:mouseenter={(e) => day.totalPings > 0 && showTooltip(e, day)}
 				on:mouseleave={hideTooltip}
 			></div>
 		{/each}
@@ -179,13 +147,13 @@ const pingSuccessful = (ping: PingResult) => ping.status_code > 0 && ping.status
 
 	.status-bars {
 		display: flex;
-		gap: 3px;
+		gap: 2px;
 		flex: 1;
 	}
 
 	.status-bar {
-		width: 100%;
-		max-width: 8px;
+		flex: 1;
+		min-width: 0;
 		height: 24px;
 		border-radius: 2px;
 		transition: opacity 0.15s ease;
@@ -196,25 +164,11 @@ const pingSuccessful = (ping: PingResult) => ping.status_code > 0 && ping.status
 		opacity: 0.75;
 	}
 
-	.status-bar.empty {
-		background: #2b2b2b;
-	}
-
-	.status-bar.bg-green-400 {
-		background: #22c55e;
-	}
-
-	.status-bar.bg-green-500 {
-		background: #16a34a;
-	}
-
-	.status-bar.bg-green-700 {
-		background: #15803d;
-	}
-
-	.status-bar.bg-red-600 {
-		background: #dc2626;
-	}
+	.status-bar.empty       { background: #2b2b2b; }
+	.status-bar.bar-perfect { background: #22c55e; }
+	.status-bar.bar-good    { background: #16a34a; }
+	.status-bar.bar-degraded { background: #eab308; }
+	.status-bar.bar-down    { background: #dc2626; }
 
 	.status-indicator {
 		display: flex;
@@ -230,13 +184,8 @@ const pingSuccessful = (ping: PingResult) => ping.status_code > 0 && ping.status
 		background: #2b2b2b;
 	}
 
-	.status-indicator.up {
-		color: #22c55e;
-	}
-
-	.status-indicator.down {
-		color: #ef4444;
-	}
+	.status-indicator.up   { color: #22c55e; }
+	.status-indicator.down { color: #ef4444; }
 
 	.status-dot {
 		width: 6px;

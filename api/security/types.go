@@ -136,14 +136,25 @@ type TechnologyAnalysis struct {
 }
 
 type HeadersAnalysis struct {
-	Score          string    `json:"score"`
-	Title          string    `json:"title"`
-	Issues         []Finding `json:"issues"` // Changed to Finding type
-	CookieFindings []Finding `json:"cookieFindings,omitempty"`
-	CORSFindings   []Finding `json:"corsFindings,omitempty"`
-	Passed         []string  `json:"passed"`
-	Risk           RiskLevel `json:"risk"`
+	Score          string       `json:"score"`
+	Title          string       `json:"title"`
+	Meta           SiteMetadata `json:"meta,omitempty"`
+	Issues         []Finding    `json:"issues"`
+	CookieFindings []Finding    `json:"cookieFindings,omitempty"`
+	CORSFindings   []Finding    `json:"corsFindings,omitempty"`
+	Passed         []string     `json:"passed"`
+	Risk           RiskLevel    `json:"risk"`
 	Checks         []HeaderCheck `json:"checks"`
+}
+
+type SiteMetadata struct {
+	Description string `json:"description,omitempty"`
+	OGTitle     string `json:"og_title,omitempty"`
+	OGDescription string `json:"og_description,omitempty"`
+	OGImage     string `json:"og_image,omitempty"`
+	OGSiteName  string `json:"og_site_name,omitempty"`
+	OGType      string `json:"og_type,omitempty"`
+	Favicon     string `json:"favicon,omitempty"`
 }
 
 type CertificateAnalysis struct {

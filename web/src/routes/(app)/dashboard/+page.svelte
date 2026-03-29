@@ -40,29 +40,9 @@
 	$: activeFilter = $page.url.searchParams.get('active');
 
 	// Compute stats from servers + ping data
-	let stats = { up: 0, down: 0, secretsExposed: 0, highRisks: 0 };
-	// eslint-disable-next-line no-unused-expressions
-	$: $pingData, stats = $servers.reduce(
-		(acc, server) => {
-			if (isServerUp(server)) {
-				acc.up += 1;
-			} else {
-				acc.down += 1;
-			}
-			if (server.secrets_count && server.secrets_count > 0) {
-				acc.secretsExposed += server.secrets_count;
-			}
-			if (server.security_risk_level === 'CRITICAL' || server.security_risk_level === 'HIGH') {
-				acc.highRisks += 1;
-			}
-			return acc;
-		},
-		{ up: 0, down: 0, secretsExposed: 0, highRisks: 0 }
-	);
-
 	// Filter servers based on search query and status
 	$: {
-		$pingData; // trigger re-run when ping data arrives
+		$pingData;
 		let result = $servers;
 
 		if (searchQuery) {
@@ -87,6 +67,25 @@
 
 		filteredServers = result;
 	}
+
+	// Compute stats from the filtered list
+	$: stats = filteredServers.reduce(
+		(acc, server) => {
+			if (isServerUp(server)) {
+				acc.up += 1;
+			} else {
+				acc.down += 1;
+			}
+			if (server.secrets_count && server.secrets_count > 0) {
+				acc.secretsExposed += server.secrets_count;
+			}
+			if (server.security_risk_level === 'CRITICAL' || server.security_risk_level === 'HIGH') {
+				acc.highRisks += 1;
+			}
+			return acc;
+		},
+		{ up: 0, down: 0, secretsExposed: 0, highRisks: 0 }
+	);
 
 	async function fetchServers(forceRefresh = false) {
 		await serverStoreActions.setFilter(activeFilter ?? null, forceRefresh);

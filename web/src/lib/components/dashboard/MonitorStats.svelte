@@ -1,105 +1,131 @@
 <script lang="ts">
+	import { CircleCheck, CircleX, KeyRound, ShieldAlert } from 'lucide-svelte';
+
 	export let stats: {
 		up: number;
 		down: number;
 		secretsExposed: number;
 		highRisks: number;
 	} | null = null;
+
+	$: total = stats ? stats.up + stats.down : 0;
 </script>
 
-<div class="stats-card">
-	<div class="stats-grid">
-		<div class="stat-item">
-			<div class="stat-label">Online</div>
-			{#if stats}
-				<div class="stat-value success">{stats.up}</div>
-			{:else}
-				<div class="stat-skeleton"></div>
-			{/if}
+<div class="stats-row">
+	<div class="stat-card">
+		<div class="stat-icon icon-green">
+			<CircleCheck size={24} />
 		</div>
-
-		<div class="stat-item">
-			<div class="stat-label">Offline</div>
+		<div class="stat-body">
 			{#if stats}
-				<div class="stat-value {stats.down > 0 ? 'error' : 'muted'}">{stats.down}</div>
+				<span class="stat-number">{stats.up}<span class="stat-sub">/{total}</span></span>
 			{:else}
-				<div class="stat-skeleton"></div>
+				<span class="stat-skeleton"></span>
 			{/if}
+			<span class="stat-label">Online</span>
 		</div>
+	</div>
 
-		<div class="stat-item">
-			<div class="stat-label">Secrets Exposed</div>
-			{#if stats}
-				<div class="stat-value {stats.secretsExposed > 0 ? 'error' : 'muted'}">{stats.secretsExposed}</div>
-			{:else}
-				<div class="stat-skeleton"></div>
-			{/if}
+	<div class="stat-card">
+		<div class="stat-icon icon-red">
+			<CircleX size={24} />
 		</div>
-
-		<div class="stat-item">
-			<div class="stat-label">Security Risks</div>
+		<div class="stat-body">
 			{#if stats}
-				<div class="stat-value {stats.highRisks > 0 ? 'warning' : 'muted'}">{stats.highRisks}</div>
+				<span class="stat-number">{stats.down}</span>
 			{:else}
-				<div class="stat-skeleton"></div>
+				<span class="stat-skeleton"></span>
 			{/if}
+			<span class="stat-label">Offline</span>
+		</div>
+	</div>
+
+	<div class="stat-card">
+		<div class="stat-icon icon-purple">
+			<KeyRound size={24} />
+		</div>
+		<div class="stat-body">
+			{#if stats}
+				<span class="stat-number">{stats.secretsExposed}</span>
+			{:else}
+				<span class="stat-skeleton"></span>
+			{/if}
+			<span class="stat-label">Secrets Exposed</span>
+		</div>
+	</div>
+
+	<div class="stat-card">
+		<div class="stat-icon icon-orange">
+			<ShieldAlert size={24} />
+		</div>
+		<div class="stat-body">
+			{#if stats}
+				<span class="stat-number">{stats.highRisks}</span>
+			{:else}
+				<span class="stat-skeleton"></span>
+			{/if}
+			<span class="stat-label">Security Risks</span>
 		</div>
 	</div>
 </div>
 
 <style>
-	.stats-card {
-		background: #202020;
-		border-radius: 0.5rem;
-		padding: 1rem;
+	.stats-row {
+		display: grid;
+		grid-template-columns: repeat(4, 1fr);
+		gap: 0.75rem;
 		margin-bottom: 1rem;
 	}
 
-	.stats-grid {
-		display: grid;
-		grid-template-columns: repeat(4, 1fr);
-		gap: 2rem;
+	.stat-card {
+		display: flex;
+		align-items: center;
+		gap: 0.625rem;
+		background: #202020;
+		border-radius: 0.5rem;
+		padding: 0.75rem 1rem;
 	}
 
-	.stat-item {
-		text-align: center;
+	.stat-icon {
+		color: #6b7280;
+		flex-shrink: 0;
 	}
 
-	.stat-label {
-		font-size: 0.875rem;
-		font-weight: 500;
-		color: #9ca3af;
-		margin-bottom: 0.5rem;
+	.stat-body {
+		display: flex;
+		flex-direction: column;
 	}
 
-	.stat-value {
-		font-size: 1.5rem;
+	.stat-number {
+		font-size: 1.125rem;
 		font-weight: 600;
+		line-height: 1.2;
+		color: #e5e7eb;
+		font-variant-numeric: tabular-nums;
 	}
 
-	.stat-value.success {
-		color: #22c55e;
-	}
-
-	.stat-value.error {
-		color: #ef4444;
-	}
-
-	.stat-value.warning {
-		color: #f97316;
-	}
-
-	.stat-value.muted {
+	.stat-sub {
+		font-size: 0.75rem;
+		font-weight: 400;
 		color: #6b7280;
 	}
 
+	.stat-label {
+		font-size: 0.6875rem;
+		font-weight: 500;
+		color: #6b7280;
+		text-transform: uppercase;
+		letter-spacing: 0.04em;
+		white-space: nowrap;
+	}
+
 	.stat-skeleton {
-		height: 2rem;
-		width: 3rem;
-		margin: 0 auto;
-		background: #374151;
+		display: block;
+		height: 1.125rem;
+		width: 2rem;
+		background: #2b2b2b;
 		border-radius: 0.25rem;
-		animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+		animation: pulse 2s ease-in-out infinite;
 	}
 
 	@keyframes pulse {
@@ -107,10 +133,15 @@
 		50% { opacity: 0.5; }
 	}
 
-	@media (max-width: 640px) {
-		.stats-grid {
+	@media (max-width: 768px) {
+		.stats-row {
 			grid-template-columns: repeat(2, 1fr);
-			gap: 1rem;
+		}
+	}
+
+	@media (max-width: 420px) {
+		.stats-row {
+			grid-template-columns: 1fr;
 		}
 	}
 </style>
