@@ -62,7 +62,7 @@
 		</div>
 
 		<!-- Issues -->
-		{#if results.headers.issues.length > 0}
+		{#if results.headers.issues?.length > 0}
 			<div class="section">
 				<h3 class="section-title error">
 					<AlertTriangle size={20} />
@@ -151,7 +151,7 @@
 			{/if}
 		</div>
 
-		<ChecksGrid checks={results.headers.passed} />
+		<ChecksGrid checks={results.headers.passed || []} />
 	</div>
 {/if}
 
