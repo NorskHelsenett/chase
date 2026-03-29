@@ -16,11 +16,16 @@ export interface Server extends BaseModel {
 	comment: string;
 	name?: string;
 	description?: string;
-	ping_results: PingResult[];
-	security?: SecurityReport; // Make optional for backward compatibility
+	ping_results?: PingResult[];
+	security?: SecurityReport;
 	update_interval: number;
 	certificate?: Certificate;
-	// New fields from server endpoint
+	// Status from server (based on latest ping)
+	status?: 'up' | 'down' | 'stale' | 'unknown';
+	last_status_code?: number;
+	last_ping_time?: string;
+	last_response_ms?: number;
+	// Security fields
 	security_risk_level?: string;
 	security_description?: string;
 	security_scan_time?: string;

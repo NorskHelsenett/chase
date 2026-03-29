@@ -5,6 +5,7 @@
 	import { goto } from '$app/navigation';
 	import { fade, scale } from 'svelte/transition';
 	import { Monitor } from 'lucide-svelte';
+	import { pingData } from '$lib/stores/pingStore';
 
 	export let sites: Server[] = [];
 
@@ -83,14 +84,13 @@
 	}
 
 	function getUptimePercentage(server: Server): number {
-		const pings = server.ping_results || [];
-		if (pings.length === 0) return 0;
-
-		const successfulPings = pings.filter(
-			(ping) => ping.status_code === server.expected_status
-		).length;
-
-		return (successfulPings / pings.length) * 100;
+		const info = $pingData.get(server.ID);
+		if (info?.days && info.days.length > 0) {
+			const total = info.days.reduce((s, d) => s + d.total, 0);
+			const success = info.days.reduce((s, d) => s + d.successful, 0);
+			return total > 0 ? (success / total) * 100 : 0;
+		}
+		return 0;
 	}
 
 	function toggleSort(field: typeof sortField) {
@@ -123,10 +123,6 @@
 					valueA = riskToNumber(getLatestRisk(a, field));
 					valueB = riskToNumber(getLatestRisk(b, field));
 					break;
-				case 'ip':
-					valueA = a.ping_results?.[0]?.ip || '';
-					valueB = b.ping_results?.[0]?.ip || '';
-					break;
 				case 'uptime':
 					valueA = getUptimePercentage(a);
 					valueB = getUptimePercentage(b);
@@ -143,12 +139,13 @@
 	}
 
 	function getLatestPingStatus(server: Server): boolean {
-		const sortedPings = [...(server.ping_results || [])].sort(
-			(a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
-		);
-		return !sortedPings.length || sortedPings[0]?.error || sortedPings[0]?.status_code >= 400
-			? false
-			: true;
+		const info = $pingData.get(server.ID);
+		if (info?.latest) {
+			return info.latest.status_code > 0
+				&& info.latest.status_code === server.expected_status
+				&& !info.latest.error;
+		}
+		return server.status === 'up';
 	}
 
 	function getLatestGrade(server: Server, type: 'header' | 'cert'): string {

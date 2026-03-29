@@ -16,14 +16,14 @@ let lastActiveFilter: string | null | undefined = undefined;
 let activeFilter: string | null = null;
 
 	function hasGoodPingHistory(server: Server): boolean {
-		if (!server.ping_results || server.ping_results.length === 0) {
-			return true;
+		const info = $pingData.get(server.ID);
+		if (info?.days && info.days.length > 0) {
+			const total = info.days.reduce((s, d) => s + d.total, 0);
+			const success = info.days.reduce((s, d) => s + d.successful, 0);
+			if (total === 0) return true;
+			return (success / total) >= 0.9;
 		}
-		const successfulPings = server.ping_results.filter((ping) =>
-			ping.status_code === server.expected_status
-		).length;
-		const successRate = successfulPings / server.ping_results.length;
-		return successRate >= 0.9;
+		return true;
 	}
 
 	const graphData = writable<{ nodes: GraphNode[]; edges: GraphEdge[] }>({ nodes: [], edges: [] });
@@ -227,11 +227,17 @@ async function loadGraphData(force = false) {
 
 function updateGraph() {
 	let serverList: Server[] = ($servers || []).map((server) => {
-		const pings = $pingData.get(server.ID);
-		if (pings && pings.length > 0) {
-			return { ...server, ping_results: pings };
+		const info = $pingData.get(server.ID);
+		if (info?.latest) {
+			// Inject latest ping as a single-element array for graph compatibility
+			return { ...server, ping_results: [{
+				status_code: info.latest.status_code,
+				response_time_ms: info.latest.response_time_ms,
+				error: info.latest.error || '',
+				timestamp: info.latest.timestamp
+			}] };
 		}
-		return server;
+		return { ...server, ping_results: server.ping_results || [] };
 	});
 		if (statusFilter !== 'all') {
 			if (statusFilter === 'online') {

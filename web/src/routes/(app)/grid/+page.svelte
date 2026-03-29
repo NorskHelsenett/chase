@@ -16,30 +16,27 @@
 	let activeFilter: string | null = null;
 
 	function hasGoodPingHistory(server: Server): boolean {
-		if (!server.ping_results || server.ping_results.length === 0) {
-			return true; // New server with no pings
+		const info = $pingData.get(server.ID);
+		if (info?.days && info.days.length > 0) {
+			const total = info.days.reduce((s, d) => s + d.total, 0);
+			const success = info.days.reduce((s, d) => s + d.successful, 0);
+			if (total === 0) return true;
+			return (success / total) >= 0.9;
 		}
+		return true;
+	}
 
-		const successfulPings = server.ping_results.filter((ping) =>
-			ping.status_code === server.expected_status
-		).length;
-
-		const successRate = successfulPings / server.ping_results.length;
-		return successRate >= 0.9; // 90% success rate threshold
+	function isServerUp(server: Server): boolean {
+		// 'up' = healthy, undefined/missing = not yet known (treat as up to avoid hiding)
+		return !server.status || server.status === 'up';
 	}
 
 	$: activeFilter = $page.url.searchParams.get('active');
 
-	$: serversWithPings = ($servers || []).map((server) => {
-		const pings = $pingData.get(server.ID);
-		if (pings && pings.length > 0) {
-			return { ...server, ping_results: pings };
-		}
-		return server;
-	});
-
 	$: {
-		const allServers = serversWithPings;
+		// Reference $pingData so Svelte re-runs this block when ping data arrives
+		$pingData;
+		const allServers = $servers || [];
 		if (allServers.length === 0) {
 			filteredServers = [];
 		} else {
@@ -63,11 +60,11 @@
 			if (filterStatus !== 'all') {
 				if (filterStatus === 'online') {
 					result = result.filter(
-						(server: Server) => server.ping_results.length > 0 && hasGoodPingHistory(server)
+						(server: Server) => isServerUp(server) && hasGoodPingHistory(server)
 					);
 				} else if (filterStatus === 'issues') {
 					result = result.filter(
-						(server: Server) => server.ping_results.length > 0 && !hasGoodPingHistory(server)
+						(server: Server) => !hasGoodPingHistory(server)
 					);
 				} else if (filterStatus === 'new') {
 					const thirtyDaysAgo = new Date();

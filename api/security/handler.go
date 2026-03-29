@@ -74,8 +74,8 @@ func getRecentCachedReport(domain string) (*SecurityReportRecord, error) {
 
 func SecurityScanHandler(c *gin.Context) {
 	domain := c.Param("domain")
-	if domain == "" {
-		c.JSON(400, gin.H{"error": "domain parameter is required"})
+	if err := ValidateDomain(domain); err != nil {
+		c.JSON(400, gin.H{"error": err.Error()})
 		return
 	}
 
@@ -139,8 +139,8 @@ func SecurityScanHandler(c *gin.Context) {
 // SecurityScanSSEHandler provides Server-Sent Events for scan progress
 func SecurityScanSSEHandler(c *gin.Context) {
 	domain := c.Param("domain")
-	if domain == "" {
-		c.JSON(400, gin.H{"error": "domain parameter is required"})
+	if err := ValidateDomain(domain); err != nil {
+		c.JSON(400, gin.H{"error": err.Error()})
 		return
 	}
 
@@ -340,8 +340,8 @@ func augmentSecurityReport(domain string, report *SecurityReport) {
 }
 func ScreenshotHandler(c *gin.Context) {
 	domain := c.Param("domain")
-	if domain == "" {
-		c.JSON(400, gin.H{"error": "domain parameter is required"})
+	if err := ValidateDomain(domain); err != nil {
+		c.JSON(400, gin.H{"error": err.Error()})
 		return
 	}
 

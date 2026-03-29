@@ -30,6 +30,10 @@ type serverSummary struct {
 	Comment             string    `json:"comment"`
 	UpdateInterval      int       `json:"update_interval"`
 	CreatedAt           time.Time `json:"CreatedAt"`
+	Status              string    `json:"status"`
+	LastStatusCode      int       `json:"last_status_code,omitempty"`
+	LastPingTime        time.Time `json:"last_ping_time,omitempty"`
+	LastResponseMs      float64   `json:"last_response_ms,omitempty"`
 	SecurityRiskLevel   string    `json:"security_risk_level,omitempty"`
 	SecurityDescription string    `json:"security_description,omitempty"`
 	SecurityScanTime    time.Time `json:"security_scan_time,omitempty"`
@@ -183,6 +187,32 @@ func GetServersWithSecurityStatus(c *gin.Context) {
 			Comment:            servers[i].Comment,
 			UpdateInterval:     servers[i].UpdateInterval,
 			CreatedAt:          servers[i].CreatedAt,
+			Status:             "unknown",
+		}
+
+		// Check latest ping to determine status
+		var latest PingResult
+		if err := db.Model(&PingResult{}).
+			Select("status_code, response_time, error, timestamp").
+			Where("server_id = ?", servers[i].ID).
+			Order("timestamp DESC").
+			First(&latest).Error; err == nil {
+
+			// Consider the ping stale if it's older than 2x the update interval
+			staleCutoff := time.Now().Add(-time.Duration(servers[i].UpdateInterval*2) * time.Minute)
+			if latest.Timestamp.Before(staleCutoff) {
+				summaries[i].Status = "stale"
+			} else if latest.Error != "" {
+				summaries[i].Status = "down"
+			} else if latest.StatusCode == servers[i].ExpectedStatusCode {
+				summaries[i].Status = "up"
+			} else {
+				summaries[i].Status = "down"
+			}
+
+			summaries[i].LastStatusCode = latest.StatusCode
+			summaries[i].LastPingTime = latest.Timestamp
+			summaries[i].LastResponseMs = latest.ResponseTime
 		}
 	}
 

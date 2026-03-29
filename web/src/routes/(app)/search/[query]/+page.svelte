@@ -146,6 +146,16 @@
 			return;
 		}
 
+		// Validate domain before starting scan
+		const blockedSuffixes = ['.local', '.internal', '.localhost', '.lan', '.home', '.corp', '.intranet', '.cluster.local', '.svc.cluster.local'];
+		const blockedHosts = ['localhost', 'kubernetes', 'kubernetes.default'];
+		const cleanHost = query.replace(/^https?:\/\//, '').split(':')[0].split('/')[0].toLowerCase();
+		if (blockedHosts.includes(cleanHost) || blockedSuffixes.some(s => cleanHost.endsWith(s))) {
+			scanError = `Scanning internal/private domains is not allowed: ${cleanHost}`;
+			loading = false;
+			return;
+		}
+
 		// Connect to SSE endpoint for real-time progress
 		try {
 			eventSource = new EventSource(`/api/security/${encodeURIComponent(query)}/stream`);

@@ -1,5 +1,8 @@
 <script lang="ts">
 	import type { Server } from '$lib/models';
+	import { pingData } from '$lib/stores/pingStore';
+
+	type DaySummary = { date: string; total: number; successful: number; uptime: number };
 
 	type ServerRowData = {
 		status: 'up' | 'down';
@@ -8,7 +11,7 @@
 		certScore: 'A+' | 'A' | 'B' | 'C' | 'D' | 'F' | '';
 		adminRisk: 'critical' | 'high' | 'medium' | 'low' | '';
 		apiRisk: 'critical' | 'high' | 'medium' | 'low' | '';
-		uptime: Array<-1 | 0 | 1>;
+		days: DaySummary[];
 	};
 
 	export let server: Server;
@@ -16,25 +19,35 @@
 
 	let rowData: ServerRowData;
 
-	$: rowData = mapServerToRowData(server);
+	$: pingInfo = $pingData.get(server.ID);
 
-	function pingSuccessful(ping: { status_code: number }): boolean {
-		return ping.status_code > 0 && ping.status_code === server.expected_status;
-	}
+	$: rowData = mapServerToRowData(server, pingInfo);
 
-	function mapServerToRowData(server: Server): ServerRowData {
-		const sortedPings = [...(server.ping_results || [])].sort(
-			(a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
-		);
+	function mapServerToRowData(server: Server, pingInfo: any): ServerRowData {
+		let status: 'up' | 'down' = 'down';
+		let days: DaySummary[] = [];
+
+		if (pingInfo?.latest) {
+			// SSE has real-time data — use it for live status
+			const s = pingInfo.latest.status_code;
+			status = s > 0 && s === server.expected_status && !pingInfo.latest.error ? 'up' : 'down';
+		} else {
+			// Use API-provided status (available immediately)
+			status = server.status === 'up' ? 'up' : 'down';
+		}
+
+		if (pingInfo?.days) {
+			days = pingInfo.days;
+		}
 
 		return {
-			status: !sortedPings.length || !pingSuccessful(sortedPings[0]) ? 'down' : 'up',
+			status,
 			title: server.url,
 			headerScore: server.header_score || server.security?.headerRisk || '',
 			certScore: server.cert_score || server.security?.certRisk || '',
 			adminRisk: server.admin_risk?.toLowerCase() || server.security?.adminRisk || '',
 			apiRisk: server.api_risk?.toLowerCase() || server.security?.apiRisk || '',
-			uptime: (server.ping_results || []).slice(0, 10).reverse().map((ping) => (pingSuccessful(ping) ? 1 : -1))
+			days
 		};
 	}
 
@@ -61,12 +74,14 @@
 		}
 	}
 
-	function getUptimeClass(status: number): string {
-		switch (status) {
-			case 1: return 'uptime-up';
-			case -1: return 'uptime-down';
-			default: return 'uptime-empty';
-		}
+	function getDayBarClass(day: DaySummary): string {
+		if (day.uptime >= 99.9) return 'uptime-up';
+		if (day.uptime >= 95) return 'uptime-degraded';
+		return 'uptime-down';
+	}
+
+	function formatDayTooltip(day: DaySummary): string {
+		return `${day.date}\n${day.uptime.toFixed(1)}% (${day.successful}/${day.total})`;
 	}
 </script>
 
@@ -105,10 +120,14 @@
 <td class="cell cell-uptime" class:hoverable={hover}>
 	<div class="uptime-bars">
 		{#each Array(10) as _, i}
-			{#if i < 10 - rowData.uptime.length}
+			{#if i < 10 - rowData.days.length}
 				<div class="uptime-bar uptime-empty"></div>
 			{:else}
-				<div class="uptime-bar {getUptimeClass(rowData.uptime[i - (10 - rowData.uptime.length)])}"></div>
+				{@const day = rowData.days[i - (10 - rowData.days.length)]}
+				<div
+					class="uptime-bar {getDayBarClass(day)}"
+					title={formatDayTooltip(day)}
+				></div>
 			{/if}
 		{/each}
 	</div>
@@ -236,6 +255,10 @@
 
 	.uptime-up {
 		background: rgba(163, 230, 53, 0.7);
+	}
+
+	.uptime-degraded {
+		background: #eab308;
 	}
 
 	.uptime-down {

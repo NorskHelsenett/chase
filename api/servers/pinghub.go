@@ -12,13 +12,21 @@ import (
 	"github.com/norskhelsenett/chase/database"
 )
 
-// PingEvent represents a ping result for SSE streaming
+// PingEvent represents a single ping result for SSE streaming
 type PingEvent struct {
 	ServerID     uint      `json:"server_id"`
 	StatusCode   int       `json:"status_code"`
 	ResponseTime float64   `json:"response_time_ms"`
 	Error        string    `json:"error,omitempty"`
 	Timestamp    time.Time `json:"timestamp"`
+}
+
+// DaySummary represents one day of aggregated ping results
+type DaySummary struct {
+	Date       string  `json:"date"`
+	Total      int     `json:"total"`
+	Successful int     `json:"successful"`
+	Uptime     float64 `json:"uptime"`
 }
 
 // pingHub manages SSE clients for ping result streaming
@@ -72,8 +80,16 @@ func BroadcastPing(serverID uint, result PingResult) {
 	}
 }
 
+// serverInitData is the initial payload sent per server on SSE connect
+type serverInitData struct {
+	ServerID       uint         `json:"server_id"`
+	ExpectedStatus int          `json:"expected_status"`
+	Latest         *PingEvent   `json:"latest"`
+	Days           []DaySummary `json:"days"`
+}
+
 // PingStreamSSE handles GET /api/servers/pings/stream
-// Sends initial ping data for all servers, then streams updates in real-time.
+// Sends daily-aggregated ping data plus latest ping per server, then streams live updates.
 func PingStreamSSE(c *gin.Context) {
 	c.Header("Content-Type", "text/event-stream")
 	c.Header("Cache-Control", "no-cache")
@@ -86,7 +102,6 @@ func PingStreamSSE(c *gin.Context) {
 		return
 	}
 
-	// Send initial ping data for all active servers
 	db := database.GetDB()
 	var servers []Server
 	if err := db.Where("active = ?", true).Find(&servers).Error; err != nil {
@@ -94,39 +109,69 @@ func PingStreamSSE(c *gin.Context) {
 		return
 	}
 
-	type serverPings struct {
-		ServerID uint        `json:"server_id"`
-		Pings    []PingEvent `json:"pings"`
-	}
+	cutoff := time.Now().AddDate(0, 0, -10) // Last 10 days
 
 	for _, srv := range servers {
-		var pings []PingResult
+		// Get daily aggregates using a single query
+		type dayRow struct {
+			Day        string
+			Total      int
+			Successful int
+		}
+
+		var rows []dayRow
+		if err := db.Model(&PingResult{}).
+			Select("DATE(timestamp) as day, COUNT(*) as total, SUM(CASE WHEN status_code = ? AND error = '' THEN 1 ELSE 0 END) as successful", srv.ExpectedStatusCode).
+			Where("server_id = ? AND timestamp >= ?", srv.ID, cutoff).
+			Group("DATE(timestamp)").
+			Order("day ASC").
+			Scan(&rows).Error; err != nil {
+			continue
+		}
+
+		days := make([]DaySummary, len(rows))
+		for i, r := range rows {
+			uptime := 0.0
+			if r.Total > 0 {
+				uptime = float64(r.Successful) / float64(r.Total) * 100
+			}
+			days[i] = DaySummary{
+				Date:       r.Day,
+				Total:      r.Total,
+				Successful: r.Successful,
+				Uptime:     uptime,
+			}
+		}
+
+		// Get latest ping for current status
+		var latest PingResult
+		var latestEvent *PingEvent
 		if err := db.Model(&PingResult{}).
 			Select("server_id, status_code, response_time, error, timestamp").
 			Where("server_id = ?", srv.ID).
 			Order("timestamp DESC").
-			Limit(10).
-			Find(&pings).Error; err != nil {
-			continue
-		}
-
-		events := make([]PingEvent, len(pings))
-		for i, p := range pings {
-			status := p.StatusCode
-			if p.Error != "" {
+			First(&latest).Error; err == nil {
+			status := latest.StatusCode
+			if latest.Error != "" {
 				status = 0
 			}
-			events[i] = PingEvent{
-				ServerID:     p.ServerID,
+			latestEvent = &PingEvent{
+				ServerID:     latest.ServerID,
 				StatusCode:   status,
-				ResponseTime: p.ResponseTime,
-				Error:        p.Error,
-				Timestamp:    p.Timestamp,
+				ResponseTime: latest.ResponseTime,
+				Error:        latest.Error,
+				Timestamp:    latest.Timestamp,
 			}
 		}
 
-		sp := serverPings{ServerID: srv.ID, Pings: events}
-		data, err := json.Marshal(sp)
+		initData := serverInitData{
+			ServerID:       srv.ID,
+			ExpectedStatus: srv.ExpectedStatusCode,
+			Latest:         latestEvent,
+			Days:           days,
+		}
+
+		data, err := json.Marshal(initData)
 		if err != nil {
 			continue
 		}
