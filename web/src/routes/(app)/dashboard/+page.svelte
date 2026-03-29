@@ -1,28 +1,23 @@
 <script lang="ts">
 	import { page } from '$app/stores';
-	import { derived } from 'svelte/store';
 	import { onMount } from 'svelte';
 	import MonitorStats from '$lib/components/dashboard/MonitorStats.svelte';
 	import MonitorControls from '$lib/components/dashboard/MonitorControls.svelte';
 	import MonitorTable from '$lib/components/dashboard/MonitorTable.svelte';
-	import { servers, isLoading, serverStats, serverStoreActions } from '$lib/stores/serverStore';
+	import { servers, isLoading, serverStoreActions } from '$lib/stores/serverStore';
+	import { pingData } from '$lib/stores/pingStore';
 	import type { Server } from '$lib/models';
 	import { exportServersToCSV } from '$lib/utils/csv.js';
 
 	let filteredServers: Server[] = [];
-
-	function isSuccessfulStatus(status: number): boolean {
-		return status >= 200 && status < 400;
-	}
 
 	function hasGoodPingHistory(server: Server): boolean {
 		if (!server.ping_results || server.ping_results.length === 0) {
 			return true; // New server with no pings
 		}
 
-		// Calculate success rate of all pings
 		const successfulPings = server.ping_results.filter((ping) =>
-			isSuccessfulStatus(ping.status_code)
+			ping.status_code === server.expected_status
 		).length;
 
 		const successRate = successfulPings / server.ping_results.length;
@@ -37,11 +32,47 @@
 	// Subscribe to page store to get URL parameters
 	$: activeFilter = $page.url.searchParams.get('active');
 
-	// Create a derived store that filters servers based on search query and status
-	$: filteredStore = derived(servers, ($servers) => {
-		let result = $servers;
+	// Merge ping data from SSE into servers
+	$: serversWithPings = $servers.map((server) => {
+		const pings = $pingData.get(server.ID);
+		if (pings && pings.length > 0) {
+			return { ...server, ping_results: pings };
+		}
+		return server;
+	});
 
-		// Apply search query filter
+	// Compute stats from servers with ping data
+	$: stats = serversWithPings.reduce(
+		(acc, server) => {
+			const sortedPings = [...(server.ping_results || [])].sort(
+				(a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+			);
+			const latestPing = sortedPings[0];
+
+			if (latestPing) {
+				if (latestPing.status_code === server.expected_status) {
+					acc.up += 1;
+				} else {
+					acc.down += 1;
+				}
+				if (server.security_risk_level === 'CRITICAL') {
+					acc.criticalRisks += 1;
+				} else if (server.security_risk_level === 'HIGH') {
+					acc.highRisks += 1;
+				}
+			} else {
+				acc.down += 1;
+			}
+
+			return acc;
+		},
+		{ up: 0, down: 0, criticalRisks: 0, highRisks: 0 }
+	);
+
+	// Filter servers based on search query and status
+	$: {
+		let result = serversWithPings;
+
 		if (searchQuery) {
 			const query = searchQuery.toLowerCase();
 			result = result.filter(
@@ -50,7 +81,6 @@
 			);
 		}
 
-		// Apply status filter
 		if (statusFilter !== 'all') {
 			if (statusFilter === 'online') {
 				result = result.filter((server) => hasGoodPingHistory(server));
@@ -63,11 +93,8 @@
 			}
 		}
 
-		return result;
-	});
-
-	// Subscribe to the filtered store
-	$: filteredServers = $filteredStore;
+		filteredServers = result;
+	}
 
 async function fetchServers(forceRefresh = false) {
 	await serverStoreActions.setFilter(activeFilter ?? null, forceRefresh);
@@ -108,7 +135,7 @@ $: if (hasMounted && activeFilter !== undefined && activeFilter !== lastActiveFi
 </script>
 
 <div class="p-4 w-full">
-	<MonitorStats stats={$serverStats} />
+	<MonitorStats {stats} />
 	<MonitorControls
 		isLoading={$isLoading}
 		on:search={handleSearch}

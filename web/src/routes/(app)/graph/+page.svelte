@@ -4,6 +4,7 @@
 	import { page } from '$app/stores';
 import CustomSelect from '$lib/components/ui/CustomSelect.svelte';
 import { servers, serverStoreActions } from '$lib/stores/serverStore';
+import { pingData } from '$lib/stores/pingStore';
 import { writable } from 'svelte/store';
 import Graph from '$lib/components/dashboard/Graph.svelte';
 import { Share2 } from 'lucide-svelte';
@@ -14,16 +15,12 @@ let hasMounted = false;
 let lastActiveFilter: string | null | undefined = undefined;
 let activeFilter: string | null = null;
 
-	function isSuccessfulStatus(status: number): boolean {
-		return status >= 200 && status < 400;
-	}
-
 	function hasGoodPingHistory(server: Server): boolean {
 		if (!server.ping_results || server.ping_results.length === 0) {
 			return true;
 		}
 		const successfulPings = server.ping_results.filter((ping) =>
-			isSuccessfulStatus(ping.status_code)
+			ping.status_code === server.expected_status
 		).length;
 		const successRate = successfulPings / server.ping_results.length;
 		return successRate >= 0.9;
@@ -229,7 +226,13 @@ async function loadGraphData(force = false) {
 	}
 
 function updateGraph() {
-	let serverList: Server[] = $servers;
+	let serverList: Server[] = ($servers || []).map((server) => {
+		const pings = $pingData.get(server.ID);
+		if (pings && pings.length > 0) {
+			return { ...server, ping_results: pings };
+		}
+		return server;
+	});
 		if (statusFilter !== 'all') {
 			if (statusFilter === 'online') {
 				serverList = serverList.filter((server: Server) => hasGoodPingHistory(server));

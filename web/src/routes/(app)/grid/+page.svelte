@@ -6,6 +6,7 @@
 	import CustomSelect from '$lib/components/ui/CustomSelect.svelte';
 	import { Search, Grid, Filter } from 'lucide-svelte';
 	import { servers, isLoading, serverStoreActions } from '$lib/stores/serverStore';
+	import { pingData } from '$lib/stores/pingStore';
 
 	let filteredServers: Server[] = [];
 	let searchTerm = '';
@@ -14,18 +15,13 @@
 	let lastActiveFilter: string | null | undefined = undefined;
 	let activeFilter: string | null = null;
 
-	function isSuccessfulStatus(status: number): boolean {
-		return status >= 200 && status < 400;
-	}
-
 	function hasGoodPingHistory(server: Server): boolean {
-		if (server.ping_results.length === 0) {
+		if (!server.ping_results || server.ping_results.length === 0) {
 			return true; // New server with no pings
 		}
 
-		// Calculate success rate of all pings
 		const successfulPings = server.ping_results.filter((ping) =>
-			isSuccessfulStatus(ping.status_code)
+			ping.status_code === server.expected_status
 		).length;
 
 		const successRate = successfulPings / server.ping_results.length;
@@ -34,8 +30,16 @@
 
 	$: activeFilter = $page.url.searchParams.get('active');
 
+	$: serversWithPings = ($servers || []).map((server) => {
+		const pings = $pingData.get(server.ID);
+		if (pings && pings.length > 0) {
+			return { ...server, ping_results: pings };
+		}
+		return server;
+	});
+
 	$: {
-		const allServers = $servers || [];
+		const allServers = serversWithPings;
 		if (allServers.length === 0) {
 			filteredServers = [];
 		} else {

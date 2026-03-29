@@ -4,6 +4,7 @@
 	import type { PingResult } from '$lib/models';
 
 export let pingResults: PingResult[] = [];
+export let expectedStatus: number = 200;
 
 	let status: 'up' | 'down' = 'down';
 	let tooltipElement: HTMLDivElement;
@@ -20,7 +21,7 @@ export let pingResults: PingResult[] = [];
 
 let aggregatedDays: AggregatedDay[] = [];
 
-const pingSuccessful = (ping: PingResult) => ping.status_code > 0 && ping.status_code < 400;
+const pingSuccessful = (ping: PingResult) => ping.status_code > 0 && ping.status_code === expectedStatus;
 
 	$: {
 		// Only perform aggregation if we have more than 50 pings

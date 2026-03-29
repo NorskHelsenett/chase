@@ -25,10 +25,27 @@
 		screenshotLoading = true; // Reset when server changes
 	}
 
+	let forceCheckDone = false;
+
 	onMount(() => {
 		fetchServerData(serverID);
 		fetchServerReport(serverID);
+		// Trigger a fresh ping so the user sees up-to-date status
+		triggerForceCheck(serverID);
 	});
+
+	async function triggerForceCheck(id: number) {
+		try {
+			const response = await fetch(`/api/servers/${id}/force-check`, { method: 'POST' });
+			if (response.ok) {
+				forceCheckDone = true;
+				// Refresh server data to include the new ping result
+				await fetchServerData(id);
+			}
+		} catch {
+			// Non-critical, ignore
+		}
+	}
 
 	onDestroy(() => {
 		if (pollInterval) {
@@ -157,7 +174,7 @@
 	}
 
 	function isPingSuccessful(ping: { status_code: number }) {
-		return ping.status_code > 0 && ping.status_code < 400;
+		return ping.status_code > 0 && ping.status_code === server?.expected_status;
 	}
 
 	function getGradeColor(grade: string): string {
@@ -388,13 +405,21 @@
 						<span class="stat-value">{server.ping_results?.length || 0}</span>
 						<span class="stat-label">Checks</span>
 					</div>
+					<div class="stat">
+						{#if forceCheckDone}
+							<span class="stat-value freshness-live">Live</span>
+						{:else}
+							<span class="stat-value freshness-stale">Checking...</span>
+						{/if}
+						<span class="stat-label">Data</span>
+					</div>
 				</div>
 			</div>
 		</section>
 
 		<!-- Uptime Bar -->
 		<section class="uptime-section">
-			<StatusIndicator pingResults={server.ping_results} />
+			<StatusIndicator pingResults={server.ping_results} expectedStatus={server.expected_status} />
 		</section>
 
 		<!-- Security Details -->
@@ -652,7 +677,7 @@
 	/* Quick Stats */
 	.quick-stats {
 		display: grid;
-		grid-template-columns: repeat(3, 1fr);
+		grid-template-columns: repeat(4, 1fr);
 		gap: 0.5rem;
 		padding-top: 1rem;
 		border-top: 1px solid #2b2b2b;
@@ -677,6 +702,22 @@
 		text-transform: uppercase;
 		letter-spacing: 0.03em;
 		margin-top: 0.125rem;
+	}
+
+	.freshness-live {
+		color: #22c55e;
+		font-size: 0.875rem;
+	}
+
+	.freshness-stale {
+		color: #eab308;
+		font-size: 0.75rem;
+		animation: pulse-opacity 1.5s ease-in-out infinite;
+	}
+
+	@keyframes pulse-opacity {
+		0%, 100% { opacity: 1; }
+		50% { opacity: 0.4; }
 	}
 
 	/* Uptime Section */

@@ -1,10 +1,16 @@
 <script>
 	import { initializeAuth } from '$lib/auth';
 	import Navbar from '$lib/components/Navbar.svelte';
-	import { onMount } from 'svelte';
+	import { connectPingSSE, disconnectPingSSE } from '$lib/stores/pingStore';
+	import { onMount, onDestroy } from 'svelte';
 
 	onMount(async () => {
 		await initializeAuth();
+		connectPingSSE();
+	});
+
+	onDestroy(() => {
+		disconnectPingSSE();
 	});
 </script>
 

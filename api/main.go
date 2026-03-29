@@ -97,6 +97,7 @@ func setupRoutes(r *gin.Engine) {
 		{
 			api.POST("/servers", servers.AddServer)
 			api.GET("/servers", servers.GetServersWithSecurityStatus)
+			api.GET("/servers/pings/stream", servers.PingStreamSSE)
 			api.PUT("/servers/:id", servers.UpdateServer)
 			api.PATCH("/servers/:id", servers.PatchServer)
 			api.GET("/servers/:id", servers.GetServer)

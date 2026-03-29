@@ -18,8 +18,9 @@
 
 	$: rowData = mapServerToRowData(server);
 
-	const pingSuccessful = (ping: { status_code: number }) =>
-		ping.status_code > 0 && ping.status_code < 400;
+	function pingSuccessful(ping: { status_code: number }): boolean {
+		return ping.status_code > 0 && ping.status_code === server.expected_status;
+	}
 
 	function mapServerToRowData(server: Server): ServerRowData {
 		const sortedPings = [...(server.ping_results || [])].sort(
@@ -107,7 +108,7 @@
 			{#if i < 10 - rowData.uptime.length}
 				<div class="uptime-bar uptime-empty"></div>
 			{:else}
-				<div class="uptime-bar {getUptimeClass(rowData.uptime[rowData.uptime.length - (i - (10 - rowData.uptime.length) + 1)])}"></div>
+				<div class="uptime-bar {getUptimeClass(rowData.uptime[i - (10 - rowData.uptime.length)])}"></div>
 			{/if}
 		{/each}
 	</div>

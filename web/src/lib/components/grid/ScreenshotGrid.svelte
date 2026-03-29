@@ -51,18 +51,13 @@
 		window.open(url, '_blank', 'noopener,noreferrer');
 	}
 
-	function isSuccessfulStatus(status: number): boolean {
-		return status >= 200 && status < 400;
-	}
-
 	function hasGoodPingHistory(server: Server): boolean {
-		if (server.ping_results.length === 0) {
+		if (!server.ping_results || server.ping_results.length === 0) {
 			return true; // New server with no pings
 		}
 
-		// Calculate success rate of all pings
 		const successfulPings = server.ping_results.filter((ping) =>
-			isSuccessfulStatus(ping.status_code)
+			ping.status_code === server.expected_status
 		).length;
 
 		const successRate = successfulPings / server.ping_results.length;

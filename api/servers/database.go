@@ -122,6 +122,9 @@ func runMonitoring() {
 
 				txn.Commit()
 
+				// Broadcast ping result to SSE clients
+				BroadcastPing(server.ID, result)
+
 				// Send notification if server was deactivated
 				if wasActive && !server.Active {
 					NotifyServerDeactivated(server.ID, server.URL, ">95% failures in past week")

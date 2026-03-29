@@ -20,24 +20,23 @@ type pingSummary struct {
 }
 
 type serverSummary struct {
-	ID                  uint          `json:"ID"`
-	URL                 string        `json:"url"`
-	Active              bool          `json:"active"`
-	FollowRedirect      bool          `json:"follow_redirect"`
-	NextCheck           time.Time     `json:"next_check"`
-	AllowInsecure       bool          `json:"allow_insecure"`
-	ExpectedStatusCode  int           `json:"expected_status"`
-	Comment             string        `json:"comment"`
-	UpdateInterval      int           `json:"update_interval"`
-	CreatedAt           time.Time     `json:"CreatedAt"`
-	PingResults         []pingSummary `json:"ping_results"`
-	SecurityRiskLevel   string        `json:"security_risk_level,omitempty"`
-	SecurityDescription string        `json:"security_description,omitempty"`
-	SecurityScanTime    time.Time     `json:"security_scan_time,omitempty"`
-	HeaderScore         string        `json:"header_score,omitempty"`
-	CertScore           string        `json:"cert_score,omitempty"`
-	AdminRisk           string        `json:"admin_risk,omitempty"`
-	APIRisk             string        `json:"api_risk,omitempty"`
+	ID                  uint      `json:"ID"`
+	URL                 string    `json:"url"`
+	Active              bool      `json:"active"`
+	FollowRedirect      bool      `json:"follow_redirect"`
+	NextCheck           time.Time `json:"next_check"`
+	AllowInsecure       bool      `json:"allow_insecure"`
+	ExpectedStatusCode  int       `json:"expected_status"`
+	Comment             string    `json:"comment"`
+	UpdateInterval      int       `json:"update_interval"`
+	CreatedAt           time.Time `json:"CreatedAt"`
+	SecurityRiskLevel   string    `json:"security_risk_level,omitempty"`
+	SecurityDescription string    `json:"security_description,omitempty"`
+	SecurityScanTime    time.Time `json:"security_scan_time,omitempty"`
+	HeaderScore         string    `json:"header_score,omitempty"`
+	CertScore           string    `json:"cert_score,omitempty"`
+	AdminRisk           string    `json:"admin_risk,omitempty"`
+	APIRisk             string    `json:"api_risk,omitempty"`
 }
 
 // GetServerResults handles the request to retrieve ping results for a specific server.
@@ -172,7 +171,6 @@ func GetServersWithSecurityStatus(c *gin.Context) {
 
 	summaries := make([]serverSummary, len(servers))
 
-	// For each server, get only a trimmed set of recent ping results
 	for i := range servers {
 		summaries[i] = serverSummary{
 			ID:                 servers[i].ID,
@@ -185,29 +183,6 @@ func GetServersWithSecurityStatus(c *gin.Context) {
 			Comment:            servers[i].Comment,
 			UpdateInterval:     servers[i].UpdateInterval,
 			CreatedAt:          servers[i].CreatedAt,
-			PingResults:        []pingSummary{},
-		}
-
-		var latestModels []PingResult
-		if err := db.Model(&PingResult{}).
-			Select("status_code, response_time, error, timestamp").
-			Where("server_id = ?", servers[i].ID).
-			Order("timestamp DESC").
-			Limit(5).
-			Find(&latestModels).Error; err == nil {
-			summaries[i].PingResults = make([]pingSummary, len(latestModels))
-			for idx, pr := range latestModels {
-				status := pr.StatusCode
-				if pr.Error != "" {
-					status = 0
-				}
-				summaries[i].PingResults[idx] = pingSummary{
-					StatusCode:   status,
-					ResponseTime: pr.ResponseTime,
-					Error:        pr.Error,
-					Timestamp:    pr.Timestamp,
-				}
-			}
 		}
 	}
 
