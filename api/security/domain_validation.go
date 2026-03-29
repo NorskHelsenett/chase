@@ -30,7 +30,7 @@ var blockedHosts = []string{
 // privateNetworks are CIDR ranges for private/reserved IPs.
 var privateNetworks = []net.IPNet{
 	parseCIDR("127.0.0.0/8"),     // Loopback
-	parseCIDR("10.0.0.0/8"),      // RFC1918
+	//parseCIDR("10.0.0.0/8"),      // RFC1918
 	parseCIDR("172.16.0.0/12"),   // RFC1918
 	parseCIDR("192.168.0.0/16"),  // RFC1918
 	parseCIDR("169.254.0.0/16"), // Link-local / cloud metadata
