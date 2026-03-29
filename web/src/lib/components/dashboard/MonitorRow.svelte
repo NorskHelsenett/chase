@@ -11,6 +11,8 @@
 		certScore: 'A+' | 'A' | 'B' | 'C' | 'D' | 'F' | '';
 		adminRisk: 'critical' | 'high' | 'medium' | 'low' | '';
 		apiRisk: 'critical' | 'high' | 'medium' | 'low' | '';
+		secretsRisk: 'critical' | 'high' | 'medium' | 'low' | '';
+		secretsCount: number;
 		days: DaySummary[];
 	};
 
@@ -47,6 +49,8 @@
 			certScore: server.cert_score || server.security?.certRisk || '',
 			adminRisk: server.admin_risk?.toLowerCase() || server.security?.adminRisk || '',
 			apiRisk: server.api_risk?.toLowerCase() || server.security?.apiRisk || '',
+			secretsRisk: server.secrets_risk?.toLowerCase() || '',
+			secretsCount: server.secrets_count || 0,
 			days
 		};
 	}
@@ -115,6 +119,16 @@
 	<div class="risk-badge {getRiskClass(rowData.apiRisk)}">
 		{rowData.apiRisk || ''}
 	</div>
+</td>
+
+<td class="cell" class:hoverable={hover}>
+	{#if rowData.secretsCount > 0}
+		<div class="risk-badge {getRiskClass(rowData.secretsRisk)}">
+			{rowData.secretsCount}
+		</div>
+	{:else}
+		<div class="risk-badge risk-none"></div>
+	{/if}
 </td>
 
 <td class="cell cell-uptime" class:hoverable={hover}>

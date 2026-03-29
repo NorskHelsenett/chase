@@ -33,6 +33,8 @@ export interface Server extends BaseModel {
 	cert_score?: string;
 	admin_risk?: string;
 	api_risk?: string;
+	secrets_risk?: string;
+	secrets_count?: number;
 }
 
 interface Finding {

@@ -54,6 +54,7 @@
 		| 'cert'
 		| 'adminRisk'
 		| 'apiRisk'
+		| 'secrets'
 		| 'uptime'
 		| null = null;
 	let sortDirection: 'asc' | 'desc' = 'asc';
@@ -122,6 +123,10 @@
 				case 'apiRisk':
 					valueA = riskToNumber(getLatestRisk(a, field));
 					valueB = riskToNumber(getLatestRisk(b, field));
+					break;
+				case 'secrets':
+					valueA = a.secrets_count || 0;
+					valueB = b.secrets_count || 0;
 					break;
 				case 'uptime':
 					valueA = getUptimePercentage(a);
@@ -215,6 +220,10 @@
 						<th class="sortable" on:click={() => toggleSort('apiRisk')}>
 							<span>API Risk</span>
 							<span class="sort-indicator">{getSortIndicator('apiRisk')}</span>
+						</th>
+						<th class="sortable" on:click={() => toggleSort('secrets')}>
+							<span>Secrets</span>
+							<span class="sort-indicator">{getSortIndicator('secrets')}</span>
 						</th>
 						<th class="sortable" on:click={() => toggleSort('uptime')}>
 							<span>Uptime</span>

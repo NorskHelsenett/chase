@@ -2,7 +2,7 @@
 	export let stats: {
 		up: number;
 		down: number;
-		criticalRisks: number;
+		secretsExposed: number;
 		highRisks: number;
 	} | null = null;
 </script>
@@ -21,25 +21,25 @@
 		<div class="stat-item">
 			<div class="stat-label">Offline</div>
 			{#if stats}
-				<div class="stat-value error">{stats.down}</div>
+				<div class="stat-value {stats.down > 0 ? 'error' : 'muted'}">{stats.down}</div>
 			{:else}
 				<div class="stat-skeleton"></div>
 			{/if}
 		</div>
 
 		<div class="stat-item">
-			<div class="stat-label">Critical Risks</div>
+			<div class="stat-label">Secrets Exposed</div>
 			{#if stats}
-				<div class="stat-value error">{stats.criticalRisks}</div>
+				<div class="stat-value {stats.secretsExposed > 0 ? 'error' : 'muted'}">{stats.secretsExposed}</div>
 			{:else}
 				<div class="stat-skeleton"></div>
 			{/if}
 		</div>
 
 		<div class="stat-item">
-			<div class="stat-label">High Risks</div>
+			<div class="stat-label">Security Risks</div>
 			{#if stats}
-				<div class="stat-value warning">{stats.highRisks}</div>
+				<div class="stat-value {stats.highRisks > 0 ? 'warning' : 'muted'}">{stats.highRisks}</div>
 			{:else}
 				<div class="stat-skeleton"></div>
 			{/if}
@@ -87,6 +87,10 @@
 
 	.stat-value.warning {
 		color: #f97316;
+	}
+
+	.stat-value.muted {
+		color: #6b7280;
 	}
 
 	.stat-skeleton {

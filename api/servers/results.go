@@ -41,6 +41,8 @@ type serverSummary struct {
 	CertScore           string    `json:"cert_score,omitempty"`
 	AdminRisk           string    `json:"admin_risk,omitempty"`
 	APIRisk             string    `json:"api_risk,omitempty"`
+	SecretsRisk         string    `json:"secrets_risk,omitempty"`
+	SecretsCount        int       `json:"secrets_count,omitempty"`
 }
 
 // GetServerResults handles the request to retrieve ping results for a specific server.
@@ -254,14 +256,21 @@ func GetServersWithSecurityStatus(c *gin.Context) {
 					Swagger struct {
 						Risk string `json:"risk"`
 					} `json:"swagger"`
+					SecretExposure struct {
+						Risk     string `json:"risk"`
+						Findings []struct {
+							Description string `json:"description"`
+						} `json:"findings"`
+					} `json:"secretExposure"`
 				}
 
 				if err := json.Unmarshal(securityReport.ReportData, &fullReport); err == nil {
-					// Populate additional security details
 					summaries[i].HeaderScore = fullReport.Headers.Score
 					summaries[i].CertScore = fullReport.Certificate.Grade
 					summaries[i].AdminRisk = string(fullReport.AdminPages.Risk)
 					summaries[i].APIRisk = string(fullReport.Swagger.Risk)
+					summaries[i].SecretsRisk = string(fullReport.SecretExposure.Risk)
+					summaries[i].SecretsCount = len(fullReport.SecretExposure.Findings)
 				}
 			}
 		}

@@ -40,7 +40,7 @@
 	$: activeFilter = $page.url.searchParams.get('active');
 
 	// Compute stats from servers + ping data
-	let stats = { up: 0, down: 0, criticalRisks: 0, highRisks: 0 };
+	let stats = { up: 0, down: 0, secretsExposed: 0, highRisks: 0 };
 	// eslint-disable-next-line no-unused-expressions
 	$: $pingData, stats = $servers.reduce(
 		(acc, server) => {
@@ -49,14 +49,15 @@
 			} else {
 				acc.down += 1;
 			}
-			if (server.security_risk_level === 'CRITICAL') {
-				acc.criticalRisks += 1;
-			} else if (server.security_risk_level === 'HIGH') {
+			if (server.secrets_count && server.secrets_count > 0) {
+				acc.secretsExposed += server.secrets_count;
+			}
+			if (server.security_risk_level === 'CRITICAL' || server.security_risk_level === 'HIGH') {
 				acc.highRisks += 1;
 			}
 			return acc;
 		},
-		{ up: 0, down: 0, criticalRisks: 0, highRisks: 0 }
+		{ up: 0, down: 0, secretsExposed: 0, highRisks: 0 }
 	);
 
 	// Filter servers based on search query and status
