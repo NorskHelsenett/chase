@@ -1,70 +1,24 @@
 <script>
 	import { onMount } from 'svelte';
-	import {
-		Home,
-		Settings,
-		LogIn,
-		LayoutDashboard,
-		Grid,
-		Logs,
-		Share2,
-		Globe,
-		X
-	} from 'lucide-svelte';
+	import { Home, LogIn, Logs, Grid, Share2, Globe, X } from 'lucide-svelte';
 	import Avatar from './Avatar.svelte';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/stores';
 	import { isLoggedIn } from '$lib/auth';
-	import { tooltip } from '$lib/actions/tooltip';
 	import { unreadCount, loadNotifications, resetNotifications } from '$lib/push/notificationStore';
 
-	function submenu(node) {
-		function updateSubmenuPosition(event) {
-			const rect = node.getBoundingClientRect();
-			const submenuX = rect.left + rect.width * 1;
-			const submenuY = rect.top * 1;
-
-			const submenuEl = node.querySelector('.submenu');
-			if (submenuEl) {
-				submenuEl.style.left = `${submenuX}px`;
-				submenuEl.style.top = `${submenuY}px`;
-				submenuEl.style.position = 'fixed';
-			}
-		}
-
-		node.addEventListener('mouseenter', updateSubmenuPosition);
-		return {
-			destroy() {
-				node.removeEventListener('mouseenter', updateSubmenuPosition);
-			}
-		};
-	}
-
 	const routes = [
-		{ path: '/', icon: Home, tooltip: 'Home', auth: false },
-		{
-			path: '/dashboard?active=true',
-			icon: LayoutDashboard,
-			auth: true,
-			submenu: [
-				{ path: '/dashboard?active=true', icon: Logs, tooltip: 'Dashboard View' },
-				{ path: '/grid?active=true', icon: Grid, tooltip: 'Grid View' },
-				{ path: '/graph', icon: Share2, tooltip: 'Graph View' },
-				{ path: '/map', icon: Globe, tooltip: 'Infrastructure Map' }
-			]
-		},
-		{ path: '/settings', icon: Settings, tooltip: 'Settings', auth: true }
+		{ path: '/', icon: Home, label: 'Home', auth: false },
+		{ path: '/dashboard?active=true', icon: Logs, label: 'Dashboard', auth: true },
+		{ path: '/grid?active=true', icon: Grid, label: 'Grid', auth: true },
+		{ path: '/graph', icon: Share2, label: 'Graph', auth: true },
+		{ path: '/map', icon: Globe, label: 'Map', auth: true }
 	];
 
 	let showModal = false;
-	let activeSubmenu = null;
 
-	async function handleLogin() {
-		try {
-			showModal = true;
-		} catch (e) {
-			console.error(e.message);
-		}
+	function handleLogin() {
+		showModal = true;
 	}
 
 	async function toProfile() {
@@ -81,104 +35,60 @@
 				resetNotifications();
 			}
 		});
-
-		return () => {
-			unsubscribe();
-		};
+		return () => unsubscribe();
 	});
 
-	function handleMouseEnter(route) {
-		if (route.submenu) {
-			activeSubmenu = route;
-		}
-	}
+	// Track current path reactively
+	$: currentPath = $page.url.pathname;
+	$: currentFull = $page.url.pathname + $page.url.search;
 
-	function handleMouseLeave() {
-		activeSubmenu = null;
+	function isActive(routePath, _currentPath, _currentFull) {
+		if (routePath === '/') return _currentPath === '/';
+		return _currentFull === routePath || _currentPath === routePath.split('?')[0];
 	}
 
 	function formatUnread(count) {
-		if (!count) {
-			return '';
-		}
+		if (!count) return '';
 		return count > 99 ? '99+' : `${count}`;
-	}
-
-	function isActive(routePath) {
-		return $page.url.pathname === routePath || $page.url.pathname + $page.url.search === routePath;
 	}
 </script>
 
 <div class="navbar">
-	<div class="spacer"></div>
-
-	<div class="nav-items">
-		{#each routes as route}
-			{#if !route.auth || $isLoggedIn}
-				<div
-					class="nav-item-wrapper"
-					on:mouseenter={() => handleMouseEnter(route)}
-					on:mouseleave={handleMouseLeave}
-					use:submenu
-				>
-					<button
-						class="nav-btn"
-						class:active={isActive(route.path)}
-						on:click={() => goto(route.path)}
-						use:tooltip
-						data-tooltip={route.tooltip}
-					>
-						<svelte:component this={route.icon} size={24} />
-					</button>
-
-					{#if activeSubmenu === route && route.submenu}
-						<div class="submenu">
-							{#each route.submenu as subItem}
-								<button
-									class="submenu-btn"
-									class:active={isActive(subItem.path)}
-									on:click={() => goto(subItem.path)}
-									use:tooltip
-									data-tooltip={subItem.tooltip}
-								>
-									<svelte:component this={subItem.icon} size={20} />
-								</button>
-							{/each}
-						</div>
-					{/if}
-				</div>
-			{/if}
-		{/each}
+	<div class="nav-brand">
+		<span class="brand-text">CHASE</span>
 	</div>
 
-	{#if $isLoggedIn}
-		<div class="nav-footer">
-			<button
-				on:click={toProfile}
-				class="profile-btn"
-				use:tooltip
-				data-tooltip="Profile"
-			>
+	<nav class="nav-links">
+		{#each routes as route}
+			{#if !route.auth || $isLoggedIn}
+				<button
+					class="nav-link"
+					class:active={isActive(route.path, currentPath, currentFull)}
+					on:click={() => goto(route.path)}
+				>
+					<svelte:component this={route.icon} size={18} />
+					<span>{route.label}</span>
+				</button>
+			{/if}
+		{/each}
+	</nav>
+
+	<div class="nav-footer">
+		{#if $isLoggedIn}
+			<button class="nav-link profile-link" on:click={toProfile}>
 				<Avatar />
+				<span>Profile</span>
 				{#if $unreadCount > 0}
-					<span class="badge">
-						{formatUnread($unreadCount)}
-					</span>
+					<span class="badge">{formatUnread($unreadCount)}</span>
 				{/if}
 			</button>
-		</div>
-	{:else}
-		<div class="nav-footer">
-			<button
-				class="nav-btn"
-				use:tooltip
-				data-tooltip="Log in"
-				on:click={handleLogin}
-			>
-				<LogIn size={24} />
+		{:else}
+			<button class="nav-link" on:click={handleLogin}>
+				<LogIn size={18} />
+				<span>Log in</span>
 			</button>
-		</div>
-	{/if}
+		{/if}
+	</div>
 </div>
 
 {#if showModal}
@@ -200,115 +110,88 @@
 	.navbar {
 		display: flex;
 		flex-direction: column;
-		align-items: center;
 		height: 100%;
-		position: relative;
+		padding: 0 0.75rem;
 	}
 
-	.spacer {
-		margin-bottom: 2rem;
+	.nav-brand {
+		padding: 0.5rem 0.75rem 1.5rem;
 	}
 
-	.nav-items {
+	.brand-text {
+		font-size: 1.125rem;
+		font-weight: 700;
+		color: #e5e7eb;
+		letter-spacing: -0.02em;
+	}
+
+	.nav-links {
 		flex: 1;
 		display: flex;
 		flex-direction: column;
-		align-items: center;
-		justify-content: center;
-		gap: 2rem;
+		gap: 0.125rem;
 	}
 
-	.nav-item-wrapper {
-		position: relative;
-	}
-
-	.nav-btn {
+	.nav-link {
 		display: flex;
 		align-items: center;
-		justify-content: center;
-		padding: 0.5rem;
-		background: transparent;
+		gap: 0.625rem;
+		padding: 0.5rem 0.75rem;
+		background: none;
 		border: none;
-		border-radius: 9999px;
-		color: #d1d5db;
+		border-radius: 0.375rem;
+		color: #9ca3af;
+		font-size: 0.8125rem;
+		font-weight: 500;
 		cursor: pointer;
-		transition: color 0.2s ease, background-color 0.2s ease;
-	}
-
-	.nav-btn:hover {
-		color: #fff;
-	}
-
-	.nav-btn.active {
-		color: #fff;
-		background: #2b2b2b;
-	}
-
-	.submenu {
-		position: fixed;
-		background: #202020;
-		border-radius: 0.5rem;
-		padding: 0.5rem 0.25rem;
-		box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-		max-width: 42px;
-		z-index: 9999;
-	}
-
-	.submenu-btn {
+		transition:
+			color 0.15s,
+			background 0.15s;
+		text-align: left;
 		width: 100%;
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		padding: 0.5rem;
-		background: transparent;
-		border: none;
-		border-radius: 0.25rem;
-		color: #d1d5db;
-		cursor: pointer;
-		transition: color 0.2s ease, background-color 0.2s ease;
+		white-space: nowrap;
 	}
 
-	.submenu-btn:hover {
-		color: #fff;
-	}
-
-	.submenu-btn.active {
-		color: #fff;
+	.nav-link:hover {
+		color: #e5e7eb;
 		background: #2b2b2b;
+	}
+
+	.nav-link.active {
+		color: #e5e7eb;
+		background: #2b2b2b;
+	}
+
+	.nav-link.active :global(svg) {
+		color: #4ade80;
 	}
 
 	.nav-footer {
-		margin-top: 2rem;
+		padding-top: 0.75rem;
+		border-top: 1px solid #2b2b2b;
 	}
 
-	.profile-btn {
+	.profile-link {
 		position: relative;
-		display: inline-flex;
-		background: transparent;
-		border: none;
-		color: #d1d5db;
-		cursor: pointer;
-		transition: color 0.2s ease;
 	}
 
-	.profile-btn:hover {
-		color: #fff;
+	.profile-link :global(img),
+	.profile-link :global(svg) {
+		width: 20px;
+		height: 20px;
+		border-radius: 50%;
 	}
 
 	.badge {
-		position: absolute;
-		top: -0.25rem;
-		right: -0.25rem;
-		min-width: 1.5rem;
-		padding: 0.125rem 0.375rem;
+		margin-left: auto;
+		min-width: 1.25rem;
+		padding: 0.0625rem 0.375rem;
 		border-radius: 9999px;
 		background: #15803d;
-		border: 1px solid rgba(34, 197, 94, 0.3);
 		color: #4ade80;
-		font-size: 0.65rem;
+		font-size: 0.625rem;
 		font-weight: 600;
 		text-align: center;
-		box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
 	}
 
 	.modal {
