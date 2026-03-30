@@ -6,6 +6,7 @@ import CustomSelect from '$lib/components/ui/CustomSelect.svelte';
 import { servers, serverStoreActions } from '$lib/stores/serverStore';
 import { statusFilter } from '$lib/stores/filterStore';
 import { pingData } from '$lib/stores/pingStore';
+import { getEffectiveStatus } from '$lib/utils/status';
 import { writable } from 'svelte/store';
 import Graph from '$lib/components/dashboard/Graph.svelte';
 import { Share2 } from 'lucide-svelte';
@@ -115,8 +116,9 @@ function buildGraphData(serverList: Server[]) {
 				const allLevels = getAllDomainLevels(hostname);
 				const rootDomain = getRootDomain(hostname);
 
-				const isDown = server.status === 'down' || server.status === 'stale';
-				const statusText = server.status === 'up' ? 'Up' : server.status === 'down' ? 'Down' : server.status || 'Unknown';
+				const effectiveStatus = getEffectiveStatus(server);
+				const isDown = effectiveStatus === 'down';
+				const statusText = effectiveStatus === 'up' ? 'Up' : 'Down';
 				const nodeId = `instance:${server.ID || idx}:${server.url}`;
 				const tooltip = `${server.url}\nStatus: ${statusText}${server.comment ? `\nNote: ${server.comment}` : ''}`;
 
@@ -183,9 +185,9 @@ function updateGraph() {
 	});
 		if ($statusFilter !== 'all') {
 			if ($statusFilter === 'online') {
-				serverList = serverList.filter((server: Server) => server.status === 'up');
+				serverList = serverList.filter((server: Server) => getEffectiveStatus(server) === 'up');
 			} else if ($statusFilter === 'issues' || $statusFilter === 'offline') {
-				serverList = serverList.filter((server: Server) => server.status === 'down' || server.status === 'stale');
+				serverList = serverList.filter((server: Server) => getEffectiveStatus(server) === 'down');
 			} else if ($statusFilter === 'new') {
 				const thirtyDaysAgo = new Date();
 				thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);

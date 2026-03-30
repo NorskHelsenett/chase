@@ -6,8 +6,10 @@
 	import MonitorTable from '$lib/components/dashboard/MonitorTable.svelte';
 	import { servers, isLoading, serverStoreActions } from '$lib/stores/serverStore';
 	import { statusFilter } from '$lib/stores/filterStore';
+	import { pingData } from '$lib/stores/pingStore';
 	import type { Server } from '$lib/models';
 	import { exportServersToCSV } from '$lib/utils/csv.js';
+	import { getEffectiveStatus } from '$lib/utils/status';
 
 	let filteredServers: Server[] = [];
 
@@ -20,6 +22,8 @@
 
 	// Filter servers based on search query and status
 	$: {
+		// Reference pingData so this block re-runs when SSE updates arrive
+		void $pingData;
 		let result = $servers;
 
 		if (searchQuery) {
@@ -32,9 +36,9 @@
 
 		if ($statusFilter !== 'all') {
 			if ($statusFilter === 'online') {
-				result = result.filter((server) => server.status === 'up');
+				result = result.filter((server) => getEffectiveStatus(server) === 'up');
 			} else if ($statusFilter === 'issues') {
-				result = result.filter((server) => server.status === 'down' || server.status === 'stale');
+				result = result.filter((server) => getEffectiveStatus(server) === 'down');
 			} else if ($statusFilter === 'new') {
 				const thirtyDaysAgo = new Date();
 				thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
@@ -45,12 +49,12 @@
 		filteredServers = result;
 	}
 
-	// Compute stats from the filtered list (only count servers with a known status)
+	// Compute stats from the filtered list using SSE-aware status
 	$: stats = filteredServers.reduce(
 		(acc, server) => {
-			if (server.status === 'up') {
+			if (getEffectiveStatus(server) === 'up') {
 				acc.up += 1;
-			} else if (server.status === 'down' || server.status === 'stale') {
+			} else {
 				acc.down += 1;
 			}
 			if (server.secrets_count && server.secrets_count > 0) {

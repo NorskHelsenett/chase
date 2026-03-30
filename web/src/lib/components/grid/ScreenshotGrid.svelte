@@ -3,6 +3,7 @@
 	import ScreenshotModal from './ScreenshotModal.svelte';
 	import LazyScreenshot from './LazyScreenshot.svelte';
 	import { fade, scale } from 'svelte/transition';
+	import { getEffectiveStatus } from '$lib/utils/status';
 	export let sites: Server[] = [];
 	let selectedImageIndex: number | null = null;
 
@@ -80,14 +81,14 @@
 						<div
 							class="absolute top-3 right-3 transition-transform duration-300 group-hover:scale-105"
 						>
-							{#if site.status === 'up'}
+							{#if getEffectiveStatus(site) === 'up'}
 								<span
 									class="bg-green-500/30 text-green-400 text-xs px-2.5 py-1 rounded-full flex items-center gap-1.5 shadow-lg backdrop-blur-sm border border-green-500/20"
 								>
 									<span class="w-1.5 h-1.5 bg-green-400 rounded-full animate-pulse"></span>
 									<span class="font-medium">Online</span>
 								</span>
-							{:else if site.status === 'down' || site.status === 'stale'}
+							{:else if getEffectiveStatus(site) === 'down'}
 								<span
 									class="bg-red-500/30 text-red-400 text-xs px-2.5 py-1 rounded-full flex items-center gap-1.5 shadow-lg backdrop-blur-sm border border-red-500/20"
 								>

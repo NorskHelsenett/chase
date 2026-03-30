@@ -7,6 +7,8 @@
 	import { Search, Grid, Filter } from 'lucide-svelte';
 	import { servers, isLoading, serverStoreActions } from '$lib/stores/serverStore';
 	import { statusFilter } from '$lib/stores/filterStore';
+	import { pingData } from '$lib/stores/pingStore';
+	import { getEffectiveStatus } from '$lib/utils/status';
 	let filteredServers: Server[] = [];
 	let searchTerm = '';
 	let hasMounted = false;
@@ -16,6 +18,7 @@
 	$: activeFilter = $page.url.searchParams.get('active');
 
 	$: {
+		void $pingData;
 		const allServers = $servers || [];
 		if (allServers.length === 0) {
 			filteredServers = [];
@@ -39,10 +42,10 @@
 
 			if ($statusFilter !== 'all') {
 				if ($statusFilter === 'online') {
-					result = result.filter((server: Server) => server.status === 'up');
+					result = result.filter((server: Server) => getEffectiveStatus(server) === 'up');
 				} else if ($statusFilter === 'issues') {
 					result = result.filter(
-						(server: Server) => server.status === 'down' || server.status === 'stale'
+						(server: Server) => getEffectiveStatus(server) === 'down'
 					);
 				} else if ($statusFilter === 'new') {
 					const thirtyDaysAgo = new Date();
