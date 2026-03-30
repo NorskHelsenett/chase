@@ -15,17 +15,6 @@ let hasMounted = false;
 let lastActiveFilter: string | null | undefined = undefined;
 let activeFilter: string | null = null;
 
-	function hasGoodPingHistory(server: Server): boolean {
-		const info = $pingData.get(server.ID);
-		if (info?.days && info.days.length > 0) {
-			const total = info.days.reduce((s, d) => s + d.total, 0);
-			const success = info.days.reduce((s, d) => s + d.successful, 0);
-			if (total === 0) return true;
-			return (success / total) >= 0.9;
-		}
-		return true;
-	}
-
 	const graphData = writable<{ nodes: GraphNode[]; edges: GraphEdge[] }>({ nodes: [], edges: [] });
 	const isLoading = writable(true);
 
@@ -195,9 +184,9 @@ function updateGraph() {
 	});
 		if (statusFilter !== 'all') {
 			if (statusFilter === 'online') {
-				serverList = serverList.filter((server: Server) => hasGoodPingHistory(server));
+				serverList = serverList.filter((server: Server) => server.status === 'up');
 			} else if (statusFilter === 'issues' || statusFilter === 'offline') {
-				serverList = serverList.filter((server: Server) => !hasGoodPingHistory(server));
+				serverList = serverList.filter((server: Server) => server.status === 'down' || server.status === 'stale');
 			} else if (statusFilter === 'new') {
 				const thirtyDaysAgo = new Date();
 				thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);

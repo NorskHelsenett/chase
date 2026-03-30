@@ -6,8 +6,6 @@
 	import CustomSelect from '$lib/components/ui/CustomSelect.svelte';
 	import { Search, Grid, Filter } from 'lucide-svelte';
 	import { servers, isLoading, serverStoreActions } from '$lib/stores/serverStore';
-	import { pingData } from '$lib/stores/pingStore';
-
 	let filteredServers: Server[] = [];
 	let searchTerm = '';
 	let filterStatus = 'online';
@@ -15,27 +13,9 @@
 	let lastActiveFilter: string | null | undefined = undefined;
 	let activeFilter: string | null = null;
 
-	function hasGoodPingHistory(server: Server): boolean {
-		const info = $pingData.get(server.ID);
-		if (info?.days && info.days.length > 0) {
-			const total = info.days.reduce((s, d) => s + d.total, 0);
-			const success = info.days.reduce((s, d) => s + d.successful, 0);
-			if (total === 0) return true;
-			return (success / total) >= 0.9;
-		}
-		return true;
-	}
-
-	function isServerUp(server: Server): boolean {
-		// 'up' = healthy, undefined/missing = not yet known (treat as up to avoid hiding)
-		return !server.status || server.status === 'up';
-	}
-
 	$: activeFilter = $page.url.searchParams.get('active');
 
 	$: {
-		// Reference $pingData so Svelte re-runs this block when ping data arrives
-		$pingData;
 		const allServers = $servers || [];
 		if (allServers.length === 0) {
 			filteredServers = [];
@@ -59,12 +39,10 @@
 
 			if (filterStatus !== 'all') {
 				if (filterStatus === 'online') {
-					result = result.filter(
-						(server: Server) => isServerUp(server) && hasGoodPingHistory(server)
-					);
+					result = result.filter((server: Server) => server.status === 'up');
 				} else if (filterStatus === 'issues') {
 					result = result.filter(
-						(server: Server) => !hasGoodPingHistory(server)
+						(server: Server) => server.status === 'down' || server.status === 'stale'
 					);
 				} else if (filterStatus === 'new') {
 					const thirtyDaysAgo = new Date();

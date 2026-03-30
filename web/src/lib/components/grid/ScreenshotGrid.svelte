@@ -3,8 +3,6 @@
 	import ScreenshotModal from './ScreenshotModal.svelte';
 	import LazyScreenshot from './LazyScreenshot.svelte';
 	import { fade, scale } from 'svelte/transition';
-	import { pingData } from '$lib/stores/pingStore';
-
 	export let sites: Server[] = [];
 	let selectedImageIndex: number | null = null;
 
@@ -52,17 +50,6 @@
 		window.open(url, '_blank', 'noopener,noreferrer');
 	}
 
-	function hasGoodPingHistory(server: Server): boolean {
-		const info = $pingData.get(server.ID);
-		if (info?.days && info.days.length > 0) {
-			const total = info.days.reduce((s, d) => s + d.total, 0);
-			const success = info.days.reduce((s, d) => s + d.successful, 0);
-			if (total === 0) return true;
-			return (success / total) >= 0.9;
-		}
-		return true;
-	}
-
 	function getHostname(url: string): string {
 		try {
 			return new URL(url.startsWith('http') ? url : `https://${url}`).hostname;
@@ -93,14 +80,14 @@
 						<div
 							class="absolute top-3 right-3 transition-transform duration-300 group-hover:scale-105"
 						>
-							{#if $pingData.has(site.ID) && hasGoodPingHistory(site)}
+							{#if site.status === 'up'}
 								<span
 									class="bg-green-500/30 text-green-400 text-xs px-2.5 py-1 rounded-full flex items-center gap-1.5 shadow-lg backdrop-blur-sm border border-green-500/20"
 								>
 									<span class="w-1.5 h-1.5 bg-green-400 rounded-full animate-pulse"></span>
 									<span class="font-medium">Online</span>
 								</span>
-							{:else if $pingData.has(site.ID)}
+							{:else if site.status === 'down' || site.status === 'stale'}
 								<span
 									class="bg-red-500/30 text-red-400 text-xs px-2.5 py-1 rounded-full flex items-center gap-1.5 shadow-lg backdrop-blur-sm border border-red-500/20"
 								>

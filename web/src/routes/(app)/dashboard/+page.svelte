@@ -5,31 +5,10 @@
 	import MonitorControls from '$lib/components/dashboard/MonitorControls.svelte';
 	import MonitorTable from '$lib/components/dashboard/MonitorTable.svelte';
 	import { servers, isLoading, serverStoreActions } from '$lib/stores/serverStore';
-	import { pingData } from '$lib/stores/pingStore';
 	import type { Server } from '$lib/models';
 	import { exportServersToCSV } from '$lib/utils/csv.js';
 
 	let filteredServers: Server[] = [];
-
-	function isServerUp(server: Server): boolean {
-		return !server.status || server.status === 'up';
-	}
-
-	function hasGoodPingHistory(server: Server): boolean {
-		const info = $pingData.get(server.ID);
-		if (info?.days && info.days.length > 0) {
-			const totalPings = info.days.reduce((s, d) => s + d.total, 0);
-			const successPings = info.days.reduce((s, d) => s + d.successful, 0);
-			if (totalPings === 0) return true;
-			return (successPings / totalPings) >= 0.9;
-		}
-		// Fallback
-		if (!server.ping_results || server.ping_results.length === 0) return true;
-		const successfulPings = server.ping_results.filter((p) =>
-			p.status_code === server.expected_status
-		).length;
-		return (successfulPings / server.ping_results.length) >= 0.9;
-	}
 
 	let searchQuery = '';
 	let statusFilter = 'all';
@@ -39,10 +18,8 @@
 
 	$: activeFilter = $page.url.searchParams.get('active');
 
-	// Compute stats from servers + ping data
 	// Filter servers based on search query and status
 	$: {
-		$pingData;
 		let result = $servers;
 
 		if (searchQuery) {
@@ -55,9 +32,9 @@
 
 		if (statusFilter !== 'all') {
 			if (statusFilter === 'online') {
-				result = result.filter((server) => hasGoodPingHistory(server));
+				result = result.filter((server) => server.status === 'up');
 			} else if (statusFilter === 'issues') {
-				result = result.filter((server) => !hasGoodPingHistory(server));
+				result = result.filter((server) => server.status === 'down' || server.status === 'stale');
 			} else if (statusFilter === 'new') {
 				const thirtyDaysAgo = new Date();
 				thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
