@@ -158,6 +158,7 @@ func main() {
 	}
 
 	go servers.StartMonitoring()
+	go servers.StartGeoCacheRefresh()
 
 	// Initialize the OIDC configuration
 	if err := auth.InitOIDC(); err != nil {

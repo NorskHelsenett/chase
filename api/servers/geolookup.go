@@ -171,6 +171,57 @@ func cacheGeo(ip string, result *GeoResult) {
 	}
 }
 
+// StartGeoCacheRefresh runs a background loop that refreshes stale geo cache entries once a day
+func StartGeoCacheRefresh() {
+	ticker := time.NewTicker(24 * time.Hour)
+	defer ticker.Stop()
+
+	// Run once at startup
+	refreshStaleGeoEntries()
+
+	for range ticker.C {
+		refreshStaleGeoEntries()
+	}
+}
+
+func refreshStaleGeoEntries() {
+	db := database.GetDB()
+	var stale []GeoCache
+	if err := db.Where("updated_at < ?", time.Now().Add(-geoCacheTTL)).Find(&stale).Error; err != nil {
+		log.Printf("Failed to fetch stale geo entries: %v", err)
+		return
+	}
+
+	if len(stale) == 0 {
+		return
+	}
+
+	log.Printf("Refreshing %d stale geo cache entries", len(stale))
+
+	var wg sync.WaitGroup
+	sem := make(chan struct{}, 10)
+
+	for _, entry := range stale {
+		wg.Add(1)
+		go func(ip string) {
+			defer wg.Done()
+			sem <- struct{}{}
+			defer func() { <-sem }()
+
+			// Clear from in-memory cache so lookupGeo hits the API
+			geoMemCacheMu.Lock()
+			delete(geoMemCache, ip)
+			geoMemCacheMu.Unlock()
+
+			if _, err := lookupGeo(ip); err != nil {
+				log.Printf("Geo refresh failed for %s: %v", ip, err)
+			}
+		}(entry.IP)
+	}
+	wg.Wait()
+	log.Printf("Geo cache refresh complete")
+}
+
 // ipwho.is — free, no key, 10k/month
 func lookupIPWhois(ip string) (*GeoResult, error) {
 	client := &http.Client{Timeout: 5 * time.Second}
