@@ -18,7 +18,7 @@ const serverBatchSize = 100
 
 func AutoMigrate(db *gorm.DB) error {
 	// Migrate the schemas
-	if err := db.AutoMigrate(&Server{}, &PingResult{}); err != nil {
+	if err := db.AutoMigrate(&Server{}, &PingResult{}, &GeoCache{}); err != nil {
 		return err
 	}
 

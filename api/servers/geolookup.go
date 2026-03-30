@@ -13,10 +13,26 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/norskhelsenett/chase/database"
+	"gorm.io/gorm"
 )
 
 type GeoResult struct {
 	IP          string  `json:"ip"`
+	Country     string  `json:"country"`
+	CountryCode string  `json:"country_code"`
+	City        string  `json:"city"`
+	Region      string  `json:"region"`
+	Lat         float64 `json:"lat"`
+	Lon         float64 `json:"lon"`
+	Org         string  `json:"org"`
+	ISP         string  `json:"isp"`
+	AS          string  `json:"as"`
+}
+
+// GeoCache is the database model for persisted geo lookups
+type GeoCache struct {
+	gorm.Model
+	IP          string  `json:"ip" gorm:"uniqueIndex"`
 	Country     string  `json:"country"`
 	CountryCode string  `json:"country_code"`
 	City        string  `json:"city"`
@@ -41,11 +57,44 @@ type ServerGeo struct {
 }
 
 var (
-	geoCache    = make(map[string]*GeoResult)
-	geoCacheMu  sync.RWMutex
-	geoCacheTTL = 24 * time.Hour
-	geoCacheTS  = make(map[string]time.Time)
+	geoMemCache   = make(map[string]*GeoResult)
+	geoMemCacheMu sync.RWMutex
+	geoCacheTTL   = 7 * 24 * time.Hour
 )
+
+// privateRanges contains all RFC 1918 and other non-routable IP ranges
+var privateRanges []*net.IPNet
+
+func init() {
+	for _, cidr := range []string{
+		"10.0.0.0/8",
+		"172.16.0.0/12",
+		"192.168.0.0/16",
+		"127.0.0.0/8",
+		"169.254.0.0/16",
+		"100.64.0.0/10",
+		"::1/128",
+		"fc00::/7",
+		"fe80::/10",
+	} {
+		_, network, _ := net.ParseCIDR(cidr)
+		privateRanges = append(privateRanges, network)
+	}
+}
+
+// isPrivateIP returns true if the IP is in a private/local/non-routable range
+func isPrivateIP(ipStr string) bool {
+	ip := net.ParseIP(ipStr)
+	if ip == nil {
+		return false
+	}
+	for _, r := range privateRanges {
+		if r.Contains(ip) {
+			return true
+		}
+	}
+	return false
+}
 
 // geoProviders are tried in order until one succeeds
 var geoProviders = []func(string) (*GeoResult, error){
@@ -54,14 +103,32 @@ var geoProviders = []func(string) (*GeoResult, error){
 }
 
 func lookupGeo(ip string) (*GeoResult, error) {
-	geoCacheMu.RLock()
-	if cached, ok := geoCache[ip]; ok {
-		if time.Since(geoCacheTS[ip]) < geoCacheTTL {
-			geoCacheMu.RUnlock()
-			return cached, nil
-		}
+	if isPrivateIP(ip) {
+		return nil, fmt.Errorf("private IP %s skipped", ip)
 	}
-	geoCacheMu.RUnlock()
+
+	// Check in-memory cache first
+	geoMemCacheMu.RLock()
+	if cached, ok := geoMemCache[ip]; ok {
+		geoMemCacheMu.RUnlock()
+		return cached, nil
+	}
+	geoMemCacheMu.RUnlock()
+
+	// Check database cache
+	db := database.GetDB()
+	var cached GeoCache
+	if err := db.Where("ip = ? AND updated_at > ?", ip, time.Now().Add(-geoCacheTTL)).First(&cached).Error; err == nil {
+		result := &GeoResult{
+			IP: cached.IP, Country: cached.Country, CountryCode: cached.CountryCode,
+			City: cached.City, Region: cached.Region, Lat: cached.Lat, Lon: cached.Lon,
+			Org: cached.Org, ISP: cached.ISP, AS: cached.AS,
+		}
+		geoMemCacheMu.Lock()
+		geoMemCache[ip] = result
+		geoMemCacheMu.Unlock()
+		return result, nil
+	}
 
 	// Try custom GEO_API_URL first if configured
 	if customURL := os.Getenv("GEO_API_URL"); customURL != "" {
@@ -84,10 +151,24 @@ func lookupGeo(ip string) (*GeoResult, error) {
 }
 
 func cacheGeo(ip string, result *GeoResult) {
-	geoCacheMu.Lock()
-	geoCache[ip] = result
-	geoCacheTS[ip] = time.Now()
-	geoCacheMu.Unlock()
+	// Update in-memory cache
+	geoMemCacheMu.Lock()
+	geoMemCache[ip] = result
+	geoMemCacheMu.Unlock()
+
+	// Persist to database
+	db := database.GetDB()
+	entry := GeoCache{
+		IP: ip, Country: result.Country, CountryCode: result.CountryCode,
+		City: result.City, Region: result.Region, Lat: result.Lat, Lon: result.Lon,
+		Org: result.Org, ISP: result.ISP, AS: result.AS,
+	}
+	var existing GeoCache
+	if err := db.Where("ip = ?", ip).First(&existing).Error; err == nil {
+		db.Model(&existing).Updates(entry)
+	} else {
+		db.Create(&entry)
+	}
 }
 
 // ipwho.is — free, no key, 10k/month
@@ -202,10 +283,16 @@ func GetServersGeo(c *gin.Context) {
 		return
 	}
 
-	results := make([]ServerGeo, 0, len(servers))
+	// Phase 1: Collect all unique public IPs across all servers (and per-server data)
+	type serverData struct {
+		srv    Server
+		ipSet  map[string]bool
+		status string
+	}
+	allData := make([]serverData, 0, len(servers))
+	allIPs := make(map[string]bool) // global dedup for geo lookups
 
 	for _, srv := range servers {
-		// Collect unique IPs: from ping detail + DNS resolution
 		ipSet := make(map[string]bool)
 
 		// IP from latest ping detail
@@ -214,19 +301,30 @@ func GetServersGeo(c *gin.Context) {
 			Preload("PingDetail").
 			Order("timestamp DESC").
 			First(&ping).Error; err == nil && ping.PingDetail != nil && ping.PingDetail.IP != "" {
-			ipSet[ping.PingDetail.IP] = true
+			if !isPrivateIP(ping.PingDetail.IP) {
+				ipSet[ping.PingDetail.IP] = true
+			}
 		}
 
 		// All IPs from DNS resolution
 		host := strings.TrimPrefix(strings.TrimPrefix(srv.URL, "https://"), "http://")
+		if idx := strings.Index(host, "/"); idx != -1 {
+			host = host[:idx]
+		}
 		if resolved, err := net.LookupHost(host); err == nil {
 			for _, ip := range resolved {
-				ipSet[ip] = true
+				if !isPrivateIP(ip) {
+					ipSet[ip] = true
+				}
 			}
 		}
 
 		if len(ipSet) == 0 {
 			continue
+		}
+
+		for ip := range ipSet {
+			allIPs[ip] = true
 		}
 
 		// Determine status from latest ping
@@ -244,23 +342,50 @@ func GetServersGeo(c *gin.Context) {
 			}
 		}
 
-		// Geo-locate each IP
-		ips := make([]IPInfo, 0, len(ipSet))
-		for ip := range ipSet {
-			info := IPInfo{IP: ip}
+		allData = append(allData, serverData{srv: srv, ipSet: ipSet, status: status})
+	}
+
+	// Phase 2: Geo-lookup all unique IPs in parallel
+	geoResults := make(map[string]*GeoResult)
+	var geoMu sync.Mutex
+	var wg sync.WaitGroup
+	sem := make(chan struct{}, 10) // limit concurrency to 10
+
+	for ip := range allIPs {
+		wg.Add(1)
+		go func(ip string) {
+			defer wg.Done()
+			sem <- struct{}{}
+			defer func() { <-sem }()
+
 			if geo, err := lookupGeo(ip); err == nil {
-				info.Geo = geo
+				geoMu.Lock()
+				geoResults[ip] = geo
+				geoMu.Unlock()
 			} else {
-				log.Printf("Geo lookup failed for %s (%s): %v", srv.URL, ip, err)
+				log.Printf("Geo lookup failed for %s: %v", ip, err)
+			}
+		}(ip)
+	}
+	wg.Wait()
+
+	// Phase 3: Assemble results
+	results := make([]ServerGeo, 0, len(allData))
+	for _, sd := range allData {
+		ips := make([]IPInfo, 0, len(sd.ipSet))
+		for ip := range sd.ipSet {
+			info := IPInfo{IP: ip}
+			if geo, ok := geoResults[ip]; ok {
+				info.Geo = geo
 			}
 			ips = append(ips, info)
 		}
 
 		results = append(results, ServerGeo{
-			ServerID: srv.ID,
-			URL:      srv.URL,
+			ServerID: sd.srv.ID,
+			URL:      sd.srv.URL,
 			IPs:      ips,
-			Status:   status,
+			Status:   sd.status,
 		})
 	}
 
