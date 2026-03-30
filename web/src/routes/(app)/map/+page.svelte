@@ -2,6 +2,7 @@
 	import { onMount, onDestroy, tick } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { MapPin, Network, Globe } from 'lucide-svelte';
+	import { statusFilter } from '$lib/stores/filterStore';
 	import 'leaflet/dist/leaflet.css';
 
 	type GeoInfo = {
@@ -35,11 +36,14 @@
 	let mapContainer: HTMLDivElement;
 	let map: any = null;
 	let view: 'map' | 'cluster' = 'map';
-	let statusFilter: 'all' | 'up' | 'down' | 'unknown' = 'all';
 
-	$: filteredServers = statusFilter === 'all'
-		? servers
-		: servers.filter(s => s.status === statusFilter);
+	$: filteredServers = (() => {
+		if ($statusFilter === 'all') return servers;
+		if ($statusFilter === 'online') return servers.filter(s => s.status === 'up');
+		if ($statusFilter === 'issues') return servers.filter(s => s.status === 'down');
+		if ($statusFilter === 'new') return servers.filter(s => s.status === 'unknown');
+		return servers;
+	})();
 
 	// Flatten: group by IP across all servers
 	$: ipGroups = filteredServers.reduce((acc, s) => {
@@ -190,16 +194,16 @@
 		</h1>
 		<div class="header-controls">
 			<div class="view-toggle">
-				<button class:active={statusFilter === 'all'} on:click={() => statusFilter = 'all'}>
+				<button class:active={$statusFilter === 'all'} on:click={() => $statusFilter = 'all'}>
 					All <span class="filter-count">{servers.length}</span>
 				</button>
-				<button class:active={statusFilter === 'up'} on:click={() => statusFilter = 'up'}>
+				<button class:active={$statusFilter === 'online'} on:click={() => $statusFilter = 'online'}>
 					Online <span class="filter-count">{servers.filter(s => s.status === 'up').length}</span>
 				</button>
-				<button class:active={statusFilter === 'down'} on:click={() => statusFilter = 'down'}>
+				<button class:active={$statusFilter === 'issues'} on:click={() => $statusFilter = 'issues'}>
 					Offline <span class="filter-count">{servers.filter(s => s.status === 'down').length}</span>
 				</button>
-				<button class:active={statusFilter === 'unknown'} on:click={() => statusFilter = 'unknown'}>
+				<button class:active={$statusFilter === 'new'} on:click={() => $statusFilter = 'new'}>
 					New <span class="filter-count">{servers.filter(s => s.status === 'unknown').length}</span>
 				</button>
 			</div>

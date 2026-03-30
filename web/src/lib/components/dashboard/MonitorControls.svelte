@@ -4,6 +4,7 @@
 	import ServerDialog from '../ServerDialog.svelte';
 	import CustomSelect from '../ui/CustomSelect.svelte';
 	import { Filter, Download, X, RefreshCw, Plus } from 'lucide-svelte';
+	import { statusFilter } from '$lib/stores/filterStore';
 
 	const dispatch = createEventDispatcher();
 
@@ -11,7 +12,6 @@
 
 	let showDialog = false;
 	let searchQuery = '';
-	let filterStatus = 'all';
 
 	// Handle dialog submission
 	async function handleDialogSubmit(event: CustomEvent) {
@@ -50,6 +50,7 @@
 
 	// Handle filter change
 	function handleFilterChange(event) {
+		$statusFilter = event.detail.value;
 		dispatch('filter', { status: event.detail.value });
 	}
 
@@ -86,7 +87,7 @@
 		<!-- Filter dropdown -->
 		<div class="filter-wrapper">
 			<CustomSelect
-				bind:value={filterStatus}
+				bind:value={$statusFilter}
 				icon={Filter}
 				storageKey="chase-filter-status"
 				options={[

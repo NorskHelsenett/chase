@@ -4,13 +4,12 @@
 	import { page } from '$app/stores';
 import CustomSelect from '$lib/components/ui/CustomSelect.svelte';
 import { servers, serverStoreActions } from '$lib/stores/serverStore';
+import { statusFilter } from '$lib/stores/filterStore';
 import { pingData } from '$lib/stores/pingStore';
 import { writable } from 'svelte/store';
 import Graph from '$lib/components/dashboard/Graph.svelte';
 import { Share2 } from 'lucide-svelte';
 import type { Server, PingResult } from '$lib/models';
-
-let statusFilter = 'all';
 let hasMounted = false;
 let lastActiveFilter: string | null | undefined = undefined;
 let activeFilter: string | null = null;
@@ -182,12 +181,12 @@ function updateGraph() {
 		}
 		return { ...server, ping_results: server.ping_results || [] };
 	});
-		if (statusFilter !== 'all') {
-			if (statusFilter === 'online') {
+		if ($statusFilter !== 'all') {
+			if ($statusFilter === 'online') {
 				serverList = serverList.filter((server: Server) => server.status === 'up');
-			} else if (statusFilter === 'issues' || statusFilter === 'offline') {
+			} else if ($statusFilter === 'issues' || $statusFilter === 'offline') {
 				serverList = serverList.filter((server: Server) => server.status === 'down' || server.status === 'stale');
-			} else if (statusFilter === 'new') {
+			} else if ($statusFilter === 'new') {
 				const thirtyDaysAgo = new Date();
 				thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 				serverList = serverList.filter(
@@ -208,7 +207,7 @@ function updateGraph() {
 		<div class="flex flex-wrap items-center gap-3">
 			<div class="relative flex items-center z-10">
 				<CustomSelect
-					bind:value={statusFilter}
+					bind:value={$statusFilter}
 					storageKey="chase-filter-status"
 					options={[
 						{

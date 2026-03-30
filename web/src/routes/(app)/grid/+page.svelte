@@ -6,9 +6,9 @@
 	import CustomSelect from '$lib/components/ui/CustomSelect.svelte';
 	import { Search, Grid, Filter } from 'lucide-svelte';
 	import { servers, isLoading, serverStoreActions } from '$lib/stores/serverStore';
+	import { statusFilter } from '$lib/stores/filterStore';
 	let filteredServers: Server[] = [];
 	let searchTerm = '';
-	let filterStatus = 'online';
 	let hasMounted = false;
 	let lastActiveFilter: string | null | undefined = undefined;
 	let activeFilter: string | null = null;
@@ -37,14 +37,14 @@
 				);
 			}
 
-			if (filterStatus !== 'all') {
-				if (filterStatus === 'online') {
+			if ($statusFilter !== 'all') {
+				if ($statusFilter === 'online') {
 					result = result.filter((server: Server) => server.status === 'up');
-				} else if (filterStatus === 'issues') {
+				} else if ($statusFilter === 'issues') {
 					result = result.filter(
 						(server: Server) => server.status === 'down' || server.status === 'stale'
 					);
-				} else if (filterStatus === 'new') {
+				} else if ($statusFilter === 'new') {
 					const thirtyDaysAgo = new Date();
 					thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 					result = result.filter((server: Server) => new Date(server.CreatedAt) >= thirtyDaysAgo);
@@ -123,7 +123,7 @@ $: if (hasMounted && activeFilter !== undefined && activeFilter !== lastActiveFi
 
 				<div class="relative flex items-center z-10">
 					<CustomSelect
-						bind:value={filterStatus}
+						bind:value={$statusFilter}
 						icon={Filter}
 						storageKey="chase-filter-status"
 						options={[

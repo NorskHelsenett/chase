@@ -5,13 +5,13 @@
 	import MonitorControls from '$lib/components/dashboard/MonitorControls.svelte';
 	import MonitorTable from '$lib/components/dashboard/MonitorTable.svelte';
 	import { servers, isLoading, serverStoreActions } from '$lib/stores/serverStore';
+	import { statusFilter } from '$lib/stores/filterStore';
 	import type { Server } from '$lib/models';
 	import { exportServersToCSV } from '$lib/utils/csv.js';
 
 	let filteredServers: Server[] = [];
 
 	let searchQuery = '';
-	let statusFilter = 'all';
 	let hasMounted = false;
 	let lastActiveFilter: string | null | undefined = undefined;
 	let activeFilter: string | null = null;
@@ -30,12 +30,12 @@
 			);
 		}
 
-		if (statusFilter !== 'all') {
-			if (statusFilter === 'online') {
+		if ($statusFilter !== 'all') {
+			if ($statusFilter === 'online') {
 				result = result.filter((server) => server.status === 'up');
-			} else if (statusFilter === 'issues') {
+			} else if ($statusFilter === 'issues') {
 				result = result.filter((server) => server.status === 'down' || server.status === 'stale');
-			} else if (statusFilter === 'new') {
+			} else if ($statusFilter === 'new') {
 				const thirtyDaysAgo = new Date();
 				thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 				result = result.filter((server) => new Date(server.CreatedAt) >= thirtyDaysAgo);
@@ -77,12 +77,12 @@
 	}
 
 	function handleFilter(event: CustomEvent) {
-		statusFilter = event.detail.status;
+		$statusFilter = event.detail.status;
 	}
 
 	function handleExport() {
 		const date = new Date().toISOString().split('T')[0];
-		const filterName = statusFilter !== 'all' ? `-${statusFilter}` : '';
+		const filterName = $statusFilter !== 'all' ? `-${$statusFilter}` : '';
 		const searchSuffix = searchQuery ? `-search_${searchQuery}` : '';
 		const filename = `server-data${filterName}${searchSuffix}-${date}.csv`;
 		exportServersToCSV(filteredServers, filename);
