@@ -92,18 +92,22 @@
 </div>
 
 {#if showModal}
-	<dialog open class="modal">
-		<div class="modal-content">
+	<!-- svelte-ignore a11y-click-events-have-key-events -->
+	<!-- svelte-ignore a11y-no-static-element-interactions -->
+	<div class="modal-backdrop" on:click={() => (showModal = false)}>
+		<div class="modal-card" on:click|stopPropagation>
 			<button class="close-btn" on:click={() => (showModal = false)}>
-				<X size={20} />
+				<X size={18} />
 			</button>
-			<div class="modal-body">
-				<h2>Welcome</h2>
-				<p>Sign in with your provider to continue</p>
-				<a href="/api/login" class="login-btn">Login with OAuth</a>
-			</div>
+			<div class="modal-logo">CHASE</div>
+			<h2 class="modal-title">Welcome back</h2>
+			<p class="modal-subtitle">Sign in to monitor your infrastructure</p>
+			<a href="/api/login" class="login-btn">
+				<LogIn size={16} />
+				Continue with OAuth
+			</a>
 		</div>
-	</dialog>
+	</div>
 {/if}
 
 <style>
@@ -194,74 +198,92 @@
 		text-align: center;
 	}
 
-	.modal {
+	.modal-backdrop {
 		position: fixed;
 		inset: 0;
 		display: flex;
 		justify-content: center;
 		align-items: center;
-		border: none;
-		background: #1e1e1e;
+		background: rgba(0, 0, 0, 0.6);
+		backdrop-filter: blur(4px);
 		z-index: 100;
 	}
 
-	.modal-content {
+	.modal-card {
 		position: relative;
 		display: flex;
+		flex-direction: column;
 		align-items: center;
-		justify-content: center;
-		min-height: 100vh;
+		gap: 0.5rem;
+		width: 320px;
+		padding: 2.5rem 2rem 2rem;
+		background: #1a1a1a;
+		border: 1px solid #2b2b2b;
+		border-radius: 0.75rem;
+		box-shadow: 0 24px 48px rgba(0, 0, 0, 0.4);
 	}
 
 	.close-btn {
 		position: absolute;
-		top: 0.625rem;
-		right: 1.875rem;
+		top: 0.75rem;
+		right: 0.75rem;
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		background: transparent;
+		width: 28px;
+		height: 28px;
+		background: none;
 		border: none;
-		color: #fff;
-		cursor: pointer;
-	}
-
-	.modal-body {
-		display: flex;
-		flex-direction: column;
-		gap: 0.5rem;
-		padding: 1.5rem 2rem 2rem;
-		border-radius: 0.5rem;
-		color: #d1d5db;
-	}
-
-	.modal-body h2 {
-		font-size: 1.125rem;
-		font-weight: 600;
-		text-align: center;
-		margin-bottom: -0.625rem;
-	}
-
-	.modal-body p {
-		font-size: 0.875rem;
+		border-radius: 0.25rem;
 		color: #6b7280;
-		text-align: center;
-		margin-bottom: 1rem;
+		cursor: pointer;
+		transition: color 0.15s, background 0.15s;
+	}
+
+	.close-btn:hover {
+		color: #e5e7eb;
+		background: #2b2b2b;
+	}
+
+	.modal-logo {
+		font-size: 0.8125rem;
+		font-weight: 700;
+		letter-spacing: 0.08em;
+		color: #4ade80;
+		margin-bottom: 0.5rem;
+	}
+
+	.modal-title {
+		font-size: 1.25rem;
+		font-weight: 600;
+		color: #e5e7eb;
+		margin: 0;
+	}
+
+	.modal-subtitle {
+		font-size: 0.8125rem;
+		color: #6b7280;
+		margin: 0 0 1rem;
 	}
 
 	.login-btn {
-		display: block;
-		padding: 0.5rem 1rem;
-		background: #6b7280;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		gap: 0.5rem;
+		width: 100%;
+		padding: 0.625rem 1rem;
+		background: #166534;
 		border-radius: 0.375rem;
-		color: #fff;
-		font-weight: 700;
+		color: #e5e7eb;
+		font-size: 0.875rem;
+		font-weight: 600;
 		text-align: center;
 		text-decoration: none;
-		transition: background-color 0.15s ease;
+		transition: background 0.15s;
 	}
 
 	.login-btn:hover {
-		background: #9ca3af;
+		background: #15803d;
 	}
 </style>
