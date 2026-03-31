@@ -18,19 +18,20 @@
 		as: string;
 	};
 
-	type IPInfo = {
-		ip: string;
-		geo?: GeoInfo;
-	};
-
 	type ServerGeo = {
 		server_id: number;
 		url: string;
-		ips: IPInfo[];
+		ips: string[];
 		status: string;
 	};
 
+	type ServerGeoResponse = {
+		servers: ServerGeo[];
+		geo: Record<string, GeoInfo>;
+	};
+
 	let servers: ServerGeo[] = [];
+	let geoMap: Record<string, GeoInfo> = {};
 	let loading = true;
 	let error: string | null = null;
 	let mapContainer: HTMLDivElement;
@@ -47,9 +48,9 @@
 
 	// Flatten: group by IP across all servers
 	$: ipGroups = filteredServers.reduce((acc, s) => {
-		for (const ipInfo of (s.ips || [])) {
-			if (!acc[ipInfo.ip]) acc[ipInfo.ip] = { ip: ipInfo.ip, geo: ipInfo.geo, servers: [] };
-			acc[ipInfo.ip].servers.push(s);
+		for (const ip of (s.ips || [])) {
+			if (!acc[ip]) acc[ip] = { ip, geo: geoMap[ip], servers: [] };
+			acc[ip].servers.push(s);
 		}
 		return acc;
 	}, {} as Record<string, { ip: string; geo?: GeoInfo; servers: ServerGeo[] }>);
@@ -63,6 +64,7 @@
 	}, {} as Record<string, { lat: number; lon: number; city: string; country: string; country_code: string; ips: typeof ipGroups[string][] }>);
 
 	let L: any = null;
+	let markersLayer: any = null;
 
 	onMount(async () => {
 		try {
@@ -71,7 +73,9 @@
 				import('leaflet')
 			]);
 			if (!resp.ok) throw new Error('Failed to fetch geo data');
-			servers = await resp.json();
+			const data: ServerGeoResponse = await resp.json();
+			servers = data.servers;
+			geoMap = data.geo;
 			L = leaflet.default || leaflet;
 		} catch (e) {
 			error = e instanceof Error ? e.message : 'Failed to load';
@@ -80,18 +84,25 @@
 		}
 	});
 
-	$: if (!loading && L && filteredServers && view === 'map' && mapContainer) {
+	// Initialize the map once when ready
+	$: if (!loading && L && view === 'map' && mapContainer && !map) {
 		tick().then(() => buildMap(L));
+	}
+
+	// Rebuild markers when filtered servers change
+	$: if (map && L && filteredServers) {
+		buildMap(L);
 	}
 
 	// Reset map when switching to clusters
 	$: if (view === 'cluster' && map) {
 		map.remove();
 		map = null;
+		markersLayer = null;
 	}
 
 	onDestroy(() => {
-		if (map) { map.remove(); map = null; }
+		if (map) { map.remove(); map = null; markersLayer = null; }
 	});
 
 	function getFlagEmoji(cc: string): string {

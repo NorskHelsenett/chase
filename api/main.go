@@ -17,6 +17,7 @@ import (
 	"github.com/norskhelsenett/chase/utils"
 	"github.com/norskhelsenett/chase/webpush"
 
+	"github.com/gin-contrib/gzip"
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
 	"gorm.io/gorm"
@@ -172,6 +173,7 @@ func main() {
 
 	r := gin.Default()
 	r.Use(gin.Recovery())
+	r.Use(gzip.Gzip(gzip.DefaultCompression))
 	r.Use(securityHeaders())
 
 	r.GET("/livez", handlers.LivenessProbe)

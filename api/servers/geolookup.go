@@ -44,16 +44,16 @@ type GeoCache struct {
 	AS          string  `json:"as"`
 }
 
-type IPInfo struct {
-	IP  string     `json:"ip"`
-	Geo *GeoResult `json:"geo,omitempty"`
-}
-
 type ServerGeo struct {
 	ServerID uint     `json:"server_id"`
 	URL      string   `json:"url"`
-	IPs      []IPInfo `json:"ips"`
+	IPs      []string `json:"ips"`
 	Status   string   `json:"status"`
+}
+
+type ServerGeoResponse struct {
+	Servers []ServerGeo          `json:"servers"`
+	Geo     map[string]GeoResult `json:"geo"`
 }
 
 var (
@@ -324,40 +324,66 @@ func lookupCustom(ip, baseURL string) (*GeoResult, error) {
 	return &result, nil
 }
 
-// GetServersGeo returns all active servers with their IP and geolocation data
+// GetServersGeo returns all active servers with their IP and geolocation data.
+// Response is deduplicated: servers reference IPs by string, geo data is a separate map.
 func GetServersGeo(c *gin.Context) {
 	db := database.GetDB()
 
-	var servers []Server
-	if err := db.Where("active = ?", true).Find(&servers).Error; err != nil {
+	var srvs []Server
+	if err := db.Where("active = ?", true).Find(&srvs).Error; err != nil {
 		c.JSON(500, gin.H{"error": "Failed to fetch servers"})
 		return
 	}
 
-	// Phase 1: Collect all unique public IPs across all servers (and per-server data)
+	if len(srvs) == 0 {
+		c.JSON(200, ServerGeoResponse{Servers: []ServerGeo{}, Geo: map[string]GeoResult{}})
+		return
+	}
+
+	// Build server ID list and lookup maps
+	serverIDs := make([]uint, len(srvs))
+	serverMap := make(map[uint]*Server, len(srvs))
+	for i := range srvs {
+		serverIDs[i] = srvs[i].ID
+		serverMap[srvs[i].ID] = &srvs[i]
+	}
+
+	// Phase 1: Batch-fetch latest ping per server (for status + IP from detail)
+	// Uses a subquery to get the max ping ID per server, then loads those rows with details.
+	var latestPings []PingResult
+	db.Where("id IN (?)",
+		db.Model(&PingResult{}).
+			Select("MAX(id)").
+			Where("server_id IN ?", serverIDs).
+			Group("server_id"),
+	).Preload("PingDetail").Find(&latestPings)
+
+	// Index pings by server ID
+	pingByServer := make(map[uint]*PingResult, len(latestPings))
+	for i := range latestPings {
+		pingByServer[latestPings[i].ServerID] = &latestPings[i]
+	}
+
+	// Phase 2: Collect IPs per server (from ping detail + DNS) and determine status
 	type serverData struct {
-		srv    Server
-		ipSet  map[string]bool
+		srv    *Server
+		ips    []string
 		status string
 	}
-	allData := make([]serverData, 0, len(servers))
-	allIPs := make(map[string]bool) // global dedup for geo lookups
+	allData := make([]serverData, 0, len(srvs))
+	allIPs := make(map[string]bool)
 
-	for _, srv := range servers {
+	for _, srv := range srvs {
 		ipSet := make(map[string]bool)
 
 		// IP from latest ping detail
-		var ping PingResult
-		if err := db.Where("server_id = ? AND detail_id IS NOT NULL", srv.ID).
-			Preload("PingDetail").
-			Order("timestamp DESC").
-			First(&ping).Error; err == nil && ping.PingDetail != nil && ping.PingDetail.IP != "" {
+		if ping, ok := pingByServer[srv.ID]; ok && ping.PingDetail != nil && ping.PingDetail.IP != "" {
 			if !isPrivateIP(ping.PingDetail.IP) {
 				ipSet[ping.PingDetail.IP] = true
 			}
 		}
 
-		// All IPs from DNS resolution
+		// DNS resolution
 		host := strings.TrimPrefix(strings.TrimPrefix(srv.URL, "https://"), "http://")
 		if idx := strings.Index(host, "/"); idx != -1 {
 			host = host[:idx]
@@ -374,33 +400,32 @@ func GetServersGeo(c *gin.Context) {
 			continue
 		}
 
+		ips := make([]string, 0, len(ipSet))
 		for ip := range ipSet {
 			allIPs[ip] = true
+			ips = append(ips, ip)
 		}
 
 		// Determine status from latest ping
 		status := "unknown"
-		var latestPing PingResult
-		if err := db.Where("server_id = ?", srv.ID).
-			Order("timestamp DESC").
-			First(&latestPing).Error; err == nil {
-			if latestPing.Error != "" {
+		if ping, ok := pingByServer[srv.ID]; ok {
+			if ping.Error != "" {
 				status = "down"
-			} else if latestPing.StatusCode == srv.ExpectedStatusCode {
+			} else if ping.StatusCode == srv.ExpectedStatusCode {
 				status = "up"
 			} else {
 				status = "down"
 			}
 		}
 
-		allData = append(allData, serverData{srv: srv, ipSet: ipSet, status: status})
+		allData = append(allData, serverData{srv: &srv, ips: ips, status: status})
 	}
 
-	// Phase 2: Geo-lookup all unique IPs in parallel
+	// Phase 3: Geo-lookup all unique IPs in parallel
 	geoResults := make(map[string]*GeoResult)
 	var geoMu sync.Mutex
 	var wg sync.WaitGroup
-	sem := make(chan struct{}, 10) // limit concurrency to 10
+	sem := make(chan struct{}, 10)
 
 	for ip := range allIPs {
 		wg.Add(1)
@@ -420,25 +445,21 @@ func GetServersGeo(c *gin.Context) {
 	}
 	wg.Wait()
 
-	// Phase 3: Assemble results
-	results := make([]ServerGeo, 0, len(allData))
+	// Phase 4: Assemble deduplicated response
+	servers := make([]ServerGeo, 0, len(allData))
 	for _, sd := range allData {
-		ips := make([]IPInfo, 0, len(sd.ipSet))
-		for ip := range sd.ipSet {
-			info := IPInfo{IP: ip}
-			if geo, ok := geoResults[ip]; ok {
-				info.Geo = geo
-			}
-			ips = append(ips, info)
-		}
-
-		results = append(results, ServerGeo{
+		servers = append(servers, ServerGeo{
 			ServerID: sd.srv.ID,
 			URL:      sd.srv.URL,
-			IPs:      ips,
+			IPs:      sd.ips,
 			Status:   sd.status,
 		})
 	}
 
-	c.JSON(200, results)
+	geo := make(map[string]GeoResult, len(geoResults))
+	for ip, g := range geoResults {
+		geo[ip] = *g
+	}
+
+	c.JSON(200, ServerGeoResponse{Servers: servers, Geo: geo})
 }
