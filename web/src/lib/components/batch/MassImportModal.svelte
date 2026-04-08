@@ -1,26 +1,31 @@
 <!-- MassImportModal.svelte -->
 <script lang="ts">
-	import { createEventDispatcher } from 'svelte';
+	import { preventDefault } from 'svelte/legacy';
+
 	import CustomCheckbox from '../ui/CustomCheckbox.svelte';
 	import IntervalSlider from '../ui/IntervalSlider.svelte';
 	import ToggleButton from '../ui/ToggleButton.svelte';
 
-	const dispatch = createEventDispatcher();
+	interface Props {
+		showModal?: boolean;
+		isLoading?: boolean;
+		onimported?: (detail: { count: number; successful: number; failed: number; failedImports: any[] }) => void;
+		onclose?: () => void;
+	}
 
-	export let showModal = false;
-	export let isLoading = false;
+	let { showModal = $bindable(false), isLoading = $bindable(false), onimported, onclose }: Props = $props();
 
 	// Track failed imports
-	let showFailedModal = false;
-	let failedImports: { url: string; reason: string }[] = [];
+	let showFailedModal = $state(false);
+	let failedImports: { url: string; reason: string }[] = $state([]);
 
 	// Default settings
-	let intervalValue = 15; // Default check interval (15 min)
-	let followRedirect = true;
-	let allowInsecure = false;
-	let isActive = true; // Default active status
-	let updateExisting = false; // Default to not update existing servers
-	let sites = '';
+	let intervalValue = $state(15); // Default check interval (15 min)
+	let followRedirect = $state(true);
+	let allowInsecure = $state(false);
+	let isActive = $state(true); // Default active status
+	let updateExisting = $state(false); // Default to not update existing servers
+	let sites = $state('');
 	const placeholderText = `https://example.com
 https://example.org
 https://another-site.com`;
@@ -136,7 +141,7 @@ https://another-site.com`;
 			}
 
 			// Close modal and notify parent
-			dispatch('imported', {
+			onimported?.({
 				count: sitesList.length,
 				successful: result.imported || 0,
 				failed: result.failed || 0,
@@ -158,7 +163,7 @@ https://another-site.com`;
 			// Just close the modal without resetting failed imports
 			showModal = false;
 		}
-		dispatch('close');
+		onclose?.();
 	}
 
 	export function resetForm() {
@@ -241,7 +246,7 @@ https://another-site.com`;
 				</h2>
 			</div>
 
-			<form on:submit|preventDefault={handleSubmit} class="space-y-6">
+			<form onsubmit={preventDefault(handleSubmit)} class="space-y-6">
 				<!-- Sites textarea -->
 				<div class="">
 					<label class="block text-gray-300 mb-2 font-medium" for="sites">
@@ -294,13 +299,13 @@ https://another-site.com`;
 							<h4 class="text-sm text-gray-300 font-medium mb-3">Options</h4>
 							<CustomCheckbox
 								checked={followRedirect}
-								on:change={(e) => (followRedirect = e.detail)}
-								label="Follow Redirects"
-							/>
+							onchange={(value) => (followRedirect = value)}
+							label="Follow Redirects"
+						/>
 
-							<CustomCheckbox
-								checked={allowInsecure}
-								on:change={(e) => (allowInsecure = e.detail)}
+						<CustomCheckbox
+							checked={allowInsecure}
+							onchange={(value) => (allowInsecure = value)}
 								label="Allow Insecure"
 							/>
 						</div>
@@ -311,7 +316,7 @@ https://another-site.com`;
 							<div class="mt-2 flex-grow flex items-center">
 								<ToggleButton
 									bind:value={isActive}
-									on:change={(e) => (isActive = e.detail)}
+								onchange={(value) => (isActive = value)}
 									width="w-36"
 									disabled={isLoading}
 								/>
@@ -324,7 +329,7 @@ https://another-site.com`;
 							<div class="flex-grow">
 								<IntervalSlider
 									value={intervalValue}
-									on:change={(e) => (intervalValue = e.detail)}
+								onchange={(value) => (intervalValue = value)}
 									label="Check Interval"
 								/>
 							</div>
@@ -333,7 +338,7 @@ https://another-site.com`;
 					<div class="mt-4 ml-4">
 						<CustomCheckbox
 							checked={updateExisting}
-							on:change={(e) => (updateExisting = e.detail)}
+							onchange={(value) => (updateExisting = value)}
 							label="Update Existing Servers"
 						/>
 						{#if updateExisting}
@@ -348,7 +353,7 @@ https://another-site.com`;
 				<div class="border-gray-700 pt-5 mt-6 flex justify-end gap-4">
 					<button
 						type="button"
-						on:click={handleClose}
+						onclick={handleClose}
 						disabled={isLoading}
 						class="px-5 py-2.5 bg-[#2b2b2b] hover:bg-[#333] rounded-lg text-gray-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-medium"
 					>
@@ -428,7 +433,7 @@ https://another-site.com`;
 					Failed Imports ({failedImports.length})
 				</h2>
 				<button
-					on:click={closeFailedModal}
+					onclick={closeFailedModal}
 					class="p-2 hover:bg-[#333] rounded-lg transition-colors"
 				>
 					<svg
@@ -469,7 +474,7 @@ https://another-site.com`;
 
 			<div class="mt-5 border-gray-700 pt-5 flex justify-end gap-4">
 				<button
-					on:click={retryFailedImports}
+					onclick={retryFailedImports}
 					class="px-5 py-2.5 bg-[#2b2b2b] hover:bg-[#333] rounded-lg text-green-400 flex items-center gap-2 transition-colors font-medium"
 				>
 					<svg
@@ -490,7 +495,7 @@ https://another-site.com`;
 					Retry All
 				</button>
 				<button
-					on:click={closeFailedModal}
+					onclick={closeFailedModal}
 					class="px-5 py-2.5 bg-[#2b2b2b] hover:bg-[#333] rounded-lg text-gray-200 transition-colors font-medium"
 				>
 					Close

@@ -1,4 +1,6 @@
 <script>
+	import { run } from 'svelte/legacy';
+
 	import {
 		Clock,
 		Globe,
@@ -34,29 +36,35 @@
 	import { searchHistory } from '$lib/stores/searchStore';
 	import { getRelativeTime } from '$lib/utils/time';
 
-	/** @type {import('./$types').PageData} */
-	export let data;
+	
+	/**
+	 * @typedef {Object} Props
+	 * @property {import('./$types').PageData} data
+	 */
 
-	let loading = true;
-	let results = null;
+	/** @type {Props} */
+	let { data } = $props();
+
+	let loading = $state(true);
+	let results = $state(null);
 	let searchTimestamp = Date.now();
 	let relativeTime = 'now';
 	let timeInterval;
-	let screenshotLoaded = false;
-	let expandedSections = {
+	let screenshotLoaded = $state(false);
+	let expandedSections = $state({
 		securityTxt: false,
 		robotsTxt: false,
 		healthProbes: false
-	};
+	});
 
 	// SSE progress state
-	let scanProgress = 0;
-	let currentStage = 'connecting';
-	let scanError = null;
+	let scanProgress = $state(0);
+	let currentStage = $state('connecting');
+	let scanError = $state(null);
 	let eventSource = null;
 	let scanComplete = false; // Track if scan completed successfully
-	let loadingScreenshotLoaded = false; // Track screenshot loading during scan
-	let loadingScreenshotError = false;
+	let loadingScreenshotLoaded = $state(false); // Track screenshot loading during scan
+	let loadingScreenshotError = $state(false);
 
 	// Stage definitions for progress display
 	// Backend sends progress 10-90% spread across ~12 tasks, then 100 at finalizing
@@ -75,7 +83,7 @@
 	];
 
 	// Reactive: compute current UI stage based on progress and backend stage
-	$: currentUIStage = (() => {
+	let currentUIStage = $derived((() => {
 		// Special cases for explicit stages from backend
 		if (currentStage === 'connecting') return 'connecting';
 		if (currentStage === 'finalizing' || currentStage === 'cached') return 'finalizing';
@@ -87,10 +95,10 @@
 			}
 		}
 		return 'connecting';
-	})();
+	})());
 
 	// Reactive: compute stage statuses based on currentUIStage and scanProgress
-	$: stageStatuses = scanStages.map((stage) => {
+	let stageStatuses = $derived(scanStages.map((stage) => {
 		const stageIndex = scanStages.findIndex((s) => s.id === stage.id);
 		const currentIndex = scanStages.findIndex((s) => s.id === currentUIStage);
 		return {
@@ -99,7 +107,7 @@
 			isActive: stage.id === currentUIStage,
 			isPending: stageIndex > currentIndex
 		};
-	});
+	}));
 
 	function updateRelativeTime() {
 		relativeTime = getRelativeTime(searchTimestamp);
@@ -236,9 +244,11 @@
 		}
 	}
 
-	$: if (data.query) {
-		fetchSearchResults(data.query);
-	}
+	run(() => {
+		if (data.query) {
+			fetchSearchResults(data.query);
+		}
+	});
 
 	// Calculate combined grade
 	function calculateOverallGrade(results) {
@@ -314,15 +324,15 @@
 		return count;
 	}
 
-	$: overallGrade = calculateOverallGrade(results);
-	$: certDaysLeft = results?.certificate?.validUntil
+	let overallGrade = $derived(calculateOverallGrade(results));
+	let certDaysLeft = $derived(results?.certificate?.validUntil
 		? getDaysUntil(results.certificate.validUntil)
-		: null;
-	$: issueCount = getIssueCount(results);
-	$: passedCount = getPassedCount(results);
-	$: securityTxtDaysLeft = results?.securityTxt?.expiration
+		: null);
+	let issueCount = $derived(getIssueCount(results));
+	let passedCount = $derived(getPassedCount(results));
+	let securityTxtDaysLeft = $derived(results?.securityTxt?.expiration
 		? getDaysUntil(results.securityTxt.expiration)
-		: null;
+		: null);
 
 	function getHealthProbeStatus(probes) {
 		if (!probes?.paths) return { total: 0, found: 0 };
@@ -385,7 +395,7 @@
 		return allIssues;
 	}
 
-	$: sortedIssues = getAllIssuesSorted(results);
+	let sortedIssues = $derived(getAllIssuesSorted(results));
 </script>
 
 <div class="page">
@@ -412,8 +422,8 @@
 						alt="Website preview for {data.query}"
 						class="loading-screenshot"
 						class:loaded={loadingScreenshotLoaded}
-						on:load={() => (loadingScreenshotLoaded = true)}
-						on:error={() => (loadingScreenshotError = true)}
+						onload={() => (loadingScreenshotLoaded = true)}
+						onerror={() => (loadingScreenshotError = true)}
 					/>
 				</div>
 
@@ -496,7 +506,7 @@
 				<AlertTriangle size={48} />
 				<h2>Scan Failed</h2>
 				<p>{scanError}</p>
-				<button class="retry-button" on:click={() => fetchSearchResults(data.query)}>
+				<button class="retry-button" onclick={() => fetchSearchResults(data.query)}>
 					Try Again
 				</button>
 			</div>
@@ -516,8 +526,8 @@
 					alt="Website preview for {data.query}"
 					class="screenshot"
 					class:loaded={screenshotLoaded}
-					on:load={() => (screenshotLoaded = true)}
-					on:error={() => (screenshotLoaded = true)}
+					onload={() => (screenshotLoaded = true)}
+					onerror={() => (screenshotLoaded = true)}
 				/>
 				<div class="screenshot-overlay">
 					<a
@@ -775,7 +785,7 @@
 		<div class="detail-sections" in:fade={{ duration: 300, delay: 250 }}>
 			<!-- Security.txt Details -->
 			<div class="detail-card">
-				<button class="detail-header" on:click={() => toggleSection('securityTxt')}>
+				<button class="detail-header" onclick={() => toggleSection('securityTxt')}>
 					<div class="detail-title">
 						<Shield size={18} />
 						<span>security.txt</span>
@@ -886,7 +896,7 @@
 
 			<!-- robots.txt Details -->
 			<div class="detail-card">
-				<button class="detail-header" on:click={() => toggleSection('robotsTxt')}>
+				<button class="detail-header" onclick={() => toggleSection('robotsTxt')}>
 					<div class="detail-title">
 						<FileText size={18} />
 						<span>robots.txt</span>
@@ -931,7 +941,7 @@
 
 			<!-- Health Probes Details -->
 			<div class="detail-card">
-				<button class="detail-header" on:click={() => toggleSection('healthProbes')}>
+				<button class="detail-header" onclick={() => toggleSection('healthProbes')}>
 					<div class="detail-title">
 						<Heart size={18} />
 						<span>Health Endpoints</span>

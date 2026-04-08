@@ -1,4 +1,6 @@
 <script lang="ts">
+	import { stopPropagation, self } from 'svelte/legacy';
+
 	import { onMount, onDestroy } from 'svelte';
 
 	interface StartBatchResponse {
@@ -28,12 +30,12 @@
 		total: number;
 	}
 
-	let activeJobs: BatchJob[] = [];
-	let completedJobs: BatchJob[] = [];
+	let activeJobs: BatchJob[] = $state([]);
+	let completedJobs: BatchJob[] = $state([]);
 	let pollingIntervals: { [key: string]: number } = {};
-	let isLoading = false;
-	let showErrorModal = false;
-	let selectedError: string[] = [];
+	let isLoading = $state(false);
+	let showErrorModal = $state(false);
+	let selectedError: string[] = $state([]);
 
 	function showError(errors: string | string[]) {
 		selectedError = Array.isArray(errors) ? errors : [errors];
@@ -177,7 +179,7 @@
 				<h2 class="text-xl text-gray-200 font-semibold">Batch Operations</h2>
 
 				<button
-					on:click={startBatch}
+					onclick={startBatch}
 					disabled={isLoading}
 					class="px-4 py-2 bg-green-600 hover:bg-green-700 rounded-lg text-white flex items-center gap-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
 				>
@@ -199,12 +201,12 @@
 				<div class="bg-[#202020] rounded-lg p-4 space-y-3">
 					<div class="flex justify-between items-center">
 						<div class="flex items-center gap-2">
-							<div class="w-2 h-2 bg-blue-500 rounded-full animate-pulse" />
+							<div class="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></div>
 							<span class="font-medium text-gray-200">Batch {job.id}</span>
 						</div>
 
 						<button
-							on:click={() => cancelBatch(job.id)}
+							onclick={() => cancelBatch(job.id)}
 							class="px-4 py-2 bg-red-600 hover:bg-red-700 rounded-lg text-white flex items-center gap-2 transition-colors"
 						>
 							<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -230,7 +232,7 @@
 								<div
 									class="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent animate-shimmer"
 									style="background-size: 200% 100%;"
-								/>
+								></div>
 							</div>
 						</div>
 
@@ -238,12 +240,12 @@
 							<div class="flex items-center gap-4">
 								<span>{job.completed} / {job.total} completed</span>
 								{#if job.failed > 0}
-									<!-- svelte-ignore a11y-click-events-have-key-events -->
-									<!-- svelte-ignore a11y-no-static-element-interactions -->
+									<!-- svelte-ignore a11y_click_events_have_key_events -->
+									<!-- svelte-ignore a11y_no_static_element_interactions -->
 									<span
 										class="text-red-400 flex items-center gap-1 cursor-pointer hover:text-red-300 transition-colors"
-										on:click|stopPropagation={() =>
-											showError(job.errors?.length ? job.errors : ['No error details available'])}
+										onclick={stopPropagation(() =>
+											showError(job.errors?.length ? job.errors : ['No error details available']))}
 									>
 										<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 											<path
@@ -322,19 +324,19 @@
 								class:bg-green-500={job.status === 'completed'}
 								class:bg-red-500={job.status === 'failed'}
 								style="width: 100%"
-							/>
+							></div>
 						</div>
 
 						<div class="flex justify-between text-sm text-gray-400">
 							<div class="flex items-center gap-4">
 								<span>{job.completed} / {job.total} completed</span>
 								{#if job.failed > 0}
-									<!-- svelte-ignore a11y-click-events-have-key-events -->
-									<!-- svelte-ignore a11y-no-static-element-interactions -->
+									<!-- svelte-ignore a11y_click_events_have_key_events -->
+									<!-- svelte-ignore a11y_no_static_element_interactions -->
 									<span
 										class="text-red-400 flex items-center gap-1 cursor-pointer hover:text-red-300 transition-colors"
-										on:click|stopPropagation={() =>
-											showError(job.errors || 'No error details available')}
+										onclick={stopPropagation(() =>
+											showError(job.errors || 'No error details available'))}
 									>
 										<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 											<path
@@ -362,11 +364,11 @@
 	</div>
 
 	<!-- Info button in bottom right -->
-	<!-- svelte-ignore a11y-click-events-have-key-events -->
-	<!-- svelte-ignore a11y-no-static-element-interactions -->
+	<!-- svelte-ignore a11y_click_events_have_key_events -->
+	<!-- svelte-ignore a11y_no_static_element_interactions -->
 	<div
 		class="fixed bottom-4 right-4 p-2 bg-[#202020] rounded-full shadow-lg cursor-pointer hover:bg-[#2b2b2b] transition-colors"
-		on:click={() =>
+		onclick={() =>
 			showError(
 				completedJobs
 					.filter((job) => job.errors && job.errors.length > 0)
@@ -386,9 +388,9 @@
 
 <!-- Error Modal -->
 {#if showErrorModal}
-	<!-- svelte-ignore a11y-click-events-have-key-events -->
-	<!-- svelte-ignore a11y-no-static-element-interactions -->
-	<div class="fixed inset-0 z-50 flex items-center justify-center" on:click|self={closeErrorModal}>
+	<!-- svelte-ignore a11y_click_events_have_key_events -->
+	<!-- svelte-ignore a11y_no_static_element_interactions -->
+	<div class="fixed inset-0 z-50 flex items-center justify-center" onclick={self(closeErrorModal)}>
 		<!-- Backdrop -->
 		<div class="absolute inset-0 bg-black/70"></div>
 
@@ -401,7 +403,7 @@
 			<!-- Header -->
 			<div class="flex justify-between items-center p-4">
 				<h2 class="text-xl font-semibold">Error Details</h2>
-				<button on:click={closeErrorModal} class="p-2 hover:bg-[#333] rounded-lg transition-colors">
+				<button onclick={closeErrorModal} class="p-2 hover:bg-[#333] rounded-lg transition-colors">
 					<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 						<path
 							stroke-linecap="round"
@@ -426,7 +428,7 @@
 			<!-- Footer -->
 			<div class="flex justify-end p-4 border-t border-[#2b2b2b]">
 				<button
-					on:click={closeErrorModal}
+					onclick={closeErrorModal}
 					class="px-4 py-2 bg-[#2b2b2b] hover:bg-[#333] rounded-lg transition-colors"
 				>
 					Close

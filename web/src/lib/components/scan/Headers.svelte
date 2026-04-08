@@ -3,10 +3,16 @@
 	import { fade, slide } from 'svelte/transition';
 	import ChecksGrid from './ChecksGrid.svelte';
 
-	export let loading = false;
-	export let results = {};
+	/**
+	 * @typedef {Object} Props
+	 * @property {boolean} [loading]
+	 * @property {any} [results]
+	 */
 
-	let expandedIssue = null;
+	/** @type {Props} */
+	let { loading = false, results = {} } = $props();
+
+	let expandedIssue = $state(null);
 
 	function getRiskClass(risk) {
 		switch (risk) {
@@ -74,7 +80,7 @@
 						<div class="issue-card">
 							<button
 								class="issue-header"
-								on:click={() => (expandedIssue = expandedIssue === index ? null : index)}
+								onclick={() => (expandedIssue = expandedIssue === index ? null : index)}
 							>
 								<ShieldAlert size={20} class="issue-icon {getRiskClass(issue.risk)}" />
 								<div class="issue-content">

@@ -1,17 +1,17 @@
 <script>
 	import { CheckCircle } from 'lucide-svelte';
 
-	export let checks = [];
+	let { checks = [] } = $props();
 
 	// Normalize checks - handle string arrays, and objects with "name" or "path"
-	$: passedChecks = (checks || [])
+	let passedChecks = $derived((checks || [])
 		.map((check) => {
 			if (typeof check === 'string') {
 				return { name: check, passed: true };
 			}
 			return { ...check, name: check.name || check.path };
 		})
-		.filter((check) => check.passed);
+		.filter((check) => check.passed));
 </script>
 
 {#if passedChecks.length > 0}

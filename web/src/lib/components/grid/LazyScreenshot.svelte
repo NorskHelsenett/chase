@@ -1,8 +1,10 @@
 <script>
+	import { run } from 'svelte/legacy';
+
 	import { onMount } from 'svelte';
 
-	let imageErrors = {};
-	let imageLoaded = {};
+	let imageErrors = $state({});
+	let imageLoaded = $state({});
 
 	function checkImage(url) {
 		const img = new Image();
@@ -74,13 +76,12 @@
 		};
 	}
 
-	export let site;
-	export let getScreenshotUrl;
+	let { site, getScreenshotUrl } = $props();
 
-	let prevImageUrl = '';
-	let imageUrl;
+	let prevImageUrl = $state('');
+	let imageUrl = $state();
 
-	$: {
+	run(() => {
 		imageUrl = getScreenshotUrl(site.url);
 		// Reset states when URL changes
 		if (imageUrl !== prevImageUrl) {
@@ -88,7 +89,7 @@
 			delete imageErrors[prevImageUrl];
 			prevImageUrl = imageUrl;
 		}
-	}
+	});
 </script>
 
 <!-- Container that triggers lazy load -->

@@ -1,5 +1,7 @@
 
 <script lang="ts">
+	import { run } from 'svelte/legacy';
+
 	import { onMount } from 'svelte';
 	import { page } from '$app/stores';
 import CustomSelect from '$lib/components/ui/CustomSelect.svelte';
@@ -11,9 +13,9 @@ import { writable } from 'svelte/store';
 import Graph from '$lib/components/dashboard/Graph.svelte';
 import { Share2 } from 'lucide-svelte';
 import type { Server, PingResult } from '$lib/models';
-let hasMounted = false;
-let lastActiveFilter: string | null | undefined = undefined;
-let activeFilter: string | null = null;
+let hasMounted = $state(false);
+let lastActiveFilter: string | null | undefined = $state(undefined);
+let activeFilter: string | null = $state(null);
 
 	const graphData = writable<{ nodes: GraphNode[]; edges: GraphEdge[] }>({ nodes: [], edges: [] });
 	const isLoading = writable(true);
@@ -148,7 +150,9 @@ function buildGraphData(serverList: Server[]) {
 		return { nodes, edges };
 	}
 
-	$: activeFilter = $page.url.searchParams.get('active') ?? 'true';
+	run(() => {
+		activeFilter = $page.url.searchParams.get('active') ?? 'true';
+	});
 
 	onMount(() => {
 		hasMounted = true;
@@ -164,10 +168,12 @@ async function loadGraphData(force = false) {
 	}
 }
 
-	$: if (hasMounted && activeFilter !== lastActiveFilter) {
-		lastActiveFilter = activeFilter;
-		loadGraphData();
-	}
+	run(() => {
+		if (hasMounted && activeFilter !== lastActiveFilter) {
+			lastActiveFilter = activeFilter;
+			loadGraphData();
+		}
+	});
 
 function updateGraph() {
 	let serverList: Server[] = ($servers || []).map((server) => {
@@ -233,7 +239,7 @@ function updateGraph() {
 							icon: '<div class="flex items-center"><span class="w-2 h-2 bg-gray-400 rounded-full mr-2"></span><span class="text-gray-300">New</span></div>'
 						}
 					]}
-					on:change={() => { updateGraph(); }}
+					onchange={() => { updateGraph(); }}
 				/>
 			</div>
 		</div>

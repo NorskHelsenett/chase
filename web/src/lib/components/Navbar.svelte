@@ -1,4 +1,7 @@
 <script>
+	import { createBubbler, stopPropagation } from 'svelte/legacy';
+
+	const bubble = createBubbler();
 	import { onMount } from 'svelte';
 	import { Home, LogIn, Logs, Grid, Share2, Globe, X } from 'lucide-svelte';
 	import Avatar from './Avatar.svelte';
@@ -15,7 +18,7 @@
 		{ path: '/map', icon: Globe, label: 'Map', auth: true }
 	];
 
-	let showModal = false;
+	let showModal = $state(false);
 
 	function handleLogin() {
 		showModal = true;
@@ -39,8 +42,8 @@
 	});
 
 	// Track current path reactively
-	$: currentPath = $page.url.pathname;
-	$: currentFull = $page.url.pathname + $page.url.search;
+	let currentPath = $derived($page.url.pathname);
+	let currentFull = $derived($page.url.pathname + $page.url.search);
 
 	function isActive(routePath, _currentPath, _currentFull) {
 		if (routePath === '/') return _currentPath === '/';
@@ -64,9 +67,9 @@
 				<button
 					class="nav-link"
 					class:active={isActive(route.path, currentPath, currentFull)}
-					on:click={() => goto(route.path)}
+					onclick={() => goto(route.path)}
 				>
-					<svelte:component this={route.icon} size={18} />
+					<route.icon size={18} />
 					<span>{route.label}</span>
 				</button>
 			{/if}
@@ -75,7 +78,7 @@
 
 	<div class="nav-footer">
 		{#if $isLoggedIn}
-			<button class="nav-link profile-link" on:click={toProfile}>
+			<button class="nav-link profile-link" onclick={toProfile}>
 				<Avatar />
 				<span>Profile</span>
 				{#if $unreadCount > 0}
@@ -83,7 +86,7 @@
 				{/if}
 			</button>
 		{:else}
-			<button class="nav-link" on:click={handleLogin}>
+			<button class="nav-link" onclick={handleLogin}>
 				<LogIn size={18} />
 				<span>Log in</span>
 			</button>
@@ -92,11 +95,11 @@
 </div>
 
 {#if showModal}
-	<!-- svelte-ignore a11y-click-events-have-key-events -->
-	<!-- svelte-ignore a11y-no-static-element-interactions -->
-	<div class="modal-backdrop" on:click={() => (showModal = false)}>
-		<div class="modal-card" on:click|stopPropagation>
-			<button class="close-btn" on:click={() => (showModal = false)}>
+	<!-- svelte-ignore a11y_click_events_have_key_events -->
+	<!-- svelte-ignore a11y_no_static_element_interactions -->
+	<div class="modal-backdrop" onclick={() => (showModal = false)}>
+		<div class="modal-card" onclick={stopPropagation(bubble('click'))}>
+			<button class="close-btn" onclick={() => (showModal = false)}>
 				<X size={18} />
 			</button>
 			<div class="modal-logo">CHASE</div>

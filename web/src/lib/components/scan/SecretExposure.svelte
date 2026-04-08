@@ -3,10 +3,16 @@
 	import { fade, slide } from 'svelte/transition';
 	import ChecksGrid from './ChecksGrid.svelte';
 
-	export let loading = false;
-	export let results = {};
+	/**
+	 * @typedef {Object} Props
+	 * @property {boolean} [loading]
+	 * @property {any} [results]
+	 */
 
-	let expandedFinding = null;
+	/** @type {Props} */
+	let { loading = false, results = {} } = $props();
+
+	let expandedFinding = $state(null);
 
 	function getRiskClass(risk) {
 		switch (risk?.toUpperCase()) {
@@ -36,12 +42,12 @@
 	}
 
 	// Combine checks and sources into a single array for ChecksGrid
-	$: allChecks = (() => {
+	let allChecks = $derived((() => {
 		const checks = (results?.secretExposure?.checks || []);
 		if (checks.length > 0) return checks;
 		// Fallback to sources if no checks provided
 		return (results?.secretExposure?.sources || []).map(s => ({ name: getSourceLabel(s), passed: true }));
-	})();
+	})());
 </script>
 
 {#if loading}
@@ -86,7 +92,7 @@
 						<button
 							class="check-item clickable"
 							class:expanded={expandedFinding === index}
-							on:click={() => (expandedFinding = expandedFinding === index ? null : index)}
+							onclick={() => (expandedFinding = expandedFinding === index ? null : index)}
 						>
 							<XCircle size={14} class="check-icon {getRiskClass(finding.severity || 'HIGH')}" />
 							<span class="check-name failed">{finding.type || 'Secret Detected'}</span>

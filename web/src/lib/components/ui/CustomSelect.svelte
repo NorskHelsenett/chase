@@ -1,20 +1,32 @@
 <script lang="ts">
-	import { createEventDispatcher, onMount } from 'svelte';
+	import { run } from 'svelte/legacy';
+
+	import { onMount } from 'svelte';
 	import { slide, fade } from 'svelte/transition';
 	import { browser } from '$app/environment';
 	import { clickOutside } from '$lib/actions/clickOutside';
 
-	export let value = '';
-	export let options = [];
-	export let placeholder = 'Select...';
-	export let icon = null;
-	export let storageKey: string | null = null;
+	interface Props {
+		value?: string;
+		options?: any;
+		placeholder?: string;
+		icon?: any;
+		storageKey?: string | null;
+		onchange?: (detail: { value: string }) => void;
+	}
 
-	const dispatch = createEventDispatcher();
+	let {
+		value = $bindable(''),
+		options = [],
+		placeholder = 'Select...',
+		icon = null,
+		storageKey = null,
+		onchange
+	}: Props = $props();
 
-	let isOpen = false;
-	let selectedOption = options.find((option) => option.value === value);
-	let selectContainer;
+	let isOpen = $state(false);
+	let selectedOption = $state(options.find((option) => option.value === value));
+	let selectContainer = $state();
 
 	function toggle() {
 		isOpen = !isOpen;
@@ -26,7 +38,7 @@
 		if (storageKey && browser) {
 			localStorage.setItem(storageKey, option.value);
 		}
-		dispatch('change', { value: option.value });
+		onchange?.({ value: option.value });
 		isOpen = false;
 	}
 
@@ -34,9 +46,11 @@
 		isOpen = false;
 	}
 
-	$: if (value) {
-		selectedOption = options.find((option) => option.value === value) || null;
-	}
+	run(() => {
+		if (value) {
+			selectedOption = options.find((option) => option.value === value) || null;
+		}
+	});
 
 	onMount(() => {
 		if (storageKey && browser) {
@@ -44,7 +58,7 @@
 			if (stored && options.some((opt) => opt.value === stored)) {
 				value = stored;
 				selectedOption = options.find((option) => option.value === stored) || null;
-				dispatch('change', { value: stored });
+				onchange?.({ value: stored });
 			}
 		}
 		if (value && !selectedOption) {
@@ -61,7 +75,7 @@
 	<button
 		type="button"
 		class="px-4 py-2 bg-[#2b2b2b] hover:bg-[#333] rounded-lg text-gray-200 flex items-center w-full text-left transition-colors disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-green-500/70"
-		on:click={toggle}
+		onclick={toggle}
 		aria-haspopup="listbox"
 		aria-expanded={isOpen}
 		data-testid="custom-select-button"
@@ -107,7 +121,7 @@
 						: 'text-gray-200'}"
 					role="option"
 					aria-selected={option.value === value}
-					on:click={() => handleSelect(option)}
+					onclick={() => handleSelect(option)}
 					in:fade={{ duration: 100, delay: 50 * options.indexOf(option) }}
 				>
 					<div

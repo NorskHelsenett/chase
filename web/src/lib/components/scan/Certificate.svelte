@@ -11,8 +11,14 @@
 	} from 'lucide-svelte';
 	import { fade } from 'svelte/transition';
 
-	export let loading = true;
-	export let results = {};
+	/**
+	 * @typedef {Object} Props
+	 * @property {boolean} [loading]
+	 * @property {any} [results]
+	 */
+
+	/** @type {Props} */
+	let { loading = true, results = {} } = $props();
 
 	function getGradeClass(grade) {
 		switch (grade) {

@@ -7,21 +7,25 @@
 	import { Monitor } from 'lucide-svelte';
 	import { pingData } from '$lib/stores/pingStore';
 
-	export let sites: Server[] = [];
+	interface Props {
+		sites?: Server[];
+	}
+
+	let { sites = $bindable([]) }: Props = $props();
 
 	// Virtual scrolling
 	const ROW_HEIGHT = 41; // px per row
 	const OVERSCAN = 10;   // extra rows above/below viewport
-	let scrollContainer: HTMLElement;
-	let scrollTop = 0;
-	let containerHeight = 0;
+	let scrollContainer: HTMLElement = $state();
+	let scrollTop = $state(0);
+	let containerHeight = $state(0);
 
-	$: totalHeight = sites.length * ROW_HEIGHT;
-	$: startIndex = Math.max(0, Math.floor(scrollTop / ROW_HEIGHT) - OVERSCAN);
-	$: endIndex = Math.min(sites.length, Math.ceil((scrollTop + containerHeight) / ROW_HEIGHT) + OVERSCAN);
-	$: visibleSites = sites.slice(startIndex, endIndex);
-	$: topPadding = startIndex * ROW_HEIGHT;
-	$: bottomPadding = (sites.length - endIndex) * ROW_HEIGHT;
+	let totalHeight = $derived(sites.length * ROW_HEIGHT);
+	let startIndex = $derived(Math.max(0, Math.floor(scrollTop / ROW_HEIGHT) - OVERSCAN));
+	let endIndex = $derived(Math.min(sites.length, Math.ceil((scrollTop + containerHeight) / ROW_HEIGHT) + OVERSCAN));
+	let visibleSites = $derived(sites.slice(startIndex, endIndex));
+	let topPadding = $derived(startIndex * ROW_HEIGHT);
+	let bottomPadding = $derived((sites.length - endIndex) * ROW_HEIGHT);
 
 	function handleScroll() {
 		if (scrollContainer) {
@@ -192,40 +196,40 @@
 		<div
 			class="virtual-scroll-container"
 			bind:this={scrollContainer}
-			on:scroll={handleScroll}
+			onscroll={handleScroll}
 		>
 			<table class="monitor-table">
 				<thead>
 					<tr>
-						<th class="sortable" on:click={() => toggleSort('status')}>
+						<th class="sortable" onclick={() => toggleSort('status')}>
 							<span>Status</span>
 							<span class="sort-indicator">{getSortIndicator('status')}</span>
 						</th>
-						<th class="sortable col-domain" on:click={() => toggleSort('url')}>
+						<th class="sortable col-domain" onclick={() => toggleSort('url')}>
 							<span>Domain</span>
 							<span class="sort-indicator">{getSortIndicator('url')}</span>
 						</th>
-						<th class="sortable" on:click={() => toggleSort('header')}>
+						<th class="sortable" onclick={() => toggleSort('header')}>
 							<span>Header</span>
 							<span class="sort-indicator">{getSortIndicator('header')}</span>
 						</th>
-						<th class="sortable" on:click={() => toggleSort('cert')}>
+						<th class="sortable" onclick={() => toggleSort('cert')}>
 							<span>Cert</span>
 							<span class="sort-indicator">{getSortIndicator('cert')}</span>
 						</th>
-						<th class="sortable" on:click={() => toggleSort('adminRisk')}>
+						<th class="sortable" onclick={() => toggleSort('adminRisk')}>
 							<span>Admin Risk</span>
 							<span class="sort-indicator">{getSortIndicator('adminRisk')}</span>
 						</th>
-						<th class="sortable" on:click={() => toggleSort('apiRisk')}>
+						<th class="sortable" onclick={() => toggleSort('apiRisk')}>
 							<span>API Risk</span>
 							<span class="sort-indicator">{getSortIndicator('apiRisk')}</span>
 						</th>
-						<th class="sortable" on:click={() => toggleSort('secrets')}>
+						<th class="sortable" onclick={() => toggleSort('secrets')}>
 							<span>Secrets</span>
 							<span class="sort-indicator">{getSortIndicator('secrets')}</span>
 						</th>
-						<th class="sortable" on:click={() => toggleSort('uptime')}>
+						<th class="sortable" onclick={() => toggleSort('uptime')}>
 							<span>Uptime</span>
 							<span class="sort-indicator">{getSortIndicator('uptime')}</span>
 						</th>
@@ -240,7 +244,7 @@
 							data-server-id={site.ID}
 							class="clickable-row"
 							style="height: {ROW_HEIGHT}px;"
-							on:click={() => goto(`/server/${site.ID}`)}
+							onclick={() => goto(`/server/${site.ID}`)}
 						>
 							<MonitorRow server={site} hover={true} />
 						</tr>

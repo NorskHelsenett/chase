@@ -13,14 +13,14 @@
 		sendTestNotification
 	} from './pushClient.js';
 
-	let isSupported = false;
-	let isSubscribed = false;
-	let isLoading = false;
-	let permission = 'default';
-	let preferences = {};
-	let eventTypes = [];
-	let error = null;
-	let successMessage = null;
+	let isSupported = $state(false);
+	let isSubscribed = $state(false);
+	let isLoading = $state(false);
+	let permission = $state('default');
+	let preferences = $state({});
+	let eventTypes = $state([]);
+	let error = $state(null);
+	let successMessage = $state(null);
 
 	onMount(async () => {
 		isSupported = 'serviceWorker' in navigator && 'PushManager' in window;
@@ -142,7 +142,7 @@
 		{#if error}
 			<div
 				class="bg-red-900/20 border border-red-800 text-red-400 px-4 py-3 rounded-lg mb-4 cursor-pointer hover:bg-red-900/30 transition-colors"
-				on:click={clearMessages}
+				onclick={clearMessages}
 			>
 				<div class="flex items-center gap-2">
 					<X size={18} />
@@ -154,7 +154,7 @@
 		{#if successMessage}
 			<div
 				class="bg-green-900/20 border border-green-800 text-green-400 px-4 py-3 rounded-lg mb-4 cursor-pointer hover:bg-green-900/30 transition-colors"
-				on:click={clearMessages}
+				onclick={clearMessages}
 			>
 				<div class="flex items-center gap-2">
 					<Check size={18} />
@@ -170,7 +170,7 @@
 					security events
 				</p>
 				<button
-					on:click={handleSubscribe}
+					onclick={handleSubscribe}
 					disabled={isLoading}
 					class="px-4 py-2 bg-green-600 hover:bg-green-700 rounded-lg text-white flex items-center gap-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
 				>
@@ -191,7 +191,7 @@
 						<span class="text-sm">Notifications Enabled</span>
 					</div>
 					<button
-						on:click={handleUnsubscribe}
+						onclick={handleUnsubscribe}
 						disabled={isLoading}
 						class="text-sm text-red-400 hover:text-red-300 disabled:text-gray-500 transition-colors"
 					>
@@ -206,7 +206,7 @@
 							<div class="p-3 bg-[#2b2b2b] rounded-lg transition-colors">
 								<CustomCheckbox
 									checked={preferences[eventType.type] !== false}
-									on:change={() => handlePreferenceChange(eventType.type)}
+								onchange={() => handlePreferenceChange(eventType.type)}
 									label={eventType.name || eventType.type}
 								/>
 								<p class="text-gray-400 text-xs ml-7 mt-1">{eventType.description || ''}</p>
@@ -217,7 +217,7 @@
 
 				<div class="pt-4">
 					<button
-						on:click={handleTestNotification}
+						onclick={handleTestNotification}
 						disabled={isLoading}
 						class="bg-[#2b2b2b] hover:bg-[#353535] disabled:bg-gray-800 disabled:text-gray-500 text-gray-100 px-4 py-2 rounded-lg flex items-center gap-2 transition-colors text-sm"
 					>

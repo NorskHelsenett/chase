@@ -1,9 +1,15 @@
 <script>
-	/** @type {import('./$types').PageData} */
-	export let data;
+	
+	/**
+	 * @typedef {Object} Props
+	 * @property {import('./$types').PageData} data
+	 */
 
-	let loading = true;
-	let error = '';
+	/** @type {Props} */
+	let { data } = $props();
+
+	let loading = $state(true);
+	let error = $state('');
 
 	function handleImageLoad() {
 		loading = false;
@@ -30,8 +36,8 @@
 		src={data.imageSrc} 
 		alt="Screenshot of {data.domain}"
 		class:hidden={loading || error}
-		on:load={handleImageLoad}
-		on:error={handleImageError}
+		onload={handleImageLoad}
+		onerror={handleImageError}
 	/>
 </div>
 

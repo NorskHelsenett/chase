@@ -3,9 +3,9 @@
 	import { fade } from 'svelte/transition';
 	import { Copy, Eye, EyeOff } from 'lucide-svelte';
 
-	let apiToken = '';
-	let copied = false;
-	let visible = false;
+	let apiToken = $state('');
+	let copied = $state(false);
+	let visible = $state(false);
 
 	onMount(async () => {
 		const response = await fetch('/api/api-token');
@@ -42,7 +42,7 @@
 
 		<div class="absolute right-2 top-1/2 transform -translate-y-1/2 flex gap-1">
 			<button
-				on:click={toggleVisibility}
+				onclick={toggleVisibility}
 				class="p-1.5 text-gray-400 hover:text-white transition-colors rounded-md"
 				title={visible ? 'Hide token' : 'Show token'}
 			>
@@ -54,7 +54,7 @@
 			</button>
 
 			<button
-				on:click={copyToClipboard}
+				onclick={copyToClipboard}
 				class="p-1.5 text-gray-400 hover:text-white transition-colors rounded-md"
 				title="Copy to clipboard"
 			>

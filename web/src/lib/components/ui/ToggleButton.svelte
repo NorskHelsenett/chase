@@ -1,14 +1,26 @@
 <!-- ToggleButton.svelte -->
 <script lang="ts">
-	import { createEventDispatcher } from 'svelte';
+	interface Props {
+		value?: boolean;
+		onLabel?: string;
+		offLabel?: string;
+		activeColor?: string;
+		disabled?: boolean;
+		size?: 'sm' | 'md' | 'lg';
+		id?: string;
+		onchange?: (value: boolean) => void;
+	}
 
-	export let value: boolean = true;
-	export let onLabel: string = 'Active';
-	export let offLabel: string = 'Inactive';
-	export let activeColor: string = 'bg-green-600';
-	export let disabled: boolean = false;
-	export let size: 'sm' | 'md' | 'lg' = 'md';
-	export let id: string = '';
+	let {
+		value = $bindable(true),
+		onLabel = 'Active',
+		offLabel = 'Inactive',
+		activeColor = 'bg-green-600',
+		disabled = false,
+		size = 'md',
+		id = '',
+		onchange
+	}: Props = $props();
 
 	// Calculate size classes
 	const sizeClasses = {
@@ -17,12 +29,10 @@
 		lg: 'px-4 py-2 text-base'
 	};
 
-	const dispatch = createEventDispatcher();
-
 	function setValue(val: boolean) {
 		if (!disabled) {
 			value = val;
-			dispatch('change', value);
+			onchange?.(value);
 		}
 	}
 
@@ -53,8 +63,8 @@
 		]} rounded transition-all duration-300 ease-in-out focus:outline-none relative z-10 flex-1 {value
 			? 'text-white'
 			: 'text-gray-400 hover:text-gray-200'}"
-		on:click={() => setValue(!value)}
-		on:keydown={(e) => handleKeydown(e, true)}
+		onclick={() => setValue(!value)}
+		onkeydown={(e) => handleKeydown(e, true)}
 		{disabled}
 		aria-pressed={value}
 		tabindex={disabled ? -1 : 0}
@@ -68,8 +78,8 @@
 		]} rounded transition-all duration-300 ease-in-out focus:outline-none relative z-10 flex-1 {!value
 			? 'text-white'
 			: 'text-gray-400 hover:text-gray-200'}"
-		on:click={() => setValue(!value)}
-		on:keydown={(e) => handleKeydown(e, false)}
+		onclick={() => setValue(!value)}
+		onkeydown={(e) => handleKeydown(e, false)}
 		{disabled}
 		aria-pressed={!value}
 		tabindex={disabled ? -1 : 0}

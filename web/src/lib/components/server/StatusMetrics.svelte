@@ -1,14 +1,25 @@
 <script lang="ts">
-	export let currentResponse = 271;
-	export let avgResponse = 138;
-	export let uptimeDay = 100;
-	export let uptimeMonth = 100;
-	export let certDaysLeft = 258;
-	export let certExpDate = '2024-12-23';
+	interface Props {
+		currentResponse?: number;
+		avgResponse?: number;
+		uptimeDay?: number;
+		uptimeMonth?: number;
+		certDaysLeft?: number;
+		certExpDate?: string;
+	}
 
-	$: formattedCertDaysLeft = certExpDate === '0001-01-01T00:00:00Z' ? NaN : certDaysLeft;
-	$: formattedCertExpDate =
-		certExpDate === '0001-01-01T00:00:00Z' ? 'N/A' : new Date(certExpDate).toLocaleDateString();
+	let {
+		currentResponse = 271,
+		avgResponse = 138,
+		uptimeDay = 100,
+		uptimeMonth = 100,
+		certDaysLeft = 258,
+		certExpDate = '2024-12-23'
+	}: Props = $props();
+
+	let formattedCertDaysLeft = $derived(certExpDate === '0001-01-01T00:00:00Z' ? NaN : certDaysLeft);
+	let formattedCertExpDate =
+		$derived(certExpDate === '0001-01-01T00:00:00Z' ? 'N/A' : new Date(certExpDate).toLocaleDateString());
 </script>
 
 <div class="grid grid-cols-5 gap-8 bg-[#202020] rounded-lg p-4">

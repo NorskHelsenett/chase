@@ -1,21 +1,27 @@
 <!-- MonitorControls.svelte -->
 <script lang="ts">
-	import { createEventDispatcher } from 'svelte';
 	import ServerDialog from '../ServerDialog.svelte';
 	import CustomSelect from '../ui/CustomSelect.svelte';
 	import { Filter, Download, X, RefreshCw, Plus } from 'lucide-svelte';
 	import { statusFilter } from '$lib/stores/filterStore';
 
-	const dispatch = createEventDispatcher();
+	interface Props {
+		isLoading?: boolean;
+		onserverAdded?: () => void;
+		onsearch?: (detail: { query: string }) => void;
+		onrefresh?: () => void;
+		onfilter?: (detail: { status: string }) => void;
+		onexport?: () => void;
+	}
 
-	export let isLoading = false;
+	let { isLoading = false, onserverAdded, onsearch, onrefresh, onfilter, onexport }: Props = $props();
 
-	let showDialog = false;
-	let searchQuery = '';
+	let showDialog = $state(false);
+	let searchQuery = $state('');
 
 	// Handle dialog submission
-	async function handleDialogSubmit(event: CustomEvent) {
-		const { data, mode } = event.detail;
+	async function handleDialogSubmit(detail) {
+		const { data, mode } = detail;
 
 		try {
 			const response = await fetch('/api/servers', {
@@ -27,7 +33,7 @@
 			});
 
 			if (response.ok) {
-				dispatch('serverAdded');
+				onserverAdded?.();
 				showDialog = false;
 				handleRefresh();
 			} else {
@@ -40,18 +46,18 @@
 
 	// Handle search
 	function handleSearch() {
-		dispatch('search', { query: searchQuery });
+		onsearch?.({ query: searchQuery });
 	}
 
 	// Handle refresh
 	function handleRefresh() {
-		dispatch('refresh');
+		onrefresh?.();
 	}
 
 	// Handle filter change
 	function handleFilterChange(event) {
-		$statusFilter = event.detail.value;
-		dispatch('filter', { status: event.detail.value });
+		$statusFilter = event.value;
+		onfilter?.({ status: event.value });
 	}
 
 	function onClose() {
@@ -66,14 +72,14 @@
 			<input
 				type="text"
 				bind:value={searchQuery}
-				on:input={handleSearch}
+				oninput={handleSearch}
 				placeholder="Search domains..."
 				class="search-input"
 			/>
 			{#if searchQuery}
 				<button
 					class="search-clear"
-					on:click={() => {
+					onclick={() => {
 						searchQuery = '';
 						handleSearch();
 					}}
@@ -112,14 +118,14 @@
 						icon: '<div class="flex items-center"><span class="w-2 h-2 bg-gray-400 rounded-full mr-2"></span><span class="text-gray-300">New</span></div>'
 					}
 				]}
-				on:change={handleFilterChange}
+				onchange={handleFilterChange}
 			/>
 		</div>
 
 		<!-- Control buttons -->
 		<div class="button-group">
 			<button
-				on:click={() => dispatch('export')}
+				onclick={() => onexport?.()}
 				disabled={isLoading}
 				class="btn btn-secondary icon-only"
 				title="Export current view as CSV"
@@ -128,7 +134,7 @@
 			</button>
 
 			<button
-				on:click={handleRefresh}
+				onclick={handleRefresh}
 				disabled={isLoading}
 				class="btn btn-secondary"
 			>
@@ -137,7 +143,7 @@
 			</button>
 
 			<button
-				on:click={() => (showDialog = true)}
+				onclick={() => (showDialog = true)}
 				disabled={isLoading}
 				class="btn btn-primary"
 			>
@@ -153,8 +159,8 @@
 	{isLoading}
 	mode="add"
 	initialData={null}
-	on:submit={handleDialogSubmit}
-	on:close={onClose}
+	onsubmit={handleDialogSubmit}
+	onclose={onClose}
 />
 
 <style>

@@ -1,11 +1,18 @@
 <script>
 	import '../app.css';
+	/**
+	 * @typedef {Object} Props
+	 * @property {import('svelte').Snippet} [children]
+	 */
+
+	/** @type {Props} */
+	let { children } = $props();
 </script>
 
 <div
 	class="min-h-screen w-full bg-background text-foreground flex flex-col sm:flex-row overflow-hidden"
 >
-	<slot />
+	{@render children?.()}
 </div>
 
 <style global>

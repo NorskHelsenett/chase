@@ -1,18 +1,34 @@
 <!-- ServerDialog.svelte -->
 <script lang="ts">
+	import { run, preventDefault } from 'svelte/legacy';
+
 	import { fade } from 'svelte/transition';
-	import { createEventDispatcher } from 'svelte';
 	import type { Server } from '$lib/models';
 	import CustomCheckbox from './ui/CustomCheckbox.svelte';
 	import IntervalSlider from './ui/IntervalSlider.svelte';
 	import RadioToggle from './ui/RadioToggle.svelte';
 
-	const dispatch = createEventDispatcher();
+	interface Props {
+		showDialog?: boolean;
+		isLoading?: boolean;
+		initialData?: Partial<Server> | null;
+		mode?: 'add' | 'edit';
+		onsubmit?: (detail: { data: any; mode: string }) => void;
+		onclose?: () => void;
+		ontoggleActive?: (value: boolean) => void;
+		ondelete?: () => void;
+	}
 
-	export let showDialog = false;
-	export let isLoading = false;
-	export let initialData: Partial<Server> | null = null;
-	export let mode: 'add' | 'edit' = 'add';
+	let {
+		showDialog = $bindable(false),
+		isLoading = false,
+		initialData = null,
+		mode = 'add',
+		onsubmit,
+		onclose,
+		ontoggleActive,
+		ondelete
+	}: Props = $props();
 
 	// Default values
 	const defaultFormData = {
@@ -27,16 +43,16 @@
 	};
 
 	// Reactive values
-	let formData = { ...defaultFormData };
-	let expectedDown = false;
-	let currentStatus = true;
-	let intervalValue = 15;
-	let hasInitialized = false;
+	let formData = $state({ ...defaultFormData });
+	let expectedDown = $state(false);
+	let currentStatus = $state(true);
+	let intervalValue = $state(15);
+	let hasInitialized = $state(false);
 
 	// UI text based on mode
-	$: title = mode === 'add' ? 'Add New Server' : 'Edit Server';
-	$: submitLabel = mode === 'add' ? 'Add Server' : 'Save Changes';
-	$: loadingLabel = mode === 'add' ? 'Adding...' : 'Saving...';
+	let title = $derived(mode === 'add' ? 'Add New Server' : 'Edit Server');
+	let submitLabel = $derived(mode === 'add' ? 'Add Server' : 'Save Changes');
+	let loadingLabel = $derived(mode === 'add' ? 'Adding...' : 'Saving...');
 
 	// Reset all form values to defaults
 	function resetForm() {
@@ -48,35 +64,39 @@
 	}
 
 	// Initialize form when dialog opens
-	$: if (showDialog && !hasInitialized) {
-		hasInitialized = true;
+	run(() => {
+		if (showDialog && !hasInitialized) {
+			hasInitialized = true;
 
-		if (mode === 'add') {
-			resetForm();
-		} else if (initialData) {
-			// Map initialData to form values, using default values as fallbacks
-			formData = {
-				id: initialData.id,
-				url: initialData.url || defaultFormData.url,
-				active: initialData.active ?? defaultFormData.active,
-				follow_redirect: initialData.follow_redirect ?? defaultFormData.follow_redirect,
-				allow_insecure: initialData.allow_insecure ?? defaultFormData.allow_insecure,
-				expected_status: initialData.expected_status ?? defaultFormData.expected_status,
-				comment: initialData.comment || defaultFormData.comment,
-				update_interval: initialData.update_interval ?? defaultFormData.update_interval
-			};
+			if (mode === 'add') {
+				resetForm();
+			} else if (initialData) {
+				// Map initialData to form values, using default values as fallbacks
+				formData = {
+					id: initialData.id,
+					url: initialData.url || defaultFormData.url,
+					active: initialData.active ?? defaultFormData.active,
+					follow_redirect: initialData.follow_redirect ?? defaultFormData.follow_redirect,
+					allow_insecure: initialData.allow_insecure ?? defaultFormData.allow_insecure,
+					expected_status: initialData.expected_status ?? defaultFormData.expected_status,
+					comment: initialData.comment || defaultFormData.comment,
+					update_interval: initialData.update_interval ?? defaultFormData.update_interval
+				};
 
-			// Derive other values from initialData
-			expectedDown = initialData.expected_status === 0;
-			currentStatus = initialData.active ?? defaultFormData.active;
-			intervalValue = initialData.update_interval ?? defaultFormData.update_interval;
+				// Derive other values from initialData
+				expectedDown = initialData.expected_status === 0;
+				currentStatus = initialData.active ?? defaultFormData.active;
+				intervalValue = initialData.update_interval ?? defaultFormData.update_interval;
+			}
 		}
-	}
+	});
 
 	// Reset initialization flag when dialog closes
-	$: if (!showDialog) {
-		hasInitialized = false;
-	}
+	run(() => {
+		if (!showDialog) {
+			hasInitialized = false;
+		}
+	});
 
 	function handleSubmit() {
 		const serverData = {
@@ -86,7 +106,7 @@
 			update_interval: intervalValue
 		};
 
-		dispatch('submit', {
+		onsubmit?.({
 			data: serverData,
 			mode
 		});
@@ -94,25 +114,25 @@
 
 	function handleClose() {
 		showDialog = false;
-		dispatch('close');
+		onclose?.();
 	}
 
-	function handleIntervalChange(event: CustomEvent) {
-		intervalValue = event.detail;
+	function handleIntervalChange(value: number) {
+		intervalValue = value;
 	}
 
-	function handleStatusChange(event: CustomEvent) {
-		currentStatus = event.detail;
+	function handleStatusChange(value: boolean) {
+		currentStatus = value;
 		// Dispatch toggle event for immediate update
-		dispatch('toggleActive', event.detail);
+		ontoggleActive?.(value);
 	}
 
 	function handleDelete() {
-		dispatch('delete');
+		ondelete?.();
 	}
 
-	function handleCheckboxChange(field: string, event: CustomEvent) {
-		formData[field] = event.detail;
+	function handleCheckboxChange(field: string, value: boolean) {
+		formData[field] = value;
 	}
 </script>
 
@@ -122,11 +142,11 @@
 			<div class="flex items-center justify-between mb-4">
 				<h2 class="text-xl text-gray-200 font-semibold">{title}</h2>
 				{#if mode === 'edit'}
-					<RadioToggle value={currentStatus} on:change={handleStatusChange} label="Status" />
+					<RadioToggle value={currentStatus} onchange={handleStatusChange} label="Status" />
 				{/if}
 			</div>
 
-			<form on:submit|preventDefault={handleSubmit} class="space-y-4">
+			<form onsubmit={preventDefault(handleSubmit)} class="space-y-4">
 				<div>
 					<label class="block text-gray-300 mb-1" for="url">URL</label>
 					<input
@@ -144,13 +164,13 @@
 					<div class="space-y-4">
 						<CustomCheckbox
 							checked={formData.follow_redirect}
-							on:change={(e) => handleCheckboxChange('follow_redirect', e)}
+							onchange={(value) => handleCheckboxChange('follow_redirect', value)}
 							label="Follow Redirects"
 						/>
 
 						<CustomCheckbox
 							checked={formData.allow_insecure}
-							on:change={(e) => handleCheckboxChange('allow_insecure', e)}
+							onchange={(value) => handleCheckboxChange('allow_insecure', value)}
 							label="Allow Insecure"
 						/>
 					</div>
@@ -158,7 +178,7 @@
 					<div class="space-y-4">
 						<CustomCheckbox
 							bind:checked={expectedDown}
-							on:change={(e) => (expectedDown = e.detail)}
+							onchange={(value) => (expectedDown = value)}
 							label="Expected Down"
 						/>
 					</div>
@@ -181,7 +201,7 @@
 				<div>
 					<IntervalSlider
 						value={intervalValue}
-						on:change={handleIntervalChange}
+						onchange={handleIntervalChange}
 						label="Check Interval"
 					/>
 				</div>
@@ -201,7 +221,7 @@
 					{#if mode === 'edit'}
 						<button
 							type="button"
-							on:click={handleDelete}
+							onclick={handleDelete}
 							disabled={isLoading}
 							class="px-4 py-2 bg-red-600/10 hover:bg-red-600/20 rounded-lg text-red-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
 						>
@@ -221,7 +241,7 @@
 					<div class="flex gap-3">
 						<button
 							type="button"
-							on:click={handleClose}
+							onclick={handleClose}
 							disabled={isLoading}
 							class="px-4 py-2 bg-[#2b2b2b] hover:bg-[#333] rounded-lg text-gray-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
 						>

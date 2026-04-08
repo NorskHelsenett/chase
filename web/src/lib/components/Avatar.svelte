@@ -3,7 +3,11 @@
 	import { onMount } from 'svelte';
 	import type { AvatarSize } from '../types/avatarSizes';
 
-	export let size: AvatarSize = 'small';
+	interface Props {
+		size?: AvatarSize;
+	}
+
+	let { size = 'small' }: Props = $props();
 
 	// Size mappings object
 	const sizeMap: Record<AvatarSize, string> = {

@@ -1,14 +1,18 @@
 <script lang="ts">
 	import { CircleCheck, CircleX, KeyRound, ShieldAlert } from 'lucide-svelte';
 
-	export let stats: {
+	interface Props {
+		stats?: {
 		up: number;
 		down: number;
 		secretsExposed: number;
 		highRisks: number;
-	} | null = null;
+	} | null;
+	}
 
-	$: total = stats ? stats.up + stats.down : 0;
+	let { stats = null }: Props = $props();
+
+	let total = $derived(stats ? stats.up + stats.down : 0);
 </script>
 
 <div class="stats-row">

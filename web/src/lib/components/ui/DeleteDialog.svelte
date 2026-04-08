@@ -1,27 +1,30 @@
 <!-- DeleteDialog.svelte -->
 <script lang="ts">
 	import { fade } from 'svelte/transition';
-	import { createEventDispatcher } from 'svelte';
 	import type { Server } from '$lib/models';
 	import { Trash2, Loader2 } from 'lucide-svelte';
 
-	const dispatch = createEventDispatcher();
+	interface Props {
+		showDialog?: boolean;
+		isLoading?: boolean;
+		serverData: Server;
+		onsubmit?: () => void;
+		onclose?: () => void;
+	}
 
-	export let showDialog = false;
-	export let isLoading = false;
-	export let serverData: Server;
+	let { showDialog = $bindable(false), isLoading = false, serverData, onsubmit, onclose }: Props = $props();
 
 	let title = 'Delete Server';
 	let submitLabel = 'Delete Server';
 	let loadingLabel = 'Deleting...';
 
 	function handleSubmit() {
-		dispatch('submit');
+		onsubmit?.();
 	}
 
 	function handleClose() {
 		showDialog = false;
-		dispatch('close');
+		onclose?.();
 	}
 </script>
 
@@ -48,7 +51,7 @@
 			<div class="dialog-footer">
 				<button
 					type="button"
-					on:click={handleClose}
+					onclick={handleClose}
 					disabled={isLoading}
 					class="btn btn-secondary"
 				>
@@ -56,7 +59,7 @@
 				</button>
 				<button
 					type="button"
-					on:click={handleSubmit}
+					onclick={handleSubmit}
 					disabled={isLoading}
 					class="btn btn-danger"
 				>

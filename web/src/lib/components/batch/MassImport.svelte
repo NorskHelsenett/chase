@@ -3,17 +3,17 @@
 	import { fade } from 'svelte/transition';
 	import MassImportModal from './MassImportModal.svelte';
 
-	let showImportModal = false;
-	let isLoading = false;
-	let importStats = null;
-	let showStats = false;
-	let importModalComponent: MassImportModal;
+	let showImportModal = $state(false);
+	let isLoading = $state(false);
+	let importStats = $state(null);
+	let showStats = $state(false);
+	let importModalComponent: MassImportModal = $state();
 
-	function handleImported(event) {
-		importStats = event.detail;
+	function handleImported(detail) {
+		importStats = detail;
 		// Store any failed import details
-		if (event.detail.failedImports && event.detail.failedImports.length > 0) {
-			importStats.failedDetails = event.detail.failedImports;
+		if (detail.failedImports && detail.failedImports.length > 0) {
+			importStats.failedDetails = detail.failedImports;
 		}
 		showStats = true;
 		// setTimeout(() => {
@@ -35,7 +35,7 @@
 			<h2 class="text-xl text-gray-200 font-semibold">Mass Import/Update</h2>
 
 			<button
-				on:click={() => {
+				onclick={() => {
 					// Reset the form and show the modal
 					if (importModalComponent) {
 						importModalComponent.resetForm();
@@ -83,7 +83,7 @@
 						{#if importStats.failed > 0}
 							<button
 								class="text-yellow-300 hover:underline cursor-pointer font-normal bg-transparent border-0 p-0 inline"
-								on:click={showFailedImports}
+								onclick={showFailedImports}
 							>
 								{importStats.failed} failed. Click to view details.
 							</button>
@@ -99,6 +99,6 @@
 	bind:showModal={showImportModal}
 	bind:isLoading
 	bind:this={importModalComponent}
-	on:imported={handleImported}
-	on:close={() => (showImportModal = false)}
+	onimported={handleImported}
+	onclose={() => (showImportModal = false)}
 />
