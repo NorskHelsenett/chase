@@ -140,7 +140,7 @@ type Screenshot struct {
 }
 
 type ReportStatusResponse struct {
-	Status ScanStatus     `json:"status"`
+	Status ScanStatus      `json:"status"`
 	Report *SecurityReport `json:"report"`
 }
 
@@ -291,11 +291,17 @@ func SecurityScanSSEHandler(c *gin.Context) {
 	scanner := NewScanner(0)
 
 	// Create a channel for progress updates
-	progressChan := make(chan struct{ stage string; progress int }, 20)
+	progressChan := make(chan struct {
+		stage    string
+		progress int
+	}, 20)
 
 	scanner.SetProgressCallback(func(stage string, progress int) {
 		select {
-		case progressChan <- struct{ stage string; progress int }{stage, progress}:
+		case progressChan <- struct {
+			stage    string
+			progress int
+		}{stage, progress}:
 		default:
 			// Drop if channel is full to prevent blocking
 		}
@@ -1089,6 +1095,7 @@ func storeScreenshotFailure(url string, statusCode int) {
 }
 
 const screenshotFailureRetry = 24 * time.Hour
+const screenshotCacheTTL = 14 * 24 * time.Hour // 14 days
 
 // getRecentScreenshot loads a cached screenshot. When thumbOnly is true,
 // it avoids loading the full-size blob from SQLite — much faster for grid views.
@@ -1113,6 +1120,11 @@ func getRecentScreenshot(url string, thumbOnly ...bool) (*Screenshot, error) {
 		if time.Since(screenshot.CreatedAt) < screenshotFailureRetry {
 			return &screenshot, nil
 		}
+		return nil, gorm.ErrRecordNotFound
+	}
+
+	// Expire successful screenshots after the cache TTL
+	if time.Since(screenshot.CreatedAt) > screenshotCacheTTL {
 		return nil, gorm.ErrRecordNotFound
 	}
 
