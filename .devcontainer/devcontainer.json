@@ -46,6 +46,7 @@
 	"forwardPorts": [
 		23456
 	],
+	"postStartCommand": "git config --global user.signingkey $HOME/.ssh/yubikey.pub && ssh-add -L > $HOME/.ssh/yubikey.pub",
 	// Use 'postCreateCommand' to run commands after the container is created.
 	"postCreateCommand": "mkdir -p .debug/data && touch api/.env && cd web && npm install"
 	// Configure tool-specific properties.
