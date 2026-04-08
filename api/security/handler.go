@@ -32,6 +32,25 @@ func InitDatabase() error {
 		return err
 	}
 
+	// Deduplicate screenshots: keep only the latest per server_url
+	db.Exec(`DELETE FROM screenshots WHERE id NOT IN (SELECT MAX(id) FROM screenshots GROUP BY server_url)`)
+
+	// Security reports: keep only the latest per server_url
+	db.Exec(`DELETE FROM security_report_records WHERE id NOT IN (SELECT MAX(id) FROM security_report_records GROUP BY server_url)`)
+
+	// Batch jobs: delete completed/failed jobs older than 30 days
+	db.Exec(`DELETE FROM batch_job_stores WHERE status IN ('completed','failed','cancelled') AND end_time < ?`, time.Now().AddDate(0, 0, -30))
+	db.Exec(`DELETE FROM batch_result_stores WHERE batch_job_id NOT IN (SELECT id FROM batch_job_stores)`)
+
+	// Notification logs: delete entries older than 90 days
+	db.Exec(`DELETE FROM notification_logs WHERE created_at < ?`, time.Now().AddDate(0, 0, -90))
+
+	// Expired sessions
+	db.Exec(`DELETE FROM sessions WHERE expires_at < ?`, time.Now())
+
+	// Reclaim disk space from all deletions
+	db.Exec(`VACUUM`)
+
 	// Backfill thumbnails for existing screenshots that don't have one
 	go backfillThumbnails()
 

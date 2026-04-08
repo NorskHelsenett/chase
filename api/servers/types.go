@@ -55,6 +55,34 @@ type SiteMetadata struct {
 	OGImage     string
 }
 
+// PingHourlySummary aggregates raw pings into one row per server per hour.
+// Covers data between 7 days and 30 days old.
+type PingHourlySummary struct {
+	ID              uint      `gorm:"primaryKey"`
+	ServerID        uint      `json:"server_id" gorm:"uniqueIndex:idx_hourly_server_hour"`
+	Hour            time.Time `json:"hour" gorm:"uniqueIndex:idx_hourly_server_hour"`
+	Total           int       `json:"total"`
+	Successful      int       `json:"successful"`
+	Failed          int       `json:"failed"`
+	AvgResponseTime float64   `json:"avg_response_time_ms"`
+	MinResponseTime float64   `json:"min_response_time_ms"`
+	MaxResponseTime float64   `json:"max_response_time_ms"`
+}
+
+// PingDailySummary aggregates hourly summaries into one row per server per day.
+// Covers data older than 30 days. Kept indefinitely (tiny footprint).
+type PingDailySummary struct {
+	ID              uint      `gorm:"primaryKey"`
+	ServerID        uint      `json:"server_id" gorm:"uniqueIndex:idx_daily_server_date"`
+	Date            time.Time `json:"date" gorm:"uniqueIndex:idx_daily_server_date;type:date"`
+	Total           int       `json:"total"`
+	Successful      int       `json:"successful"`
+	Failed          int       `json:"failed"`
+	AvgResponseTime float64   `json:"avg_response_time_ms"`
+	MinResponseTime float64   `json:"min_response_time_ms"`
+	MaxResponseTime float64   `json:"max_response_time_ms"`
+}
+
 type PingDetail struct {
 	gorm.Model
 	OrganizationName string    `json:"organization_name"`

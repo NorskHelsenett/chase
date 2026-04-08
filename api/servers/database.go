@@ -18,7 +18,7 @@ const serverBatchSize = 100
 
 func AutoMigrate(db *gorm.DB) error {
 	// Migrate the schemas
-	if err := db.AutoMigrate(&Server{}, &PingResult{}, &GeoCache{}); err != nil {
+	if err := db.AutoMigrate(&Server{}, &PingResult{}, &PingHourlySummary{}, &PingDailySummary{}, &GeoCache{}); err != nil {
 		return err
 	}
 
@@ -30,7 +30,124 @@ func AutoMigrate(db *gorm.DB) error {
 		return err
 	}
 
+	// Three-tier ping aggregation in background
+	go aggregateAndPrunePings(db)
+
 	return nil
+}
+
+type aggRow struct {
+	ServerID        uint
+	Bucket          string
+	Total           int
+	Successful      int
+	Failed          int
+	AvgResponseTime float64
+	MinResponseTime float64
+	MaxResponseTime float64
+}
+
+// aggregateAndPrunePings implements a three-tier retention policy:
+//
+//	Last 7 days  → every raw ping kept
+//	7–30 days    → aggregated to hourly, raw pings deleted
+//	30+ days     → aggregated to daily, hourly summaries deleted
+func aggregateAndPrunePings(db *gorm.DB) {
+	now := time.Now()
+	weekAgo := now.AddDate(0, 0, -7)
+	monthAgo := now.AddDate(0, -1, 0)
+
+	// --- Tier 2: raw pings 7–30 days old → hourly summaries ---
+	var hourlyRows []aggRow
+	db.Raw(`
+		SELECT server_id,
+			strftime('%Y-%m-%d %H:00:00', timestamp) as bucket,
+			COUNT(*) as total,
+			SUM(CASE WHEN error = '' THEN 1 ELSE 0 END) as successful,
+			SUM(CASE WHEN error != '' THEN 1 ELSE 0 END) as failed,
+			AVG(CASE WHEN error = '' THEN response_time_ms ELSE NULL END) as avg_response_time,
+			MIN(CASE WHEN error = '' THEN response_time_ms ELSE NULL END) as min_response_time,
+			MAX(CASE WHEN error = '' THEN response_time_ms ELSE NULL END) as max_response_time
+		FROM ping_results
+		WHERE timestamp < ? AND timestamp >= ? AND deleted_at IS NULL
+		GROUP BY server_id, strftime('%Y-%m-%d %H', timestamp)
+	`, weekAgo, monthAgo).Scan(&hourlyRows)
+
+	if len(hourlyRows) > 0 {
+		log.Printf("Aggregating %d hourly ping summaries (7-30 days)", len(hourlyRows))
+		for _, r := range hourlyRows {
+			hour, _ := time.Parse("2006-01-02 15:04:05", r.Bucket)
+			var existing PingHourlySummary
+			if err := db.Where("server_id = ? AND hour = ?", r.ServerID, hour).First(&existing).Error; err == nil {
+				db.Model(&existing).Updates(map[string]interface{}{
+					"total": r.Total, "successful": r.Successful, "failed": r.Failed,
+					"avg_response_time": r.AvgResponseTime, "min_response_time": r.MinResponseTime, "max_response_time": r.MaxResponseTime,
+				})
+			} else {
+				db.Create(&PingHourlySummary{
+					ServerID: r.ServerID, Hour: hour, Total: r.Total, Successful: r.Successful, Failed: r.Failed,
+					AvgResponseTime: r.AvgResponseTime, MinResponseTime: r.MinResponseTime, MaxResponseTime: r.MaxResponseTime,
+				})
+			}
+		}
+
+		// Delete raw pings that are now aggregated (7-30 days old)
+		result := db.Unscoped().Where("timestamp < ? AND timestamp >= ?", weekAgo, monthAgo).Delete(&PingResult{})
+		log.Printf("Pruned %d raw pings (7-30 days old)", result.RowsAffected)
+	}
+
+	// --- Tier 3: hourly summaries older than 30 days → daily summaries ---
+	var dailyRows []aggRow
+	db.Raw(`
+		SELECT server_id,
+			DATE(hour) as bucket,
+			SUM(total) as total,
+			SUM(successful) as successful,
+			SUM(failed) as failed,
+			SUM(avg_response_time * total) / NULLIF(SUM(total), 0) as avg_response_time,
+			MIN(min_response_time) as min_response_time,
+			MAX(max_response_time) as max_response_time
+		FROM ping_hourly_summaries
+		WHERE hour < ?
+		GROUP BY server_id, DATE(hour)
+	`, monthAgo).Scan(&dailyRows)
+
+	if len(dailyRows) > 0 {
+		log.Printf("Aggregating %d daily ping summaries (30+ days)", len(dailyRows))
+		for _, r := range dailyRows {
+			date, _ := time.Parse("2006-01-02", r.Bucket)
+			var existing PingDailySummary
+			if err := db.Where("server_id = ? AND date = ?", r.ServerID, date).First(&existing).Error; err == nil {
+				db.Model(&existing).Updates(map[string]interface{}{
+					"total": r.Total, "successful": r.Successful, "failed": r.Failed,
+					"avg_response_time": r.AvgResponseTime, "min_response_time": r.MinResponseTime, "max_response_time": r.MaxResponseTime,
+				})
+			} else {
+				db.Create(&PingDailySummary{
+					ServerID: r.ServerID, Date: date, Total: r.Total, Successful: r.Successful, Failed: r.Failed,
+					AvgResponseTime: r.AvgResponseTime, MinResponseTime: r.MinResponseTime, MaxResponseTime: r.MaxResponseTime,
+				})
+			}
+		}
+
+		// Delete hourly summaries now rolled into daily
+		result := db.Where("hour < ?", monthAgo).Delete(&PingHourlySummary{})
+		log.Printf("Pruned %d hourly summaries (30+ days old)", result.RowsAffected)
+	}
+
+	// --- Also delete any raw pings older than 30 days (in case they were missed) ---
+	result := db.Unscoped().Where("timestamp < ?", monthAgo).Delete(&PingResult{})
+	if result.RowsAffected > 0 {
+		log.Printf("Pruned %d raw pings older than 30 days", result.RowsAffected)
+	}
+
+	// --- Clean up orphaned ping_details ---
+	orphaned := db.Exec(`DELETE FROM ping_details WHERE id NOT IN (SELECT DISTINCT detail_id FROM ping_results WHERE detail_id IS NOT NULL)`)
+	if orphaned.RowsAffected > 0 {
+		log.Printf("Pruned %d orphaned ping details", orphaned.RowsAffected)
+	}
+
+	log.Printf("Ping aggregation complete")
 }
 
 func StartMonitoring() {
