@@ -16,6 +16,8 @@
 	let hasMounted = $state(false);
 	let lastActiveFilter: string | null | undefined = $state(undefined);
 	let activeFilter: string | null = $state(null);
+	let currentPage = $state(1);
+	const pageSize = 24;
 
 	run(() => {
 		activeFilter = $page.url.searchParams.get('active');
@@ -59,8 +61,12 @@
 			}
 
 			filteredServers = result;
+			currentPage = 1;
 		}
 	});
+
+	let totalPages = $derived(Math.max(1, Math.ceil(filteredServers.length / pageSize)));
+	let pagedServers = $derived(filteredServers.slice((currentPage - 1) * pageSize, currentPage * pageSize));
 
 	async function loadData(force = false) {
 		await serverStoreActions.setFilter(activeFilter ?? null, force);
@@ -177,6 +183,44 @@ run(() => {
 			<p class="mt-5 text-green-400 font-medium">Loading servers...</p>
 		</div>
 	{:else}
-		<ScreenshotGrid sites={filteredServers} />
+		<ScreenshotGrid sites={pagedServers} />
+
+		{#if totalPages > 1}
+			<div class="flex items-center justify-center gap-2 mt-4 pb-4">
+				<button
+					class="px-3 py-1.5 rounded-lg text-sm font-medium transition-colors {currentPage === 1 ? 'bg-[#2b2b2b] text-gray-600 cursor-not-allowed' : 'bg-[#2b2b2b] text-gray-300 hover:bg-[#363636] hover:text-white'}"
+					disabled={currentPage === 1}
+					onclick={() => currentPage = 1}
+				>
+					First
+				</button>
+				<button
+					class="px-3 py-1.5 rounded-lg text-sm font-medium transition-colors {currentPage === 1 ? 'bg-[#2b2b2b] text-gray-600 cursor-not-allowed' : 'bg-[#2b2b2b] text-gray-300 hover:bg-[#363636] hover:text-white'}"
+					disabled={currentPage === 1}
+					onclick={() => currentPage--}
+				>
+					Prev
+				</button>
+
+				<span class="px-3 py-1.5 text-sm text-gray-400">
+					Page {currentPage} of {totalPages}
+				</span>
+
+				<button
+					class="px-3 py-1.5 rounded-lg text-sm font-medium transition-colors {currentPage === totalPages ? 'bg-[#2b2b2b] text-gray-600 cursor-not-allowed' : 'bg-[#2b2b2b] text-gray-300 hover:bg-[#363636] hover:text-white'}"
+					disabled={currentPage === totalPages}
+					onclick={() => currentPage++}
+				>
+					Next
+				</button>
+				<button
+					class="px-3 py-1.5 rounded-lg text-sm font-medium transition-colors {currentPage === totalPages ? 'bg-[#2b2b2b] text-gray-600 cursor-not-allowed' : 'bg-[#2b2b2b] text-gray-300 hover:bg-[#363636] hover:text-white'}"
+					disabled={currentPage === totalPages}
+					onclick={() => currentPage = totalPages}
+				>
+					Last
+				</button>
+			</div>
+		{/if}
 	{/if}
 </div>

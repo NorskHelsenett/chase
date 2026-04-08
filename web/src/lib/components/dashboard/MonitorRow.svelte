@@ -200,8 +200,8 @@
 	}
 
 	.favicon {
-		width: 16px;
-		height: 16px;
+		width: 22px;
+		height: 22px;
 		flex-shrink: 0;
 		border-radius: 2px;
 	}
