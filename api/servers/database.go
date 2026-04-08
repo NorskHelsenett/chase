@@ -30,10 +30,13 @@ func AutoMigrate(db *gorm.DB) error {
 		return err
 	}
 
-	// Three-tier ping aggregation in background
-	go aggregateAndPrunePings(db)
-
 	return nil
+}
+
+// AggregateAndPrunePings runs the three-tier ping retention cleanup.
+// Call from a single background goroutine to avoid SQLite lock contention.
+func AggregateAndPrunePings() {
+	aggregateAndPrunePings(database.GetDB())
 }
 
 type aggRow struct {
@@ -72,9 +75,9 @@ func aggregateAndPrunePings(db *gorm.DB) {
 			COUNT(*) as total,
 			SUM(CASE WHEN error = '' THEN 1 ELSE 0 END) as successful,
 			SUM(CASE WHEN error != '' THEN 1 ELSE 0 END) as failed,
-			AVG(CASE WHEN error = '' THEN response_time_ms ELSE NULL END) as avg_response_time,
-			MIN(CASE WHEN error = '' THEN response_time_ms ELSE NULL END) as min_response_time,
-			MAX(CASE WHEN error = '' THEN response_time_ms ELSE NULL END) as max_response_time
+			AVG(CASE WHEN error = '' THEN response_time ELSE NULL END) as avg_response_time,
+			MIN(CASE WHEN error = '' THEN response_time ELSE NULL END) as min_response_time,
+			MAX(CASE WHEN error = '' THEN response_time ELSE NULL END) as max_response_time
 		FROM ping_results
 		WHERE timestamp < ? AND timestamp >= ? AND deleted_at IS NULL
 		GROUP BY server_id, strftime('%Y-%m-%d %H', timestamp)

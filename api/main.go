@@ -158,6 +158,15 @@ func main() {
 		log.Println("Web push notification system initialized")
 	}
 
+	// Run all cleanup sequentially in one goroutine to avoid SQLite lock contention
+	go func() {
+		time.Sleep(5 * time.Second) // let the app start serving first
+		log.Println("Starting database cleanup...")
+		security.RunDatabaseCleanup()
+		servers.AggregateAndPrunePings()
+		log.Println("Database cleanup complete")
+	}()
+
 	go servers.StartMonitoring()
 	go servers.StartGeoCacheRefresh()
 

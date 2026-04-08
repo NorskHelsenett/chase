@@ -32,13 +32,12 @@ func InitDatabase() error {
 		return err
 	}
 
-	// Run cleanup in background so it doesn't block startup
-	go runDatabaseCleanup()
-
 	return nil
 }
 
-func runDatabaseCleanup() {
+// RunDatabaseCleanup deduplicates and prunes old data.
+// Call from a single background goroutine to avoid SQLite lock contention.
+func RunDatabaseCleanup() {
 	db := database.GetDB()
 
 	// Each cleanup is wrapped to avoid crashing on tables that don't exist yet
