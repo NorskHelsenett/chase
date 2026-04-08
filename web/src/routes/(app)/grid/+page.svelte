@@ -16,8 +16,9 @@
 	let hasMounted = $state(false);
 	let lastActiveFilter: string | null | undefined = $state(undefined);
 	let activeFilter: string | null = $state(null);
-	let currentPage = $state(1);
-	const pageSize = 24;
+	let visibleCount = $state(24);
+	const batchSize = 24;
+	let sentinelEl: HTMLElement | undefined = $state();
 
 	run(() => {
 		activeFilter = $page.url.searchParams.get('active');
@@ -61,12 +62,12 @@
 			}
 
 			filteredServers = result;
-			currentPage = 1;
+			visibleCount = batchSize;
 		}
 	});
 
-	let totalPages = $derived(Math.max(1, Math.ceil(filteredServers.length / pageSize)));
-	let pagedServers = $derived(filteredServers.slice((currentPage - 1) * pageSize, currentPage * pageSize));
+	let visibleServers = $derived(filteredServers.slice(0, visibleCount));
+	let hasMore = $derived(visibleCount < filteredServers.length);
 
 	async function loadData(force = false) {
 		await serverStoreActions.setFilter(activeFilter ?? null, force);
@@ -75,6 +76,21 @@
 onMount(async () => {
 	hasMounted = true;
 });
+
+function initSentinel(node: HTMLElement) {
+	const observer = new IntersectionObserver(
+		([entry]) => {
+			if (entry.isIntersecting && hasMore) {
+				visibleCount += batchSize;
+			}
+		},
+		{ rootMargin: '400px' }
+	);
+	observer.observe(node);
+	return {
+		destroy() { observer.disconnect(); }
+	};
+}
 
 run(() => {
 		if (hasMounted && activeFilter !== undefined && activeFilter !== lastActiveFilter) {
@@ -183,44 +199,18 @@ run(() => {
 			<p class="mt-5 text-green-400 font-medium">Loading servers...</p>
 		</div>
 	{:else}
-		<ScreenshotGrid sites={pagedServers} />
+		<ScreenshotGrid sites={visibleServers} />
 
-		{#if totalPages > 1}
-			<div class="flex items-center justify-center gap-2 mt-4 pb-4">
-				<button
-					class="px-3 py-1.5 rounded-lg text-sm font-medium transition-colors {currentPage === 1 ? 'bg-[#2b2b2b] text-gray-600 cursor-not-allowed' : 'bg-[#2b2b2b] text-gray-300 hover:bg-[#363636] hover:text-white'}"
-					disabled={currentPage === 1}
-					onclick={() => currentPage = 1}
-				>
-					First
-				</button>
-				<button
-					class="px-3 py-1.5 rounded-lg text-sm font-medium transition-colors {currentPage === 1 ? 'bg-[#2b2b2b] text-gray-600 cursor-not-allowed' : 'bg-[#2b2b2b] text-gray-300 hover:bg-[#363636] hover:text-white'}"
-					disabled={currentPage === 1}
-					onclick={() => currentPage--}
-				>
-					Prev
-				</button>
-
-				<span class="px-3 py-1.5 text-sm text-gray-400">
-					Page {currentPage} of {totalPages}
-				</span>
-
-				<button
-					class="px-3 py-1.5 rounded-lg text-sm font-medium transition-colors {currentPage === totalPages ? 'bg-[#2b2b2b] text-gray-600 cursor-not-allowed' : 'bg-[#2b2b2b] text-gray-300 hover:bg-[#363636] hover:text-white'}"
-					disabled={currentPage === totalPages}
-					onclick={() => currentPage++}
-				>
-					Next
-				</button>
-				<button
-					class="px-3 py-1.5 rounded-lg text-sm font-medium transition-colors {currentPage === totalPages ? 'bg-[#2b2b2b] text-gray-600 cursor-not-allowed' : 'bg-[#2b2b2b] text-gray-300 hover:bg-[#363636] hover:text-white'}"
-					disabled={currentPage === totalPages}
-					onclick={() => currentPage = totalPages}
-				>
-					Last
-				</button>
+		{#if hasMore}
+			<div use:initSentinel class="flex justify-center py-8">
+				<div class="w-8 h-8 border-4 border-t-green-500 border-r-green-400/40 border-b-green-400/20 border-l-green-400/60 rounded-full animate-spin"></div>
 			</div>
+		{/if}
+
+		{#if !hasMore && filteredServers.length > batchSize}
+			<p class="text-center text-gray-500 text-sm py-4">
+				Showing all {filteredServers.length} servers
+			</p>
 		{/if}
 	{/if}
 </div>
