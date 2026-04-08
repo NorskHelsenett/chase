@@ -23,6 +23,22 @@ func checkServer(serverID uint, resultChan chan<- any) {
 	}
 
 	result := pingServer(server)
+
+	// Update site metadata if extracted during ping
+	if result.siteMetadata.Favicon != "" && server.Favicon == "" {
+		server.Favicon = result.siteMetadata.Favicon
+	}
+	if result.siteMetadata.Title != "" && server.SiteTitle == "" {
+		server.SiteTitle = result.siteMetadata.Title
+	}
+	if result.siteMetadata.Description != "" && server.SiteDescription == "" {
+		server.SiteDescription = result.siteMetadata.Description
+	}
+	if result.siteMetadata.OGImage != "" && server.OGImage == "" {
+		server.OGImage = result.siteMetadata.OGImage
+	}
+	db.Save(&server)
+
 	db.Create(&result)
 
 	// Broadcast to SSE clients

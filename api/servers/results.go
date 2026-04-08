@@ -194,6 +194,10 @@ func GetServersWithSecurityStatus(c *gin.Context) {
 			UpdateInterval:     servers[i].UpdateInterval,
 			CreatedAt:          servers[i].CreatedAt,
 			Status:             "unknown",
+			Favicon:            servers[i].Favicon,
+			SiteTitle:          servers[i].SiteTitle,
+			SiteDescription:    servers[i].SiteDescription,
+			OGImage:            servers[i].OGImage,
 		}
 
 		// Check latest ping to determine status
@@ -281,10 +285,18 @@ func GetServersWithSecurityStatus(c *gin.Context) {
 					summaries[i].APIRisk = string(fullReport.Swagger.Risk)
 					summaries[i].SecretsRisk = string(fullReport.SecretExposure.Risk)
 					summaries[i].SecretsCount = len(fullReport.SecretExposure.Findings)
-					summaries[i].SiteTitle = fullReport.Headers.Title
-					summaries[i].SiteDescription = fullReport.Headers.Meta.Description
-					summaries[i].OGImage = fullReport.Headers.Meta.OGImage
-					summaries[i].Favicon = fullReport.Headers.Meta.Favicon
+					if fullReport.Headers.Title != "" {
+						summaries[i].SiteTitle = fullReport.Headers.Title
+					}
+					if fullReport.Headers.Meta.Description != "" {
+						summaries[i].SiteDescription = fullReport.Headers.Meta.Description
+					}
+					if fullReport.Headers.Meta.OGImage != "" {
+						summaries[i].OGImage = fullReport.Headers.Meta.OGImage
+					}
+					if fullReport.Headers.Meta.Favicon != "" {
+						summaries[i].Favicon = fullReport.Headers.Meta.Favicon
+					}
 				}
 			}
 		}

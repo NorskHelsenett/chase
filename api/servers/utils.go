@@ -2,10 +2,14 @@ package servers
 
 import (
 	"crypto/tls"
+	"io"
 	"net"
 	"net/http"
 	"os"
+	"strings"
 	"time"
+
+	"golang.org/x/net/html"
 )
 
 func calculateNextCheckInterval(server Server) (time.Duration, bool) {
@@ -128,6 +132,14 @@ func pingServer(server Server) PingResult {
 			result.PingDetail = extractConnectionDetails(resp, fullURL)
 		}
 
+		// Extract site metadata (favicon, title, etc.) if not yet stored
+		if server.Favicon == "" && resp.StatusCode >= 200 && resp.StatusCode < 400 {
+			ct := resp.Header.Get("Content-Type")
+			if strings.Contains(ct, "text/html") {
+				result.siteMetadata = extractSiteMetadata(resp.Body)
+			}
+		}
+
 		return result
 	}
 
@@ -171,4 +183,102 @@ func extractConnectionDetails(resp *http.Response, url string) *PingDetail {
 	}
 
 	return detail
+}
+
+// extractSiteMetadata reads the first 64KB of an HTML response to extract
+// favicon, title, description, and og:image from the <head>.
+func extractSiteMetadata(body io.Reader) SiteMetadata {
+	limited := io.LimitReader(body, 64*1024)
+	tokenizer := html.NewTokenizer(limited)
+
+	var meta SiteMetadata
+	var inTitle bool
+
+	for {
+		tt := tokenizer.Next()
+		switch tt {
+		case html.ErrorToken:
+			if meta.Favicon == "" {
+				meta.Favicon = "/favicon.ico"
+			}
+			return meta
+
+		case html.TextToken:
+			if inTitle && meta.Title == "" {
+				meta.Title = strings.TrimSpace(string(tokenizer.Text()))
+			}
+
+		case html.EndTagToken:
+			tn, _ := tokenizer.TagName()
+			if string(tn) == "title" {
+				inTitle = false
+			}
+
+		case html.StartTagToken, html.SelfClosingTagToken:
+			tn, hasAttr := tokenizer.TagName()
+			tag := string(tn)
+
+			if tag == "body" {
+				if meta.Favicon == "" {
+					meta.Favicon = "/favicon.ico"
+				}
+				return meta
+			}
+
+			if tag == "title" {
+				inTitle = true
+				continue
+			}
+
+			if !hasAttr {
+				continue
+			}
+
+			if tag == "link" {
+				var rel, href string
+				for {
+					key, val, more := tokenizer.TagAttr()
+					switch string(key) {
+					case "rel":
+						rel = strings.ToLower(string(val))
+					case "href":
+						href = string(val)
+					}
+					if !more {
+						break
+					}
+				}
+				if (rel == "icon" || rel == "shortcut icon") && href != "" && meta.Favicon == "" {
+					meta.Favicon = href
+				}
+			}
+
+			if tag == "meta" {
+				var name, property, content string
+				for {
+					key, val, more := tokenizer.TagAttr()
+					switch string(key) {
+					case "name":
+						name = strings.ToLower(string(val))
+					case "property":
+						property = strings.ToLower(string(val))
+					case "content":
+						content = string(val)
+					}
+					if !more {
+						break
+					}
+				}
+				if name == "description" && meta.Description == "" {
+					meta.Description = content
+				}
+				if property == "og:image" && meta.OGImage == "" {
+					meta.OGImage = content
+				}
+				if property == "og:title" && meta.Title == "" {
+					meta.Title = content
+				}
+			}
+		}
+	}
 }

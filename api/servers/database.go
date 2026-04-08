@@ -87,6 +87,20 @@ func runMonitoring() {
 
 				result := pingServer(server)
 
+				// Update site metadata if extracted during ping
+				if result.siteMetadata.Favicon != "" {
+					server.Favicon = result.siteMetadata.Favicon
+				}
+				if result.siteMetadata.Title != "" {
+					server.SiteTitle = result.siteMetadata.Title
+				}
+				if result.siteMetadata.Description != "" {
+					server.SiteDescription = result.siteMetadata.Description
+				}
+				if result.siteMetadata.OGImage != "" {
+					server.OGImage = result.siteMetadata.OGImage
+				}
+
 				interval, shouldRemainActive := calculateNextCheckInterval(server)
 
 				server.NextCheck = now.Add(interval)

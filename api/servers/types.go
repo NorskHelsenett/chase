@@ -16,6 +16,10 @@ type Server struct {
 	ExpectedStatusCode int          `json:"expected_status"`
 	Comment            string       `json:"comment"`
 	UpdateInterval     int          `json:"update_interval" gorm:"default:15"` // in minutes
+	Favicon            string       `json:"favicon,omitempty"`
+	SiteTitle          string       `json:"site_title,omitempty"`
+	SiteDescription    string       `json:"site_description,omitempty"`
+	OGImage            string       `json:"og_image,omitempty"`
 	PingResults        []PingResult `gorm:"foreignKey:ServerID;references:ID;OnDelete:CASCADE" json:"ping_results"`
 	// Security report metadata (not stored in database)
 	SecurityRiskLevel   string    `json:"security_risk_level,omitempty" gorm:"-"`
@@ -38,6 +42,17 @@ type PingResult struct {
 	Timestamp    time.Time   `json:"timestamp" gorm:"index:idx_server_timestamp"`
 	DetailID     *uint       `json:"detail_id,omitempty" gorm:"index"`
 	PingDetail   *PingDetail `gorm:"foreignKey:DetailID" json:"detail,omitempty"`
+
+	// Transient — extracted during ping, used to update Server, not persisted
+	siteMetadata SiteMetadata `gorm:"-" json:"-"`
+}
+
+// SiteMetadata holds lightweight metadata extracted from an HTML page's <head>.
+type SiteMetadata struct {
+	Favicon     string
+	Title       string
+	Description string
+	OGImage     string
 }
 
 type PingDetail struct {
