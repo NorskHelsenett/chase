@@ -28,7 +28,44 @@ import (
 
 func InitDatabase() error {
 	db := database.GetDB()
-	return db.AutoMigrate(&SecurityReportRecord{}, &Screenshot{})
+	if err := db.AutoMigrate(&SecurityReportRecord{}, &Screenshot{}); err != nil {
+		return err
+	}
+
+	// Backfill thumbnails for existing screenshots that don't have one
+	go backfillThumbnails()
+
+	return nil
+}
+
+func backfillThumbnails() {
+	db := database.GetDB()
+	var screenshots []Screenshot
+	// Find PNGs without thumbnails (thumbnail_data is NULL or empty)
+	db.Where("mime_type = ? AND (thumbnail_data IS NULL OR length(thumbnail_data) = 0)", "image/png").
+		Select("id, server_url, data, mime_type").
+		Find(&screenshots)
+
+	if len(screenshots) == 0 {
+		return
+	}
+
+	log.Printf("Backfilling thumbnails for %d screenshots", len(screenshots))
+	for _, s := range screenshots {
+		if len(s.Data) == 0 {
+			continue
+		}
+		thumb, err := generateThumbnail(s.Data, thumbnailWidth)
+		if err != nil {
+			log.Printf("Thumbnail backfill failed for %s: %v", s.ServerURL, err)
+			continue
+		}
+		db.Model(&s).Updates(map[string]interface{}{
+			"thumbnail_data": thumb,
+			"thumbnail_w":    thumbnailWidth,
+		})
+	}
+	log.Printf("Thumbnail backfill complete")
 }
 
 type SecurityReportRecord struct {
@@ -371,8 +408,8 @@ func ScreenshotHandler(c *gin.Context) {
 		waitInt = 3
 	}
 
-	// Try to get cached screenshot first for any request
-	cachedScreenshot, cacheErr := getRecentScreenshot(domain)
+	// Try to get cached screenshot — use lightweight query when only thumbnail is needed
+	cachedScreenshot, cacheErr := getRecentScreenshot(domain, wantThumb && preferCached)
 
 	// If preferCached is set and cache exists, return it immediately
 	if preferCached && cacheErr == nil {
@@ -382,14 +419,29 @@ func ScreenshotHandler(c *gin.Context) {
 			c.JSON(404, gin.H{"error": "Screenshot not available for this server"})
 			return
 		}
-		imgData := cachedScreenshot.Data
+
 		if wantThumb && len(cachedScreenshot.ThumbnailData) > 0 {
-			imgData = cachedScreenshot.ThumbnailData
+			c.Header("Cache-Control", "public, max-age=86400")
+			c.Header("Content-Type", cachedScreenshot.MIMEType)
+			c.Data(200, cachedScreenshot.MIMEType, cachedScreenshot.ThumbnailData)
+			return
 		}
-		c.Header("Cache-Control", "public, max-age=86400") // 24 hours
-		c.Header("Content-Type", cachedScreenshot.MIMEType)
-		c.Data(200, cachedScreenshot.MIMEType, imgData)
-		return
+
+		// No thumbnail available — need full data
+		if len(cachedScreenshot.Data) == 0 {
+			// We did a thumbOnly query but no thumb exists, re-fetch with full data
+			cachedScreenshot, cacheErr = getRecentScreenshot(domain)
+			if cacheErr != nil {
+				// Fall through to capture
+			}
+		}
+
+		if cacheErr == nil && len(cachedScreenshot.Data) > 0 {
+			c.Header("Cache-Control", "public, max-age=86400")
+			c.Header("Content-Type", cachedScreenshot.MIMEType)
+			c.Data(200, cachedScreenshot.MIMEType, cachedScreenshot.Data)
+			return
+		}
 	}
 
 	// Try to capture new screenshot
@@ -398,17 +450,17 @@ func ScreenshotHandler(c *gin.Context) {
 		// Log error server-side
 		log.Printf("Screenshot service error for %s: %v", domain, err)
 
-		// Fall back to cached screenshot if available
-		if cacheErr == nil {
+		// Fall back to cached screenshot if available (full query)
+		if cached, fallbackErr := getRecentScreenshot(domain); fallbackErr == nil {
 			log.Printf("Returning cached screenshot for %s after service error", domain)
-			imgData := cachedScreenshot.Data
-			if wantThumb && len(cachedScreenshot.ThumbnailData) > 0 {
-				imgData = cachedScreenshot.ThumbnailData
+			imgData := cached.Data
+			if wantThumb && len(cached.ThumbnailData) > 0 {
+				imgData = cached.ThumbnailData
 			}
 			c.Header("Cache-Control", "public, max-age=3600")
 			c.Header("X-Screenshot-Cached", "true")
-			c.Header("Content-Type", cachedScreenshot.MIMEType)
-			c.Data(200, cachedScreenshot.MIMEType, imgData)
+			c.Header("Content-Type", cached.MIMEType)
+			c.Data(200, cached.MIMEType, imgData)
 			return
 		}
 
@@ -923,50 +975,85 @@ func generateThumbnail(data []byte, targetWidth int) ([]byte, error) {
 
 func storeScreenshot(url string, data []byte, mimeType string) error {
 	db := database.GetDB()
+	normalizedURL := utils.StripProtocol(url)
 
-	screenshot := Screenshot{
-		ServerURL: utils.StripProtocol(url),
-		Data:      data,
-		CreatedAt: time.Now(),
-		MIMEType:  mimeType,
-	}
+	var thumbData []byte
+	var thumbW int
 
 	// Generate thumbnail for PNG images
 	if mimeType == "image/png" {
 		if thumb, err := generateThumbnail(data, thumbnailWidth); err == nil {
-			screenshot.ThumbnailData = thumb
-			screenshot.ThumbnailW = thumbnailWidth
+			thumbData = thumb
+			thumbW = thumbnailWidth
 		} else {
 			log.Printf("Failed to generate thumbnail for %s: %v", url, err)
 		}
 	}
 
-	return db.Create(&screenshot).Error
+	// Upsert: keep only one screenshot per server URL
+	var existing Screenshot
+	if err := db.Where("server_url = ?", normalizedURL).First(&existing).Error; err == nil {
+		return db.Model(&existing).Updates(map[string]interface{}{
+			"data":           data,
+			"thumbnail_data": thumbData,
+			"thumbnail_w":    thumbW,
+			"created_at":     time.Now(),
+			"mime_type":      mimeType,
+		}).Error
+	}
+
+	return db.Create(&Screenshot{
+		ServerURL:     normalizedURL,
+		Data:          data,
+		ThumbnailData: thumbData,
+		ThumbnailW:    thumbW,
+		CreatedAt:     time.Now(),
+		MIMEType:      mimeType,
+	}).Error
 }
 
 // storeScreenshotFailure records a failed screenshot attempt so we don't keep retrying.
 // The marker expires after 24 hours, at which point the next request will retry.
 func storeScreenshotFailure(url string, statusCode int) {
 	db := database.GetDB()
-	screenshot := Screenshot{
-		ServerURL: utils.StripProtocol(url),
-		Data:      nil,
-		CreatedAt: time.Now(),
-		MIMEType:  fmt.Sprintf("error/%d", statusCode),
+	normalizedURL := utils.StripProtocol(url)
+	mimeType := fmt.Sprintf("error/%d", statusCode)
+
+	var existing Screenshot
+	if err := db.Where("server_url = ?", normalizedURL).First(&existing).Error; err == nil {
+		db.Model(&existing).Updates(map[string]interface{}{
+			"data":           nil,
+			"thumbnail_data": nil,
+			"thumbnail_w":    0,
+			"created_at":     time.Now(),
+			"mime_type":      mimeType,
+		})
+		return
 	}
-	db.Create(&screenshot)
+
+	db.Create(&Screenshot{
+		ServerURL: normalizedURL,
+		CreatedAt: time.Now(),
+		MIMEType:  mimeType,
+	})
 }
 
 const screenshotFailureRetry = 24 * time.Hour
 
-func getRecentScreenshot(url string) (*Screenshot, error) {
+// getRecentScreenshot loads a cached screenshot. When thumbOnly is true,
+// it avoids loading the full-size blob from SQLite — much faster for grid views.
+func getRecentScreenshot(url string, thumbOnly ...bool) (*Screenshot, error) {
 	db := database.GetDB()
 	var screenshot Screenshot
 
 	query := db.Where("server_url = ?", url)
 
-	err := query.Order("created_at DESC").First(&screenshot).Error
+	if len(thumbOnly) > 0 && thumbOnly[0] {
+		// Only load thumbnail + metadata, skip the heavy full-size blob
+		query = query.Select("id, server_url, thumbnail_data, thumbnail_w, created_at, mime_type")
+	}
 
+	err := query.First(&screenshot).Error
 	if err != nil {
 		return nil, err
 	}
@@ -976,7 +1063,6 @@ func getRecentScreenshot(url string) (*Screenshot, error) {
 		if time.Since(screenshot.CreatedAt) < screenshotFailureRetry {
 			return &screenshot, nil
 		}
-		// Expired failure — treat as no screenshot
 		return nil, gorm.ErrRecordNotFound
 	}
 

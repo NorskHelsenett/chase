@@ -19,6 +19,8 @@
 	let visibleCount = $state(24);
 	const batchSize = 24;
 	let sentinelEl: HTMLElement | undefined = $state();
+	let lastSearchTerm = $state('');
+	let lastStatusFilter = $state('');
 
 	run(() => {
 		activeFilter = $page.url.searchParams.get('active');
@@ -62,7 +64,13 @@
 			}
 
 			filteredServers = result;
-			visibleCount = batchSize;
+
+			// Only reset scroll position when user changes filters, not on SSE updates
+			if (searchTerm !== lastSearchTerm || $statusFilter !== lastStatusFilter) {
+				visibleCount = batchSize;
+				lastSearchTerm = searchTerm;
+				lastStatusFilter = $statusFilter;
+			}
 		}
 	});
 
