@@ -8,6 +8,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/norskhelsenett/chase/database"
+	"github.com/norskhelsenett/chase/security"
 	"github.com/norskhelsenett/chase/types"
 	"gorm.io/gorm"
 )
@@ -172,8 +173,9 @@ func AddServer(c *gin.Context) {
 	// Send push notification for new server
 	go NotifyServerAdded(server.ID, server.URL)
 
-	// Start the ping in a goroutine without waiting for the result
+	// Start ping and security scan in background
 	go checkServer(server.ID, nil)
+	go security.RunBackgroundScan(server.URL)
 
 	c.JSON(201, server)
 }

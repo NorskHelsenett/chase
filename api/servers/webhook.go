@@ -6,6 +6,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/norskhelsenett/chase/database"
+	"github.com/norskhelsenett/chase/security"
 )
 
 type webhookServerRequest struct {
@@ -67,6 +68,7 @@ func AddServerFromWebhook(c *gin.Context) {
 
 	go NotifyServerAdded(server.ID, server.URL)
 	go checkServer(server.ID, nil)
+	go security.RunBackgroundScan(server.URL)
 
 	c.JSON(201, server)
 }

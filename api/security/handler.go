@@ -476,6 +476,12 @@ func LastSecurityScanHandler(c *gin.Context) {
 	})
 }
 
+// RunBackgroundScan triggers a security scan for the given server URL in the current goroutine.
+// Call this with `go` to run it in the background.
+func RunBackgroundScan(serverURL string) {
+	runBackgroundScan(serverURL)
+}
+
 func runBackgroundScan(serverURL string) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
