@@ -80,18 +80,24 @@ func RunDatabaseCleanup() {
 
 func backfillThumbnails() {
 	db := database.GetDB()
-	var screenshots []Screenshot
-	// Find PNGs without thumbnails (thumbnail_data is NULL or empty)
-	db.Where("mime_type = ? AND (thumbnail_data IS NULL OR length(thumbnail_data) = 0)", "image/png").
-		Select("id, server_url, data, mime_type").
-		Find(&screenshots)
 
-	if len(screenshots) == 0 {
+	// Get IDs only — don't load blobs into memory
+	var ids []uint
+	db.Model(&Screenshot{}).
+		Where("mime_type = ? AND (thumbnail_data IS NULL OR length(thumbnail_data) = 0)", "image/png").
+		Pluck("id", &ids)
+
+	if len(ids) == 0 {
 		return
 	}
 
-	log.Printf("Backfilling thumbnails for %d screenshots", len(screenshots))
-	for _, s := range screenshots {
+	log.Printf("Backfilling thumbnails for %d screenshots", len(ids))
+	for _, id := range ids {
+		// Load one screenshot at a time
+		var s Screenshot
+		if err := db.First(&s, id).Error; err != nil {
+			continue
+		}
 		if len(s.Data) == 0 {
 			continue
 		}
@@ -104,6 +110,8 @@ func backfillThumbnails() {
 			"thumbnail_data": thumb,
 			"thumbnail_w":    thumbnailWidth,
 		})
+		// Let GC reclaim the blob memory
+		s.Data = nil
 	}
 	log.Printf("Thumbnail backfill complete")
 }
