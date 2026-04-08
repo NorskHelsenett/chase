@@ -110,8 +110,9 @@ func backfillThumbnails() {
 			"thumbnail_data": thumb,
 			"thumbnail_w":    thumbnailWidth,
 		})
-		// Let GC reclaim the blob memory
+		// Let GC reclaim memory
 		s.Data = nil
+		thumb = nil
 	}
 	log.Printf("Thumbnail backfill complete")
 }

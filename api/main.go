@@ -146,6 +146,25 @@ func main() {
 
 	db = database.GetDB()
 	handlers.InitHealth(appStart)
+
+	// Start HTTP server early so health probes pass during init
+	r := gin.Default()
+	r.Use(gin.Recovery())
+	r.Use(gzip.Gzip(gzip.DefaultCompression))
+	r.Use(securityHeaders())
+
+	r.GET("/livez", handlers.LivenessProbe)
+	r.GET("/readyz", handlers.ReadinessProbe)
+	r.GET("/healthz", handlers.HealthProbe)
+
+	go func() {
+		log.Println("Starting health endpoint on :8080")
+		if err := r.Run(":8080"); err != nil {
+			log.Fatalf("Failed to start server: %v", err)
+		}
+	}()
+
+	// Schema migrations
 	servers.AutoMigrate(db)
 	db.AutoMigrate(&security.BatchJobStore{}, &security.BatchResultStore{})
 	security.InitDatabase()
@@ -158,42 +177,34 @@ func main() {
 		log.Println("Web push notification system initialized")
 	}
 
-	// Run all cleanup sequentially in one goroutine to avoid SQLite lock contention
-	go func() {
-		time.Sleep(5 * time.Second) // let the app start serving first
-		log.Println("Starting database cleanup...")
-		security.RunDatabaseCleanup()
-		servers.AggregateAndPrunePings()
-		log.Println("Database cleanup complete")
-	}()
-
-	go servers.StartMonitoring()
-	go servers.StartGeoCacheRefresh()
-
 	// Initialize the OIDC configuration
 	if err := auth.InitOIDC(); err != nil {
 		log.Printf("Failed to initialize OIDC: %v", err)
-		// log.Fatalf("Failed to initialize OIDC: %v", err)
 	}
 
 	if err := session.Init(); err != nil {
 		log.Fatalf("Unable to initalize session storage: %v", err)
 	}
 
-	r := gin.Default()
-	r.Use(gin.Recovery())
-	r.Use(gzip.Gzip(gzip.DefaultCompression))
-	r.Use(securityHeaders())
-
-	r.GET("/livez", handlers.LivenessProbe)
-	r.GET("/readyz", handlers.ReadinessProbe)
-	r.GET("/healthz", handlers.HealthProbe)
-
+	// Register all routes (added to the already-running server)
 	setupRoutes(r)
 
 	spaDirectory := utils.GetEnv("WEB_DIR", "../web")
-
 	r.Use(spa.Middleware("/", spaDirectory))
 
-	r.Run(":8080")
+	log.Println("Application routes registered")
+
+	go servers.StartMonitoring()
+	go servers.StartGeoCacheRefresh()
+
+	// Run all cleanup sequentially in one goroutine to avoid SQLite lock contention
+	go func() {
+		log.Println("Starting database cleanup...")
+		security.RunDatabaseCleanup()
+		servers.AggregateAndPrunePings()
+		log.Println("Database cleanup complete")
+	}()
+
+	// Block forever (server runs in goroutine above)
+	select {}
 }
