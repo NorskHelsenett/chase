@@ -85,25 +85,39 @@ func aggregateAndPrunePings(db *gorm.DB) {
 
 	if len(hourlyRows) > 0 {
 		log.Printf("Aggregating %d hourly ping summaries (7-30 days)", len(hourlyRows))
-		for _, r := range hourlyRows {
-			hour, _ := time.Parse("2006-01-02 15:04:05", r.Bucket)
-			var existing PingHourlySummary
-			if err := db.Where("server_id = ? AND hour = ?", r.ServerID, hour).First(&existing).Error; err == nil {
-				db.Model(&existing).Updates(map[string]interface{}{
-					"total": r.Total, "successful": r.Successful, "failed": r.Failed,
-					"avg_response_time": r.AvgResponseTime, "min_response_time": r.MinResponseTime, "max_response_time": r.MaxResponseTime,
-				})
-			} else {
-				db.Create(&PingHourlySummary{
-					ServerID: r.ServerID, Hour: hour, Total: r.Total, Successful: r.Successful, Failed: r.Failed,
-					AvgResponseTime: r.AvgResponseTime, MinResponseTime: r.MinResponseTime, MaxResponseTime: r.MaxResponseTime,
-				})
+
+		// Use INSERT OR REPLACE in batches via raw SQL to avoid row-by-row locking
+		const batchSize = 500
+		for i := 0; i < len(hourlyRows); i += batchSize {
+			end := i + batchSize
+			if end > len(hourlyRows) {
+				end = len(hourlyRows)
 			}
+			batch := hourlyRows[i:end]
+
+			tx := db.Begin()
+			for _, r := range batch {
+				hour, _ := time.Parse("2006-01-02 15:04:05", r.Bucket)
+				tx.Exec(`INSERT INTO ping_hourly_summaries (server_id, hour, total, successful, failed, avg_response_time, min_response_time, max_response_time)
+					VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+					ON CONFLICT(server_id, hour) DO UPDATE SET
+						total=excluded.total, successful=excluded.successful, failed=excluded.failed,
+						avg_response_time=excluded.avg_response_time, min_response_time=excluded.min_response_time, max_response_time=excluded.max_response_time`,
+					r.ServerID, hour, r.Total, r.Successful, r.Failed, r.AvgResponseTime, r.MinResponseTime, r.MaxResponseTime)
+			}
+			tx.Commit()
+
+			// Yield the write lock between batches so monitoring can write
 		}
 
-		// Delete raw pings that are now aggregated (7-30 days old)
-		result := db.Unscoped().Where("timestamp < ? AND timestamp >= ?", weekAgo, monthAgo).Delete(&PingResult{})
-		log.Printf("Pruned %d raw pings (7-30 days old)", result.RowsAffected)
+		// Delete raw pings in batches to avoid long lock holds
+		for {
+			result := db.Exec(`DELETE FROM ping_results WHERE id IN (SELECT id FROM ping_results WHERE timestamp < ? AND timestamp >= ? AND deleted_at IS NULL LIMIT 10000)`, weekAgo, monthAgo)
+			if result.RowsAffected == 0 {
+				break
+			}
+			log.Printf("Pruned %d raw pings (7-30 days old)", result.RowsAffected)
+		}
 	}
 
 	// --- Tier 3: hourly summaries older than 30 days → daily summaries ---
@@ -124,37 +138,54 @@ func aggregateAndPrunePings(db *gorm.DB) {
 
 	if len(dailyRows) > 0 {
 		log.Printf("Aggregating %d daily ping summaries (30+ days)", len(dailyRows))
-		for _, r := range dailyRows {
-			date, _ := time.Parse("2006-01-02", r.Bucket)
-			var existing PingDailySummary
-			if err := db.Where("server_id = ? AND date = ?", r.ServerID, date).First(&existing).Error; err == nil {
-				db.Model(&existing).Updates(map[string]interface{}{
-					"total": r.Total, "successful": r.Successful, "failed": r.Failed,
-					"avg_response_time": r.AvgResponseTime, "min_response_time": r.MinResponseTime, "max_response_time": r.MaxResponseTime,
-				})
-			} else {
-				db.Create(&PingDailySummary{
-					ServerID: r.ServerID, Date: date, Total: r.Total, Successful: r.Successful, Failed: r.Failed,
-					AvgResponseTime: r.AvgResponseTime, MinResponseTime: r.MinResponseTime, MaxResponseTime: r.MaxResponseTime,
-				})
+
+		const batchSize = 500
+		for i := 0; i < len(dailyRows); i += batchSize {
+			end := i + batchSize
+			if end > len(dailyRows) {
+				end = len(dailyRows)
 			}
+			batch := dailyRows[i:end]
+
+			tx := db.Begin()
+			for _, r := range batch {
+				date, _ := time.Parse("2006-01-02", r.Bucket)
+				tx.Exec(`INSERT INTO ping_daily_summaries (server_id, date, total, successful, failed, avg_response_time, min_response_time, max_response_time)
+					VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+					ON CONFLICT(server_id, date) DO UPDATE SET
+						total=excluded.total, successful=excluded.successful, failed=excluded.failed,
+						avg_response_time=excluded.avg_response_time, min_response_time=excluded.min_response_time, max_response_time=excluded.max_response_time`,
+					r.ServerID, date, r.Total, r.Successful, r.Failed, r.AvgResponseTime, r.MinResponseTime, r.MaxResponseTime)
+			}
+			tx.Commit()
 		}
 
-		// Delete hourly summaries now rolled into daily
-		result := db.Where("hour < ?", monthAgo).Delete(&PingHourlySummary{})
-		log.Printf("Pruned %d hourly summaries (30+ days old)", result.RowsAffected)
+		// Delete old hourly summaries in batches
+		for {
+			result := db.Exec(`DELETE FROM ping_hourly_summaries WHERE id IN (SELECT id FROM ping_hourly_summaries WHERE hour < ? LIMIT 10000)`, monthAgo)
+			if result.RowsAffected == 0 {
+				break
+			}
+			log.Printf("Pruned %d hourly summaries (30+ days old)", result.RowsAffected)
+		}
 	}
 
-	// --- Also delete any raw pings older than 30 days (in case they were missed) ---
-	result := db.Unscoped().Where("timestamp < ?", monthAgo).Delete(&PingResult{})
-	if result.RowsAffected > 0 {
+	// --- Delete any raw pings older than 30 days in batches ---
+	for {
+		result := db.Exec(`DELETE FROM ping_results WHERE id IN (SELECT id FROM ping_results WHERE timestamp < ? LIMIT 10000)`, monthAgo)
+		if result.RowsAffected == 0 {
+			break
+		}
 		log.Printf("Pruned %d raw pings older than 30 days", result.RowsAffected)
 	}
 
-	// --- Clean up orphaned ping_details ---
-	orphaned := db.Exec(`DELETE FROM ping_details WHERE id NOT IN (SELECT DISTINCT detail_id FROM ping_results WHERE detail_id IS NOT NULL)`)
-	if orphaned.RowsAffected > 0 {
-		log.Printf("Pruned %d orphaned ping details", orphaned.RowsAffected)
+	// --- Clean up orphaned ping_details in batches ---
+	for {
+		result := db.Exec(`DELETE FROM ping_details WHERE id IN (SELECT id FROM ping_details WHERE id NOT IN (SELECT DISTINCT detail_id FROM ping_results WHERE detail_id IS NOT NULL) LIMIT 10000)`)
+		if result.RowsAffected == 0 {
+			break
+		}
+		log.Printf("Pruned %d orphaned ping details", result.RowsAffected)
 	}
 
 	log.Printf("Ping aggregation complete")

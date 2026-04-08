@@ -110,9 +110,10 @@ func backfillThumbnails() {
 			"thumbnail_data": thumb,
 			"thumbnail_w":    thumbnailWidth,
 		})
-		// Let GC reclaim memory
+		// Let GC reclaim memory and yield the SQLite write lock to other goroutines
 		s.Data = nil
 		thumb = nil
+		time.Sleep(100 * time.Millisecond)
 	}
 	log.Printf("Thumbnail backfill complete")
 }
