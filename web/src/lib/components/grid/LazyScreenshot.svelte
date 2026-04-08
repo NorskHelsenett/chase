@@ -6,11 +6,11 @@
 	let imageErrors = $state({});
 	let imageLoaded = $state({});
 
-	function checkImage(url) {
+	function checkImage(url, preloadUrl) {
 		const img = new Image();
 		img.onload = () => (imageLoaded[url] = true);
 		img.onerror = () => (imageErrors[url] = true);
-		img.src = url;
+		img.src = preloadUrl || url;
 	}
 
 	function lazyCheck(node, url) {
@@ -26,7 +26,7 @@
 			observer = new IntersectionObserver(
 				([entry]) => {
 					if (entry.isIntersecting) {
-						checkImage(currentUrl);
+						checkImage(currentUrl, thumbUrl || currentUrl);
 					}
 				},
 				{
@@ -63,7 +63,7 @@
 		const observer = new IntersectionObserver(([entry]) => {
 			isVisible = entry.isIntersecting;
 			if (isVisible && imageUrl) {
-				checkImage(imageUrl);
+				checkImage(imageUrl, thumbUrl || imageUrl);
 			}
 		});
 
@@ -76,13 +76,15 @@
 		};
 	}
 
-	let { site, getScreenshotUrl } = $props();
+	let { site, getScreenshotUrl, getThumbUrl = undefined } = $props();
 
 	let prevImageUrl = $state('');
 	let imageUrl = $state();
+	let thumbUrl = $state();
 
 	run(() => {
 		imageUrl = getScreenshotUrl(site.url);
+		thumbUrl = getThumbUrl ? getThumbUrl(site.url) : undefined;
 		// Reset states when URL changes
 		if (imageUrl !== prevImageUrl) {
 			delete imageLoaded[prevImageUrl];
@@ -95,11 +97,25 @@
 <!-- Container that triggers lazy load -->
 <div use:lazyCheck={imageUrl} class="w-full h-full">
 	{#if imageLoaded[imageUrl]}
-		<img
-			src={imageUrl}
-			alt={`Screenshot of ${site.url}`}
-			class="absolute inset-0 w-full h-full object-cover transition-all duration-300 group-hover:scale-105 group-hover:brightness-105 rounded-t-xl"
-		/>
+		{#if thumbUrl}
+			<img
+				src={thumbUrl}
+				srcset="{thumbUrl} 480w, {imageUrl} 1280w"
+				sizes="(max-width: 768px) 100vw, (max-width: 1024px) 50vw, 25vw"
+				alt={`Screenshot of ${site.url}`}
+				loading="lazy"
+				decoding="async"
+				class="absolute inset-0 w-full h-full object-cover transition-all duration-300 group-hover:scale-105 group-hover:brightness-105 rounded-t-xl"
+			/>
+		{:else}
+			<img
+				src={imageUrl}
+				alt={`Screenshot of ${site.url}`}
+				loading="lazy"
+				decoding="async"
+				class="absolute inset-0 w-full h-full object-cover transition-all duration-300 group-hover:scale-105 group-hover:brightness-105 rounded-t-xl"
+			/>
+		{/if}
 	{:else if imageErrors[imageUrl]}
 		<div
 			class="absolute inset-0 flex flex-col items-center justify-center bg-black/70 text-gray-300 rounded-xl p-4 backdrop-blur-sm"

@@ -1,10 +1,14 @@
 package security
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"image"
+	"image/color"
+	"image/png"
 	"io"
 	"log"
 	"math"
@@ -37,13 +41,15 @@ type SecurityReportRecord struct {
 	ScannerVersion string `gorm:"type:varchar(16);index"`
 }
 
-// Screenshot stores binary screenshot data
+// Screenshot stores binary screenshot data with an optional pre-generated thumbnail
 type Screenshot struct {
-	ID        uint   `gorm:"primaryKey"`
-	ServerURL string `gorm:"index"`
-	Data      []byte `gorm:"type:blob"`
-	CreatedAt time.Time
-	MIMEType  string
+	ID            uint   `gorm:"primaryKey"`
+	ServerURL     string `gorm:"index"`
+	Data          []byte `gorm:"type:blob"`
+	ThumbnailData []byte `gorm:"type:blob"`
+	ThumbnailW    int
+	CreatedAt     time.Time
+	MIMEType      string
 }
 
 type ReportStatusResponse struct {
@@ -352,6 +358,9 @@ func ScreenshotHandler(c *gin.Context) {
 	fullSizeParam := strings.ToLower(c.Query("fullSize"))
 	fullSize := fullSizeParam == "true"
 
+	// thumb=true serves the pre-generated thumbnail instead of full image
+	wantThumb := strings.ToLower(c.Query("thumb")) == "true"
+
 	// Parse wait parameter as integer seconds with a default of 3
 	waitStr := c.DefaultQuery("waitTime", "3")
 	if waitStr == "" {
@@ -367,9 +376,13 @@ func ScreenshotHandler(c *gin.Context) {
 
 	// If preferCached is set and cache exists, return it immediately
 	if preferCached && cacheErr == nil {
+		imgData := cachedScreenshot.Data
+		if wantThumb && len(cachedScreenshot.ThumbnailData) > 0 {
+			imgData = cachedScreenshot.ThumbnailData
+		}
 		c.Header("Cache-Control", "public, max-age=86400") // 24 hours
 		c.Header("Content-Type", cachedScreenshot.MIMEType)
-		c.Data(200, cachedScreenshot.MIMEType, cachedScreenshot.Data)
+		c.Data(200, cachedScreenshot.MIMEType, imgData)
 		return
 	}
 
@@ -382,10 +395,14 @@ func ScreenshotHandler(c *gin.Context) {
 		// Fall back to cached screenshot if available
 		if cacheErr == nil {
 			log.Printf("Returning cached screenshot for %s after service error", domain)
+			imgData := cachedScreenshot.Data
+			if wantThumb && len(cachedScreenshot.ThumbnailData) > 0 {
+				imgData = cachedScreenshot.ThumbnailData
+			}
 			c.Header("Cache-Control", "public, max-age=3600")
 			c.Header("X-Screenshot-Cached", "true")
 			c.Header("Content-Type", cachedScreenshot.MIMEType)
-			c.Data(200, cachedScreenshot.MIMEType, cachedScreenshot.Data)
+			c.Data(200, cachedScreenshot.MIMEType, imgData)
 			return
 		}
 
@@ -818,6 +835,77 @@ func notifySecurityTxtExpiring90DaysHelper(serverID uint, serverURL, serverName 
 	}
 }
 
+const thumbnailWidth = 480
+
+// generateThumbnail creates a smaller PNG from the full-size image using bilinear interpolation.
+func generateThumbnail(data []byte, targetWidth int) ([]byte, error) {
+	src, err := png.Decode(bytes.NewReader(data))
+	if err != nil {
+		return nil, err
+	}
+
+	srcBounds := src.Bounds()
+	srcW := srcBounds.Dx()
+	srcH := srcBounds.Dy()
+
+	if targetWidth >= srcW {
+		return data, nil
+	}
+
+	targetHeight := srcH * targetWidth / srcW
+	dst := image.NewRGBA(image.Rect(0, 0, targetWidth, targetHeight))
+
+	xRatio := float64(srcW) / float64(targetWidth)
+	yRatio := float64(srcH) / float64(targetHeight)
+
+	for y := 0; y < targetHeight; y++ {
+		for x := 0; x < targetWidth; x++ {
+			// Bilinear interpolation
+			srcXf := float64(x)*xRatio + float64(srcBounds.Min.X)
+			srcYf := float64(y)*yRatio + float64(srcBounds.Min.Y)
+
+			x0 := int(srcXf)
+			y0 := int(srcYf)
+			x1 := x0 + 1
+			y1 := y0 + 1
+
+			if x1 >= srcBounds.Max.X {
+				x1 = srcBounds.Max.X - 1
+			}
+			if y1 >= srcBounds.Max.Y {
+				y1 = srcBounds.Max.Y - 1
+			}
+
+			xFrac := srcXf - float64(x0)
+			yFrac := srcYf - float64(y0)
+
+			r00, g00, b00, a00 := src.At(x0, y0).RGBA()
+			r10, g10, b10, a10 := src.At(x1, y0).RGBA()
+			r01, g01, b01, a01 := src.At(x0, y1).RGBA()
+			r11, g11, b11, a11 := src.At(x1, y1).RGBA()
+
+			lerp := func(v00, v10, v01, v11 uint32) uint8 {
+				top := float64(v00)*(1-xFrac) + float64(v10)*xFrac
+				bot := float64(v01)*(1-xFrac) + float64(v11)*xFrac
+				return uint8((top*(1-yFrac) + bot*yFrac) / 257)
+			}
+
+			dst.SetRGBA(x, y, color.RGBA{
+				R: lerp(r00, r10, r01, r11),
+				G: lerp(g00, g10, g01, g11),
+				B: lerp(b00, b10, b01, b11),
+				A: lerp(a00, a10, a01, a11),
+			})
+		}
+	}
+
+	var buf bytes.Buffer
+	if err := png.Encode(&buf, dst); err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
+}
+
 func storeScreenshot(url string, data []byte, mimeType string) error {
 	db := database.GetDB()
 
@@ -827,6 +915,17 @@ func storeScreenshot(url string, data []byte, mimeType string) error {
 		CreatedAt: time.Now(),
 		MIMEType:  mimeType,
 	}
+
+	// Generate thumbnail for PNG images
+	if mimeType == "image/png" {
+		if thumb, err := generateThumbnail(data, thumbnailWidth); err == nil {
+			screenshot.ThumbnailData = thumb
+			screenshot.ThumbnailW = thumbnailWidth
+		} else {
+			log.Printf("Failed to generate thumbnail for %s: %v", url, err)
+		}
+	}
+
 	return db.Create(&screenshot).Error
 }
 

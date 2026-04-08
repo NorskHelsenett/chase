@@ -16,6 +16,11 @@
 		return `/api/screenshot/${cleanUrl}?cached=true`;
 	}
 
+	function getThumbUrl(url: string) {
+		const cleanUrl = url.replace(/^(https?:\/\/)/, '').replace(/\/$/, '');
+		return `/api/screenshot/${cleanUrl}?cached=true&thumb=true`;
+	}
+
 	function openModal(index: number) {
 		selectedImageIndex = index;
 	}
@@ -79,7 +84,7 @@
 					aria-label="Screenshot of {site.url}. Click to view larger, Cmd or Ctrl click to visit website."
 				>
 					<div class="relative w-full pb-[56.25%] overflow-hidden">
-						<LazyScreenshot {site} {getScreenshotUrl} />
+						<LazyScreenshot {site} {getScreenshotUrl} {getThumbUrl} />
 
 						<!-- Status badge -->
 						<div

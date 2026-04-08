@@ -439,65 +439,84 @@ func GetServersGeo(c *gin.Context) {
 		pingByServerWithDetail[latestPings[i].ServerID] = &latestPings[i]
 	}
 
-	// Phase 2: Parallel DNS resolution for all servers
+	// Phase 2: Collect IPs from ping details; only DNS-resolve servers without a known IP
 	type serverData struct {
 		srv    *Server
 		ips    []string
 		status string
 	}
 
-	type dnsResult struct {
+	// First pass: use ping detail IPs (instant, no network), track servers needing DNS
+	type dnsPending struct {
 		index int
-		ips   []string
+		host  string
 	}
-	dnsCh := make(chan dnsResult, len(srvs))
-	var dnsWg sync.WaitGroup
-	dnsSem := make(chan struct{}, 50)
+	var needDNS []dnsPending
+	pingIPs := make(map[int]string, len(srvs)) // index -> IP from ping
 
 	for i, srv := range srvs {
+		if ping, ok := pingByServerWithDetail[srv.ID]; ok && ping.PingDetail != nil && ping.PingDetail.IP != "" {
+			if !isPrivateIP(ping.PingDetail.IP) {
+				pingIPs[i] = ping.PingDetail.IP
+				continue
+			}
+		}
+		// No ping IP — need DNS fallback
 		host := strings.TrimPrefix(strings.TrimPrefix(srv.URL, "https://"), "http://")
 		if idx := strings.Index(host, "/"); idx != -1 {
 			host = host[:idx]
 		}
+		needDNS = append(needDNS, dnsPending{index: i, host: host})
+	}
 
-		dnsWg.Add(1)
-		go func(idx int, h string) {
-			defer dnsWg.Done()
-			dnsSem <- struct{}{}
-			defer func() { <-dnsSem }()
+	// Parallel DNS only for servers without a ping IP
+	type dnsResult struct {
+		index int
+		ips   []string
+	}
+	dnsResultsByIdx := make(map[int][]string, len(needDNS))
 
-			var ips []string
-			if resolved, err := net.LookupHost(h); err == nil {
-				for _, ip := range resolved {
-					if !isPrivateIP(ip) {
-						ips = append(ips, ip)
+	if len(needDNS) > 0 {
+		dnsCh := make(chan dnsResult, len(needDNS))
+		var dnsWg sync.WaitGroup
+		dnsSem := make(chan struct{}, 50)
+
+		for _, pending := range needDNS {
+			dnsWg.Add(1)
+			go func(idx int, h string) {
+				defer dnsWg.Done()
+				dnsSem <- struct{}{}
+				defer func() { <-dnsSem }()
+
+				var ips []string
+				if resolved, err := net.LookupHost(h); err == nil {
+					for _, ip := range resolved {
+						if !isPrivateIP(ip) {
+							ips = append(ips, ip)
+						}
 					}
 				}
-			}
-			dnsCh <- dnsResult{index: idx, ips: ips}
-		}(i, host)
-	}
-	dnsWg.Wait()
-	close(dnsCh)
+				dnsCh <- dnsResult{index: idx, ips: ips}
+			}(pending.index, pending.host)
+		}
+		dnsWg.Wait()
+		close(dnsCh)
 
-	dnsResultsByIdx := make(map[int][]string, len(srvs))
-	for r := range dnsCh {
-		dnsResultsByIdx[r.index] = r.ips
+		for r := range dnsCh {
+			dnsResultsByIdx[r.index] = r.ips
+		}
 	}
 
-	// Assemble server data with IPs from pings + DNS
+	// Assemble server data from ping IPs + DNS fallback
 	allData := make([]serverData, 0, len(srvs))
 	allIPs := make(map[string]bool)
 
 	for i, srv := range srvs {
 		ipSet := make(map[string]bool)
 
-		if ping, ok := pingByServerWithDetail[srv.ID]; ok && ping.PingDetail != nil && ping.PingDetail.IP != "" {
-			if !isPrivateIP(ping.PingDetail.IP) {
-				ipSet[ping.PingDetail.IP] = true
-			}
+		if ip, ok := pingIPs[i]; ok {
+			ipSet[ip] = true
 		}
-
 		for _, ip := range dnsResultsByIdx[i] {
 			ipSet[ip] = true
 		}
@@ -512,7 +531,6 @@ func GetServersGeo(c *gin.Context) {
 			ips = append(ips, ip)
 		}
 
-		// Use status from fingerprint query (already computed)
 		status := "unknown"
 		if ping, ok := pingByServer[srv.ID]; ok {
 			if ping.Error != "" {
