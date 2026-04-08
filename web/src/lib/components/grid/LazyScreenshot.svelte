@@ -1,16 +1,15 @@
 <script>
 	import { run } from 'svelte/legacy';
 
-	import { onMount } from 'svelte';
-
 	let imageErrors = $state({});
 	let imageLoaded = $state({});
 
-	function checkImage(url, preloadUrl) {
+	function checkImage(url) {
+		if (imageLoaded[url] || imageErrors[url]) return;
 		const img = new Image();
 		img.onload = () => (imageLoaded[url] = true);
 		img.onerror = () => (imageErrors[url] = true);
-		img.src = preloadUrl || url;
+		img.src = url;
 	}
 
 	function lazyCheck(node, url) {
@@ -18,7 +17,6 @@
 		let observer;
 
 		function setupObserver() {
-			// Clear previous observer if it exists
 			if (observer) {
 				observer.disconnect();
 			}
@@ -26,18 +24,17 @@
 			observer = new IntersectionObserver(
 				([entry]) => {
 					if (entry.isIntersecting) {
-						checkImage(currentUrl, thumbUrl || currentUrl);
+						checkImage(currentUrl);
 					}
 				},
 				{
-					rootMargin: '100px' // preload a bit earlier
+					rootMargin: '100px'
 				}
 			);
 
 			observer.observe(node);
 		}
 
-		// Initial setup
 		setupObserver();
 
 		return {
@@ -55,68 +52,45 @@
 		};
 	}
 
-	// Track if component is visible
-	let isVisible = false;
-
-	// Function to check if element is in viewport
-	function checkVisibility(node) {
-		const observer = new IntersectionObserver(([entry]) => {
-			isVisible = entry.isIntersecting;
-			if (isVisible && imageUrl) {
-				checkImage(imageUrl, thumbUrl || imageUrl);
-			}
-		});
-
-		observer.observe(node);
-
-		return {
-			destroy() {
-				observer.disconnect();
-			}
-		};
-	}
-
 	let { site, getScreenshotUrl, getThumbUrl = undefined } = $props();
 
-	let prevImageUrl = $state('');
-	let imageUrl = $state();
-	let thumbUrl = $state();
+	// The display URL is what we actually show — thumb if available, full otherwise
+	let displayUrl = $state();
+	let fullUrl = $state();
+	let prevDisplayUrl = $state('');
 
 	run(() => {
-		imageUrl = getScreenshotUrl(site.url);
-		thumbUrl = getThumbUrl ? getThumbUrl(site.url) : undefined;
-		// Reset states when URL changes
-		if (imageUrl !== prevImageUrl) {
-			delete imageLoaded[prevImageUrl];
-			delete imageErrors[prevImageUrl];
-			prevImageUrl = imageUrl;
+		fullUrl = getScreenshotUrl(site.url);
+		displayUrl = getThumbUrl ? getThumbUrl(site.url) : fullUrl;
+		if (displayUrl !== prevDisplayUrl) {
+			delete imageLoaded[prevDisplayUrl];
+			delete imageErrors[prevDisplayUrl];
+			prevDisplayUrl = displayUrl;
 		}
 	});
 </script>
 
-<!-- Container that triggers lazy load -->
-<div use:lazyCheck={imageUrl} class="w-full h-full">
-	{#if imageLoaded[imageUrl]}
-		{#if thumbUrl}
+<!-- Container that triggers lazy load using the actual display URL -->
+<div use:lazyCheck={displayUrl} class="w-full h-full">
+	{#if imageLoaded[displayUrl]}
+		{#if getThumbUrl}
 			<img
-				src={thumbUrl}
-				srcset="{thumbUrl} 480w, {imageUrl} 1280w"
+				src={displayUrl}
+				srcset="{displayUrl} 480w, {fullUrl} 1280w"
 				sizes="(max-width: 768px) 100vw, (max-width: 1024px) 50vw, 25vw"
 				alt={`Screenshot of ${site.url}`}
-				loading="lazy"
 				decoding="async"
 				class="absolute inset-0 w-full h-full object-cover transition-all duration-300 group-hover:scale-105 group-hover:brightness-105 rounded-t-xl"
 			/>
 		{:else}
 			<img
-				src={imageUrl}
+				src={displayUrl}
 				alt={`Screenshot of ${site.url}`}
-				loading="lazy"
 				decoding="async"
 				class="absolute inset-0 w-full h-full object-cover transition-all duration-300 group-hover:scale-105 group-hover:brightness-105 rounded-t-xl"
 			/>
 		{/if}
-	{:else if imageErrors[imageUrl]}
+	{:else if imageErrors[displayUrl]}
 		<div
 			class="absolute inset-0 flex flex-col items-center justify-center bg-black/70 text-gray-300 rounded-xl p-4 backdrop-blur-sm"
 		>

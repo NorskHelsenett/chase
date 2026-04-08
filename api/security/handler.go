@@ -376,6 +376,12 @@ func ScreenshotHandler(c *gin.Context) {
 
 	// If preferCached is set and cache exists, return it immediately
 	if preferCached && cacheErr == nil {
+		// Failure marker — don't retry, just tell the client
+		if strings.HasPrefix(cachedScreenshot.MIMEType, "error/") {
+			c.Header("Cache-Control", "public, max-age=3600")
+			c.JSON(404, gin.H{"error": "Screenshot not available for this server"})
+			return
+		}
 		imgData := cachedScreenshot.Data
 		if wantThumb && len(cachedScreenshot.ThumbnailData) > 0 {
 			imgData = cachedScreenshot.ThumbnailData
@@ -606,21 +612,24 @@ func captureAndSendScreenshot(c *gin.Context, domain string, fullSize bool, wait
 		body, _ := io.ReadAll(resp.Body)
 		log.Printf("Screenshot service returned status %d for %s: %s", resp.StatusCode, domain, string(body))
 
-		// Handle client errors (4xx) - these are legitimate responses about the target
+		// Handle client errors (4xx) - target is not screenshottable
 		if resp.StatusCode >= 400 && resp.StatusCode < 500 {
-			if c != nil {
-				switch resp.StatusCode {
-				case http.StatusNotFound:
-					c.JSON(404, gin.H{"error": "Target site not found"})
-				case http.StatusForbidden:
-					c.JSON(403, gin.H{"error": "Access to target site forbidden"})
-				case http.StatusTooManyRequests:
+			// Don't retry rate limits
+			if resp.StatusCode == http.StatusTooManyRequests {
+				if c != nil {
 					c.JSON(429, gin.H{"error": "Rate limited, please try again later"})
-				default:
-					c.JSON(resp.StatusCode, gin.H{"error": fmt.Sprintf("Unable to capture screenshot: %d", resp.StatusCode)})
 				}
+				return nil
 			}
-			return nil // Return nil since we've already sent the response
+
+			// Store a failure marker so we don't keep retrying for this domain
+			log.Printf("Screenshot not available for %s (status %d), caching failure", domain, resp.StatusCode)
+			storeScreenshotFailure(domain, resp.StatusCode)
+
+			if c != nil {
+				c.JSON(resp.StatusCode, gin.H{"error": fmt.Sprintf("Unable to capture screenshot: %d", resp.StatusCode)})
+			}
+			return nil
 		}
 
 		// Server errors (5xx) - return error to trigger cache fallback
@@ -935,6 +944,21 @@ func storeScreenshot(url string, data []byte, mimeType string) error {
 	return db.Create(&screenshot).Error
 }
 
+// storeScreenshotFailure records a failed screenshot attempt so we don't keep retrying.
+// The marker expires after 24 hours, at which point the next request will retry.
+func storeScreenshotFailure(url string, statusCode int) {
+	db := database.GetDB()
+	screenshot := Screenshot{
+		ServerURL: utils.StripProtocol(url),
+		Data:      nil,
+		CreatedAt: time.Now(),
+		MIMEType:  fmt.Sprintf("error/%d", statusCode),
+	}
+	db.Create(&screenshot)
+}
+
+const screenshotFailureRetry = 24 * time.Hour
+
 func getRecentScreenshot(url string) (*Screenshot, error) {
 	db := database.GetDB()
 	var screenshot Screenshot
@@ -945,6 +969,15 @@ func getRecentScreenshot(url string) (*Screenshot, error) {
 
 	if err != nil {
 		return nil, err
+	}
+
+	// If this is a failure marker, only return it within the retry window
+	if strings.HasPrefix(screenshot.MIMEType, "error/") {
+		if time.Since(screenshot.CreatedAt) < screenshotFailureRetry {
+			return &screenshot, nil
+		}
+		// Expired failure — treat as no screenshot
+		return nil, gorm.ErrRecordNotFound
 	}
 
 	return &screenshot, nil
