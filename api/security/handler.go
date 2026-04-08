@@ -74,8 +74,8 @@ func RunDatabaseCleanup() {
 		log.Printf("Incremental vacuum complete")
 	}
 
-	// Backfill thumbnails for existing screenshots that don't have one
-	backfillThumbnails()
+	// Backfill thumbnails in background — slow, one-at-a-time, doesn't block cleanup
+	go backfillThumbnails()
 }
 
 func backfillThumbnails() {
