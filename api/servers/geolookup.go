@@ -1,12 +1,14 @@
 package servers
 
 import (
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"log"
 	"net"
 	"net/http"
 	"os"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -60,6 +62,13 @@ var (
 	geoMemCache   = make(map[string]*GeoResult)
 	geoMemCacheMu sync.RWMutex
 	geoCacheTTL   = 7 * 24 * time.Hour
+
+	// Response-level cache for GetServersGeo, invalidated by status fingerprint or TTL
+	geoResponseCache       *ServerGeoResponse
+	geoResponseFingerprint string
+	geoResponseCacheMu     sync.RWMutex
+	geoResponseTTL         = 8 * time.Hour
+	geoResponseCacheAt     time.Time
 )
 
 // privateRanges contains all RFC 1918 and other non-routable IP ranges
@@ -324,13 +333,73 @@ func lookupCustom(ip, baseURL string) (*GeoResult, error) {
 	return &result, nil
 }
 
+// computeStatusFingerprint builds a cheap hash from active server IDs and their
+// latest ping statuses. This avoids the expensive DNS + geo pipeline when nothing changed.
+func computeStatusFingerprint(db *gorm.DB) (string, []Server, map[uint]*PingResult) {
+	var srvs []Server
+	if err := db.Where("active = ?", true).Find(&srvs).Error; err != nil {
+		return "", nil, nil
+	}
+
+	if len(srvs) == 0 {
+		return "empty", srvs, nil
+	}
+
+	serverIDs := make([]uint, len(srvs))
+	for i := range srvs {
+		serverIDs[i] = srvs[i].ID
+	}
+
+	var latestPings []PingResult
+	db.Where("id IN (?)",
+		db.Model(&PingResult{}).
+			Select("MAX(id)").
+			Where("server_id IN ?", serverIDs).
+			Group("server_id"),
+	).Find(&latestPings)
+
+	pingByServer := make(map[uint]*PingResult, len(latestPings))
+	for i := range latestPings {
+		pingByServer[latestPings[i].ServerID] = &latestPings[i]
+	}
+
+	// Build deterministic fingerprint: sorted server IDs with their status
+	type entry struct {
+		id     uint
+		status string
+	}
+	entries := make([]entry, 0, len(srvs))
+	for _, srv := range srvs {
+		status := "unknown"
+		if ping, ok := pingByServer[srv.ID]; ok {
+			if ping.Error != "" {
+				status = "down"
+			} else if ping.StatusCode == srv.ExpectedStatusCode {
+				status = "up"
+			} else {
+				status = "down"
+			}
+		}
+		entries = append(entries, entry{id: srv.ID, status: status})
+	}
+	sort.Slice(entries, func(i, j int) bool { return entries[i].id < entries[j].id })
+
+	h := sha256.New()
+	for _, e := range entries {
+		fmt.Fprintf(h, "%d:%s,", e.id, e.status)
+	}
+	return fmt.Sprintf("%x", h.Sum(nil)), srvs, pingByServer
+}
+
 // GetServersGeo returns all active servers with their IP and geolocation data.
 // Response is deduplicated: servers reference IPs by string, geo data is a separate map.
+// Cached for up to 8 hours, invalidated immediately when server statuses change.
 func GetServersGeo(c *gin.Context) {
 	db := database.GetDB()
 
-	var srvs []Server
-	if err := db.Where("active = ?", true).Find(&srvs).Error; err != nil {
+	// Compute cheap fingerprint from server IDs + statuses (no DNS, no geo)
+	fingerprint, srvs, pingByServer := computeStatusFingerprint(db)
+	if srvs == nil {
 		c.JSON(500, gin.H{"error": "Failed to fetch servers"})
 		return
 	}
@@ -340,16 +409,23 @@ func GetServersGeo(c *gin.Context) {
 		return
 	}
 
-	// Build server ID list and lookup maps
+	// Serve from cache if fingerprint matches and TTL hasn't expired
+	geoResponseCacheMu.RLock()
+	if geoResponseCache != nil && geoResponseFingerprint == fingerprint && time.Since(geoResponseCacheAt) < geoResponseTTL {
+		resp := geoResponseCache
+		geoResponseCacheMu.RUnlock()
+		c.JSON(200, resp)
+		return
+	}
+	geoResponseCacheMu.RUnlock()
+
+	// Cache miss — full rebuild with preloaded ping details
 	serverIDs := make([]uint, len(srvs))
-	serverMap := make(map[uint]*Server, len(srvs))
 	for i := range srvs {
 		serverIDs[i] = srvs[i].ID
-		serverMap[srvs[i].ID] = &srvs[i]
 	}
 
-	// Phase 1: Batch-fetch latest ping per server (for status + IP from detail)
-	// Uses a subquery to get the max ping ID per server, then loads those rows with details.
+	// Re-fetch pings with PingDetail preloaded (fingerprint query skipped preload for speed)
 	var latestPings []PingResult
 	db.Where("id IN (?)",
 		db.Model(&PingResult{}).
@@ -358,42 +434,72 @@ func GetServersGeo(c *gin.Context) {
 			Group("server_id"),
 	).Preload("PingDetail").Find(&latestPings)
 
-	// Index pings by server ID
-	pingByServer := make(map[uint]*PingResult, len(latestPings))
+	pingByServerWithDetail := make(map[uint]*PingResult, len(latestPings))
 	for i := range latestPings {
-		pingByServer[latestPings[i].ServerID] = &latestPings[i]
+		pingByServerWithDetail[latestPings[i].ServerID] = &latestPings[i]
 	}
 
-	// Phase 2: Collect IPs per server (from ping detail + DNS) and determine status
+	// Phase 2: Parallel DNS resolution for all servers
 	type serverData struct {
 		srv    *Server
 		ips    []string
 		status string
 	}
+
+	type dnsResult struct {
+		index int
+		ips   []string
+	}
+	dnsCh := make(chan dnsResult, len(srvs))
+	var dnsWg sync.WaitGroup
+	dnsSem := make(chan struct{}, 50)
+
+	for i, srv := range srvs {
+		host := strings.TrimPrefix(strings.TrimPrefix(srv.URL, "https://"), "http://")
+		if idx := strings.Index(host, "/"); idx != -1 {
+			host = host[:idx]
+		}
+
+		dnsWg.Add(1)
+		go func(idx int, h string) {
+			defer dnsWg.Done()
+			dnsSem <- struct{}{}
+			defer func() { <-dnsSem }()
+
+			var ips []string
+			if resolved, err := net.LookupHost(h); err == nil {
+				for _, ip := range resolved {
+					if !isPrivateIP(ip) {
+						ips = append(ips, ip)
+					}
+				}
+			}
+			dnsCh <- dnsResult{index: idx, ips: ips}
+		}(i, host)
+	}
+	dnsWg.Wait()
+	close(dnsCh)
+
+	dnsResultsByIdx := make(map[int][]string, len(srvs))
+	for r := range dnsCh {
+		dnsResultsByIdx[r.index] = r.ips
+	}
+
+	// Assemble server data with IPs from pings + DNS
 	allData := make([]serverData, 0, len(srvs))
 	allIPs := make(map[string]bool)
 
-	for _, srv := range srvs {
+	for i, srv := range srvs {
 		ipSet := make(map[string]bool)
 
-		// IP from latest ping detail
-		if ping, ok := pingByServer[srv.ID]; ok && ping.PingDetail != nil && ping.PingDetail.IP != "" {
+		if ping, ok := pingByServerWithDetail[srv.ID]; ok && ping.PingDetail != nil && ping.PingDetail.IP != "" {
 			if !isPrivateIP(ping.PingDetail.IP) {
 				ipSet[ping.PingDetail.IP] = true
 			}
 		}
 
-		// DNS resolution
-		host := strings.TrimPrefix(strings.TrimPrefix(srv.URL, "https://"), "http://")
-		if idx := strings.Index(host, "/"); idx != -1 {
-			host = host[:idx]
-		}
-		if resolved, err := net.LookupHost(host); err == nil {
-			for _, ip := range resolved {
-				if !isPrivateIP(ip) {
-					ipSet[ip] = true
-				}
-			}
+		for _, ip := range dnsResultsByIdx[i] {
+			ipSet[ip] = true
 		}
 
 		if len(ipSet) == 0 {
@@ -406,7 +512,7 @@ func GetServersGeo(c *gin.Context) {
 			ips = append(ips, ip)
 		}
 
-		// Determine status from latest ping
+		// Use status from fingerprint query (already computed)
 		status := "unknown"
 		if ping, ok := pingByServer[srv.ID]; ok {
 			if ping.Error != "" {
@@ -461,5 +567,13 @@ func GetServersGeo(c *gin.Context) {
 		geo[ip] = *g
 	}
 
-	c.JSON(200, ServerGeoResponse{Servers: servers, Geo: geo})
+	resp := &ServerGeoResponse{Servers: servers, Geo: geo}
+
+	geoResponseCacheMu.Lock()
+	geoResponseCache = resp
+	geoResponseFingerprint = fingerprint
+	geoResponseCacheAt = time.Now()
+	geoResponseCacheMu.Unlock()
+
+	c.JSON(200, resp)
 }
