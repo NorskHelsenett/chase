@@ -16,14 +16,16 @@
 		days: DaySummary[];
 	};
 
-	export let server: Server;
-	export let hover = false;
+	interface Props {
+		server: Server;
+		hover?: boolean;
+	}
 
-	let rowData: ServerRowData;
+	let { server, hover = false }: Props = $props();
 
-	$: pingInfo = $pingData.get(server.ID);
+	let rowData: ServerRowData = $derived(mapServerToRowData(server, pingInfo));
 
-	$: rowData = mapServerToRowData(server, pingInfo);
+
 
 	function mapServerToRowData(server: Server, pingInfo: any): ServerRowData {
 		let status: 'up' | 'down' = 'down';
@@ -87,6 +89,8 @@
 	function formatDayTooltip(day: DaySummary): string {
 		return `${day.date}\n${day.uptime.toFixed(1)}% (${day.successful}/${day.total})`;
 	}
+	let pingInfo = $derived($pingData.get(server.ID));
+	
 </script>
 
 <td class="cell cell-status" class:hoverable={hover}>
@@ -102,7 +106,7 @@
 				class="favicon"
 				src={server.favicon.startsWith('http') ? server.favicon : `https://${server.url}${server.favicon.startsWith('/') ? '' : '/'}${server.favicon}`}
 				alt=""
-				on:error={(e) => e.currentTarget.style.display = 'none'}
+				onerror={(e) => e.currentTarget.style.display = 'none'}
 			/>
 		{/if}
 		<div class="domain-text-wrap">

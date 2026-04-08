@@ -1,11 +1,17 @@
 <script lang="ts">
+	import { run } from 'svelte/legacy';
+
 	import { onMount } from 'svelte';
 	import { browser } from '$app/environment';
 
-	export let data: Array<{ timestamp: Date; value: number }> = [];
+	interface Props {
+		data?: Array<{ timestamp: Date; value: number }>;
+	}
 
-	let chartElement: HTMLElement;
-	let chart: any;
+	let { data = [] }: Props = $props();
+
+	let chartElement: HTMLElement = $state();
+	let chart: any = $state();
 	let ApexCharts: any;
 
 	// Increased window size for smoother moving average
@@ -137,27 +143,29 @@
 		}
 	};
 
-	$: if (chart && data) {
-		const smoothedData = calculateMovingAverage(data);
-		chart.updateOptions({
-			yaxis: {
-				min: 0,
-				max: Math.max(...data.map((d) => d.value)) + 5,
-				tickAmount: 6,
-				labels: {
-					style: {
-						colors: '#9ca3af'
+	run(() => {
+		if (chart && data) {
+			const smoothedData = calculateMovingAverage(data);
+			chart.updateOptions({
+				yaxis: {
+					min: 0,
+					max: Math.max(...data.map((d) => d.value)) + 5,
+					tickAmount: 6,
+					labels: {
+						style: {
+							colors: '#9ca3af'
+						}
 					}
-				}
-			},
-			series: [
-				{
-					name: 'Response Time',
-					data: smoothedData
-				}
-			]
-		});
-	}
+				},
+				series: [
+					{
+						name: 'Response Time',
+						data: smoothedData
+					}
+				]
+			});
+		}
+	});
 
 	onMount(async () => {
 		await initChart();

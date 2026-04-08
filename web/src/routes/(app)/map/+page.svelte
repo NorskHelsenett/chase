@@ -1,4 +1,6 @@
 <script lang="ts">
+	import { run } from 'svelte/legacy';
+
 	import { onMount, onDestroy, tick } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { MapPin, Network, Globe } from 'lucide-svelte';
@@ -30,41 +32,19 @@
 		geo: Record<string, GeoInfo>;
 	};
 
-	let servers: ServerGeo[] = [];
-	let geoMap: Record<string, GeoInfo> = {};
-	let loading = true;
-	let error: string | null = null;
-	let mapContainer: HTMLDivElement;
-	let map: any = null;
-	let view: 'map' | 'cluster' = 'map';
+	let servers: ServerGeo[] = $state([]);
+	let geoMap: Record<string, GeoInfo> = $state({});
+	let loading = $state(true);
+	let error: string | null = $state(null);
+	let mapContainer: HTMLDivElement = $state();
+	let map: any = $state(null);
+	let view: 'map' | 'cluster' = $state('map');
 
-	$: filteredServers = (() => {
-		if ($statusFilter === 'all') return servers;
-		if ($statusFilter === 'online') return servers.filter(s => s.status === 'up');
-		if ($statusFilter === 'issues') return servers.filter(s => s.status === 'down');
-		if ($statusFilter === 'new') return servers.filter(s => s.status === 'unknown');
-		return servers;
-	})();
 
-	// Flatten: group by IP across all servers
-	$: ipGroups = filteredServers.reduce((acc, s) => {
-		for (const ip of (s.ips || [])) {
-			if (!acc[ip]) acc[ip] = { ip, geo: geoMap[ip], servers: [] };
-			acc[ip].servers.push(s);
-		}
-		return acc;
-	}, {} as Record<string, { ip: string; geo?: GeoInfo; servers: ServerGeo[] }>);
 
-	$: locationGroups = Object.values(ipGroups).reduce((acc, group) => {
-		if (!group.geo) return acc;
-		const key = `${group.geo.lat},${group.geo.lon}`;
-		if (!acc[key]) acc[key] = { lat: group.geo.lat, lon: group.geo.lon, city: group.geo.city, country: group.geo.country, country_code: group.geo.country_code, ips: [] };
-		acc[key].ips.push(group);
-		return acc;
-	}, {} as Record<string, { lat: number; lon: number; city: string; country: string; country_code: string; ips: typeof ipGroups[string][] }>);
 
-	let L: any = null;
-	let markersLayer: any = null;
+	let L: any = $state(null);
+	let markersLayer: any = $state(null);
 
 	onMount(async () => {
 		try {
@@ -84,22 +64,8 @@
 		}
 	});
 
-	// Initialize the map once when ready
-	$: if (!loading && L && view === 'map' && mapContainer && !map) {
-		tick().then(() => buildMap(L));
-	}
 
-	// Rebuild markers when filtered servers change
-	$: if (map && L && filteredServers) {
-		buildMap(L);
-	}
 
-	// Reset map when switching to clusters
-	$: if (view === 'cluster' && map) {
-		map.remove();
-		map = null;
-		markersLayer = null;
-	}
 
 	onDestroy(() => {
 		if (map) { map.remove(); map = null; markersLayer = null; }
@@ -194,6 +160,48 @@
 			});
 		}
 	}
+	let filteredServers = $derived((() => {
+		if ($statusFilter === 'all') return servers;
+		if ($statusFilter === 'online') return servers.filter(s => s.status === 'up');
+		if ($statusFilter === 'issues') return servers.filter(s => s.status === 'down');
+		if ($statusFilter === 'new') return servers.filter(s => s.status === 'unknown');
+		return servers;
+	})());
+	// Flatten: group by IP across all servers
+	let ipGroups = $derived(filteredServers.reduce((acc, s) => {
+		for (const ip of (s.ips || [])) {
+			if (!acc[ip]) acc[ip] = { ip, geo: geoMap[ip], servers: [] };
+			acc[ip].servers.push(s);
+		}
+		return acc;
+	}, {} as Record<string, { ip: string; geo?: GeoInfo; servers: ServerGeo[] }>));
+	let locationGroups = $derived(Object.values(ipGroups).reduce((acc, group) => {
+		if (!group.geo) return acc;
+		const key = `${group.geo.lat},${group.geo.lon}`;
+		if (!acc[key]) acc[key] = { lat: group.geo.lat, lon: group.geo.lon, city: group.geo.city, country: group.geo.country, country_code: group.geo.country_code, ips: [] };
+		acc[key].ips.push(group);
+		return acc;
+	}, {} as Record<string, { lat: number; lon: number; city: string; country: string; country_code: string; ips: typeof ipGroups[string][] }>));
+	// Reset map when switching to clusters
+	run(() => {
+		if (view === 'cluster' && map) {
+			map.remove();
+			map = null;
+			markersLayer = null;
+		}
+	});
+	// Initialize the map once when ready
+	run(() => {
+		if (!loading && L && view === 'map' && mapContainer && !map) {
+			tick().then(() => buildMap(L));
+		}
+	});
+	// Rebuild markers when filtered servers change
+	run(() => {
+		if (map && L && filteredServers) {
+			buildMap(L);
+		}
+	});
 </script>
 
 
@@ -205,24 +213,24 @@
 		</h1>
 		<div class="header-controls">
 			<div class="view-toggle">
-				<button class:active={$statusFilter === 'all'} on:click={() => $statusFilter = 'all'}>
+				<button class:active={$statusFilter === 'all'} onclick={() => $statusFilter = 'all'}>
 					All <span class="filter-count">{servers.length}</span>
 				</button>
-				<button class:active={$statusFilter === 'online'} on:click={() => $statusFilter = 'online'}>
+				<button class:active={$statusFilter === 'online'} onclick={() => $statusFilter = 'online'}>
 					Online <span class="filter-count">{servers.filter(s => s.status === 'up').length}</span>
 				</button>
-				<button class:active={$statusFilter === 'issues'} on:click={() => $statusFilter = 'issues'}>
+				<button class:active={$statusFilter === 'issues'} onclick={() => $statusFilter = 'issues'}>
 					Offline <span class="filter-count">{servers.filter(s => s.status === 'down').length}</span>
 				</button>
-				<button class:active={$statusFilter === 'new'} on:click={() => $statusFilter = 'new'}>
+				<button class:active={$statusFilter === 'new'} onclick={() => $statusFilter = 'new'}>
 					New <span class="filter-count">{servers.filter(s => s.status === 'unknown').length}</span>
 				</button>
 			</div>
 			<div class="view-toggle">
-				<button class:active={view === 'map'} on:click={() => view = 'map'}>
+				<button class:active={view === 'map'} onclick={() => view = 'map'}>
 					<MapPin size={14} /> Map
 				</button>
-				<button class:active={view === 'cluster'} on:click={() => view = 'cluster'}>
+				<button class:active={view === 'cluster'} onclick={() => view = 'cluster'}>
 					<Network size={14} /> IP Clusters
 				</button>
 			</div>
@@ -269,7 +277,7 @@
 					{/if}
 					<div class="cluster-domains">
 						{#each group.servers as s}
-							<button class="domain-row" on:click={() => goto(`/server/${s.server_id}`)}>
+							<button class="domain-row" onclick={() => goto(`/server/${s.server_id}`)}>
 								<span class="domain-dot" class:up={s.status === 'up'} class:down={s.status === 'down'}></span>
 								<span class="domain-url">{s.url}</span>
 								<span class="domain-status">{s.status}</span>

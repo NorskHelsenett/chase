@@ -1,16 +1,22 @@
 <script lang="ts">
+	import { run } from 'svelte/legacy';
+
 	import { onMount } from 'svelte';
 	import { computePosition, autoPlacement, offset, shift, arrow } from '@floating-ui/dom';
 	import type { PingResult } from '$lib/models';
 
-	export let pingResults: PingResult[] = [];
-	export let expectedStatus: number = 200;
+	interface Props {
+		pingResults?: PingResult[];
+		expectedStatus?: number;
+	}
+
+	let { pingResults = [], expectedStatus = 200 }: Props = $props();
 
 	const MAX_DAYS = 90;
 
-	let status: 'up' | 'down' = 'down';
-	let tooltipElement: HTMLDivElement;
-	let arrowElement: HTMLDivElement;
+	let status: 'up' | 'down' = $state('down');
+	let tooltipElement: HTMLDivElement = $state();
+	let arrowElement: HTMLDivElement = $state();
 	let currentTarget: HTMLElement | null = null;
 
 	type AggregatedDay = {
@@ -20,12 +26,12 @@
 		successfulPings: number;
 	};
 
-	let aggregatedDays: AggregatedDay[] = [];
+	let aggregatedDays: AggregatedDay[] = $state([]);
 
 	const pingSuccessful = (ping: PingResult) =>
 		ping.status_code > 0 && ping.status_code === expectedStatus;
 
-	$: {
+	run(() => {
 		// Always aggregate by day
 		const dailyMap: Record<string, { total: number; success: number }> = {};
 
@@ -56,13 +62,13 @@
 			});
 		}
 		aggregatedDays = allDays;
-	}
+	});
 
 	// Status based on the most recent day
-	$: {
+	run(() => {
 		const latest = aggregatedDays.length > 0 ? aggregatedDays[aggregatedDays.length - 1] : null;
 		status = latest && latest.uptime >= 99.9 ? 'up' : 'down';
-	}
+	});
 
 	const getStatusColor = (uptime: number) => {
 		if (uptime < 0) return 'empty';
@@ -120,8 +126,8 @@
 		{#each aggregatedDays as day}
 			<div
 				class="status-bar {getStatusColor(day.uptime)}"
-				on:mouseenter={(e) => day.totalPings > 0 && showTooltip(e, day)}
-				on:mouseleave={hideTooltip}
+				onmouseenter={(e) => day.totalPings > 0 && showTooltip(e, day)}
+				onmouseleave={hideTooltip}
 			></div>
 		{/each}
 	</div>

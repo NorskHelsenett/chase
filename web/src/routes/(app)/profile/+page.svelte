@@ -10,9 +10,9 @@
 	import NotificationHistory from '$lib/push/NotificationHistory.svelte';
 	import { isPushSubscribed } from '$lib/push/pushClient.js';
 
-	let pushSettingsOpen = false;
-	let notificationHistoryOpen = true;
-	let isPushEnabled = false;
+	let pushSettingsOpen = $state(false);
+	let notificationHistoryOpen = $state(true);
+	let isPushEnabled = $state(false);
 
 	onMount(async () => {
 		const unsubscribe = isLoggedIn.subscribe((loggedIn) => {
@@ -93,7 +93,7 @@
 						<!-- Push Notification Settings -->
 						<div class="bg-[#202020] rounded-lg overflow-hidden">
 							<button
-								on:click={() => (pushSettingsOpen = !pushSettingsOpen)}
+								onclick={() => (pushSettingsOpen = !pushSettingsOpen)}
 								class="w-full px-6 py-4 flex items-center justify-between hover:bg-[#252525] transition-colors"
 							>
 								<div class="flex items-center gap-3">
@@ -122,7 +122,7 @@
 						<!-- Notification History -->
 						<div class="bg-[#202020] rounded-lg overflow-hidden">
 							<button
-								on:click={() => (notificationHistoryOpen = !notificationHistoryOpen)}
+								onclick={() => (notificationHistoryOpen = !notificationHistoryOpen)}
 								class="w-full px-6 py-4 flex items-center justify-between hover:bg-[#252525] transition-colors"
 							>
 								<h2 class="text-xl text-gray-100">Notification History</h2>

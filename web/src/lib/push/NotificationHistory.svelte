@@ -3,7 +3,7 @@
 	import { onMount } from 'svelte';
 	import { flip } from 'svelte/animate';
 	import { fade, slide } from 'svelte/transition';
-	import type { ComponentType } from 'svelte';
+	import type { Component } from 'svelte';
 	import { writable } from 'svelte/store';
 	import {
 		notifications,
@@ -38,7 +38,7 @@
 	} from 'lucide-svelte';
 
 	type EventVisual = {
-		icon: ComponentType;
+		icon: Component;
 		color: string;
 		background: string;
 		label: string;
@@ -102,10 +102,10 @@
 	let filterType: string = 'all';
 
 	// Computed filtered notifications
-	$: filteredNotifications = $notifications.filter((notification) => {
+	let filteredNotifications = $derived($notifications.filter((notification) => {
 		if (filterType === 'all') return true;
 		return notification.eventType === filterType;
-	});
+	}));
 
 	onMount(() => {
 		loadNotifications().catch((error) => {
@@ -282,7 +282,7 @@
 					? 'bg-gray-700/50 text-gray-200'
 					: 'bg-gray-800/30 text-gray-400 hover:bg-gray-700/30 hover:text-gray-300'
 			}`}
-			on:click={() => (filterType = 'all')}
+			onclick={() => (filterType = 'all')}
 		>
 			All
 		</button>
@@ -292,7 +292,7 @@
 					? 'bg-green-500/20 text-green-400 border border-green-500/30'
 					: 'bg-gray-800/30 text-gray-400 hover:bg-green-500/10 hover:text-green-400'
 			}`}
-			on:click={() => (filterType = 'server_added')}
+			onclick={() => (filterType = 'server_added')}
 		>
 			New
 		</button>
@@ -302,7 +302,7 @@
 					? 'bg-green-500/20 text-green-400 border border-green-500/30'
 					: 'bg-gray-800/30 text-gray-400 hover:bg-green-500/10 hover:text-green-400'
 			}`}
-			on:click={() => (filterType = 'server_online')}
+			onclick={() => (filterType = 'server_online')}
 		>
 			Online
 		</button>
@@ -312,7 +312,7 @@
 					? 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
 					: 'bg-gray-800/30 text-gray-400 hover:bg-amber-500/10 hover:text-amber-400'
 			}`}
-			on:click={() => (filterType = 'server_offline')}
+			onclick={() => (filterType = 'server_offline')}
 		>
 			Offline
 		</button>
@@ -322,7 +322,7 @@
 					? 'bg-red-500/20 text-red-500 border border-red-500/30'
 					: 'bg-gray-800/30 text-gray-400 hover:bg-red-500/10 hover:text-red-500'
 			}`}
-			on:click={() => (filterType = 'server_deleted')}
+			onclick={() => (filterType = 'server_deleted')}
 		>
 			Deleted
 		</button>
@@ -330,7 +330,7 @@
 		<div class="flex flex-wrap items-center gap-2">
 			<button
 				class="flex items-center gap-1.5 rounded-lg border border-gray-700/50 px-3 py-1.5 text-sm text-gray-300 transition-colors hover:border-gray-600 hover:bg-gray-800/30 disabled:opacity-50"
-				on:click={handleRefresh}
+				onclick={handleRefresh}
 				disabled={$isLoading}
 			>
 				{#if $isLoading}
@@ -342,7 +342,7 @@
 			</button>
 			<button
 				class="flex items-center gap-1.5 rounded-lg bg-gray-700/30 px-3 py-1.5 text-sm text-gray-200 transition-colors hover:bg-gray-700/50 disabled:opacity-50"
-				on:click={handleDismissAll}
+				onclick={handleDismissAll}
 				disabled={bulkDismissPending || !$notifications.length}
 			>
 				{#if bulkDismissPending}
@@ -381,7 +381,7 @@
 			</div>
 			<button
 				class="mt-3 inline-flex items-center gap-1.5 rounded-lg border border-red-500/40 px-3 py-1.5 text-sm text-red-200 transition-colors hover:border-red-400 hover:bg-red-900/20"
-				on:click={handleRefresh}
+				onclick={handleRefresh}
 			>
 				<RefreshCcw size={14} />
 				<span>Try again</span>
@@ -419,7 +419,8 @@
 					out:fade={{ duration: 150 }}
 					animate:flip={{ duration: 300 }}
 				>
-					<button
+					<!-- svelte-ignore a11y_no_static_element_interactions -->
+					<div
 						class={`group relative overflow-hidden rounded-lg p-4 transition-all w-full text-left ${
 							isDeleted ? 'cursor-default' : 'cursor-pointer'
 						} ${
@@ -427,14 +428,17 @@
 								? 'border-gray-800/50 bg-[#1e1e1e] hover:border-gray-700/60'
 								: 'border-gray-600/50 bg-[#2b2b2b] hover:border-gray-500/60'
 						}`}
-						on:click={() => handleOpen(notification)}
+						role="button"
+						tabindex="0"
+						onclick={() => handleOpen(notification)}
+						onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleOpen(notification); } }}
 					>
 						<div class="flex items-start gap-3">
 							<div
 								class={`flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg ${notification.read ? 'opacity-50' : ''} ${visual.background} ${visual.color}`}
 								aria-label={visual.label}
 							>
-								<svelte:component this={visual.icon} size={18} />
+								<visual.icon size={18} />
 							</div>
 							<div class="flex-1 min-w-0">
 								<div class="flex flex-wrap items-start justify-between gap-2 mb-2">
@@ -492,7 +496,7 @@
 									{#if !notification.read}
 										<button
 											class="inline-flex items-center gap-1.5 rounded-lg border border-gray-700/50 px-3 py-1.5 text-sm text-gray-300 transition-colors hover:border-gray-600 hover:bg-[#3a3a3a] disabled:opacity-50"
-											on:click={(e) => {
+											onclick={(e) => {
 												e.stopPropagation();
 												handleMarkRead(notification);
 											}}
@@ -509,7 +513,7 @@
 
 									<button
 										class="inline-flex items-center gap-1.5 rounded-lg border border-transparent px-3 py-1.5 text-sm text-gray-400 transition-colors hover:border-red-600/50 hover:bg-red-900/10 hover:text-red-400 disabled:opacity-50"
-										on:click={(e) => {
+										onclick={(e) => {
 											e.stopPropagation();
 											handleDismiss(notification);
 										}}
@@ -525,7 +529,7 @@
 								</div>
 							</div>
 						</div>
-					</button>
+					</div>
 				</div>
 			{/each}
 		</div>

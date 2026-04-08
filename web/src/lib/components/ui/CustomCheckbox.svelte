@@ -1,18 +1,19 @@
 <script lang="ts">
-	import { createEventDispatcher } from 'svelte';
+	interface Props {
+		checked?: boolean;
+		label?: string;
+		onchange?: (value: boolean) => void;
+	}
 
-	const dispatch = createEventDispatcher();
-
-	export let checked = false;
-	export let label = '';
+	let { checked = $bindable(false), label = '', onchange }: Props = $props();
 
 	function handleClick() {
 		checked = !checked;
-		dispatch('change', checked);
+		onchange?.(checked);
 	}
 </script>
 
-<label class="flex items-center gap-2.5 cursor-pointer select-none group" on:click={handleClick}>
+<label class="flex items-center gap-2.5 cursor-pointer select-none group" onclick={handleClick}>
 	<div
 		class="w-5 h-5 rounded flex items-center justify-center transition-all duration-200
     {checked ? 'bg-green-600 border-green-600' : 'bg-[#2b2b2b] hover:bg-[#333]'}"

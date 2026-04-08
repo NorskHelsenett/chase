@@ -1,4 +1,6 @@
 <script lang="ts">
+	import { run } from 'svelte/legacy';
+
 	import { onMount, onDestroy } from 'svelte';
 	import { goto } from '$app/navigation';
 	import type { Server } from '$lib/models';
@@ -7,25 +9,31 @@
 	import ServerControls from '$lib/components/server/ServerControls.svelte';
 	import { ExternalLink } from 'lucide-svelte';
 
-	/** @type {import('./$types').PageData} */
-	export let data;
-
-	let serverID: number = 0;
-	let server: Server | null = null;
-	let isLoading = true;
-	let isLoadingResults = true;
-	let error: string | null = null;
-	let searchResults = null;
-	let reportStatus: { state: string; startedAt: string; completedAt: string } | null = null;
-	let pollInterval: ReturnType<typeof setInterval> | null = null;
-	let screenshotLoading = true;
-
-	$: if (data.id) {
-		serverID = data.id;
-		screenshotLoading = true; // Reset when server changes
+	
+	interface Props {
+		data: import('./$types').PageData;
 	}
 
-	let forceCheckDone = false;
+	let { data }: Props = $props();
+
+	let serverID: number = $state(0);
+	let server: Server | null = $state(null);
+	let isLoading = $state(true);
+	let isLoadingResults = $state(true);
+	let error: string | null = $state(null);
+	let searchResults = $state(null);
+	let reportStatus: { state: string; startedAt: string; completedAt: string } | null = $state(null);
+	let pollInterval: ReturnType<typeof setInterval> | null = null;
+	let screenshotLoading = $state(true);
+
+	run(() => {
+		if (data.id) {
+			serverID = data.id;
+			screenshotLoading = true; // Reset when server changes
+		}
+	});
+
+	let forceCheckDone = $state(false);
 
 	onMount(() => {
 		fetchServerData(serverID);
@@ -99,8 +107,8 @@
 	}
 
 	// Server management functions
-	async function handleServerUpdate(event: CustomEvent) {
-		const { data: updatedServer } = event.detail;
+	async function handleServerUpdate(detail) {
+		const { data: updatedServer } = detail;
 		isLoading = true;
 
 		try {
@@ -125,8 +133,8 @@
 		}
 	}
 
-	async function handleToggleActive(event: CustomEvent) {
-		const { active } = event.detail;
+	async function handleToggleActive(detail) {
+		const { active } = detail;
 		isLoading = true;
 
 		try {
@@ -293,8 +301,8 @@
 					alt="Website preview"
 					class="screenshot-img"
 					class:screenshot-loaded={!screenshotLoading}
-					on:load={() => screenshotLoading = false}
-					on:error={(e) => {
+					onload={() => screenshotLoading = false}
+					onerror={(e) => {
 						screenshotLoading = false;
 						e.currentTarget.style.display = 'none';
 					}}
@@ -314,9 +322,9 @@
 					<ServerControls
 						{server}
 						{isLoading}
-						on:update={handleServerUpdate}
-						on:toggleActive={handleToggleActive}
-						on:delete={handleDelete}
+						onupdate={handleServerUpdate}
+						ontoggleActive={handleToggleActive}
+						ondelete={handleDelete}
 					/>
 				</div>
 

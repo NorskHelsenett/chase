@@ -9,13 +9,17 @@
 	import SecretExposure from './scan/SecretExposure.svelte';
 	import ChecksGrid from './scan/ChecksGrid.svelte';
 
-	export let domain: string = '';
-	export let searchResults = {};
-	export let hideHero: boolean = false;
+	interface Props {
+		domain?: string;
+		searchResults?: any;
+		hideHero?: boolean;
+	}
 
-	let loading = true;
-	let results: any = null;
-	let error: string | null = null;
+	let { domain = $bindable(''), searchResults = {}, hideHero = false }: Props = $props();
+
+	let loading = $state(true);
+	let results: any = $state(null);
+	let error: string | null = $state(null);
 
 	function getRiskColor(value: string): string {
 		switch (value?.toLowerCase()) {
@@ -122,7 +126,7 @@
 					<div class="w-full h-48 bg-[#2b2b2b] relative">
 						<div class="w-full h-48 bg-[#2b2b2b] relative">
 							{#if loading}
-								<div class="absolute inset-0 animate-pulse bg-gray-700/50" />
+								<div class="absolute inset-0 animate-pulse bg-gray-700/50"></div>
 							{:else}
 								<div class="w-full h-48 bg-[#2b2b2b] relative">
 									{#key domain}
@@ -131,14 +135,14 @@
 												src={`/api/screenshot/${encodeURIComponent(domain)}?cached=true`}
 												alt="Website preview"
 												class="absolute w-full h-full object-cover opacity-0 transition-opacity duration-300"
-												on:load={(e) => {
+												onload={(e) => {
 													e.target.classList.remove('opacity-0');
 													e.target.classList.add('opacity-80');
 													// Find and remove the loading overlay
 													const overlay = e.target.parentElement.querySelector('.loading-overlay');
 													if (overlay) overlay.remove();
 												}}
-												on:error={(e) => {
+												onerror={(e) => {
 													// Remove the loading overlay on error too
 													const overlay = e.target.parentElement.querySelector('.loading-overlay');
 													if (overlay) overlay.remove();
@@ -147,13 +151,13 @@
 											<div
 												class="loading-overlay absolute inset-0 bg-gray-700/50 animate-pulse"
 												style="animation-duration: 2s;"
-											/>
+											></div>
 										</div>
 									{/key}
-									<div class="absolute bottom-0 left-0 right-0 h-16" />
+									<div class="absolute bottom-0 left-0 right-0 h-16"></div>
 								</div>
 							{/if}
-							<div class="absolute bottom-0 left-0 right-0 h-16" />
+							<div class="absolute bottom-0 left-0 right-0 h-16"></div>
 						</div>
 						<div class="absolute bottom-0 left-0 right-0 h-16"></div>
 					</div>

@@ -2,8 +2,8 @@
 	import { fade, fly } from 'svelte/transition';
 	import { goto } from '$app/navigation';
 
-	let searchText = '';
-	let isAnimating = false;
+	let searchText = $state('');
+	let isAnimating = $state(false);
 
 	function handleSearch() {
 		if (!searchText.trim() || isAnimating) return;
@@ -36,11 +36,11 @@
 		>
 			<textarea
 				bind:value={searchText}
-				on:keydown={handleKeydown}
+				onkeydown={handleKeydown}
 				placeholder="Any domain..."
 				rows="1"
 				class="w-[25em] bg-transparent border-none text-[#bfbfbf] text-lg outline-none resize-none placeholder-[#918c8c]"
-			/>
+			></textarea>
 			<div class="flex justify-between items-center mt-4 text-[#bfbfbf]">
 				<div class="flex gap-4 items-center">
 					<!-- <span>Focus</span>
@@ -48,7 +48,7 @@
 				</div>
 				<div class="flex gap-4 items-center">
 					<button
-						on:click={handleSearch}
+						onclick={handleSearch}
 						disabled={isAnimating}
 						class="h-10 w-10 text-gray-300 hover:bg-gray-600 disabled:opacity-50 disabled:hover:bg-gray-700 transition-colors duration-200 ease-in-out p-2 text-white bg-gray-700 rounded-full"
 					>

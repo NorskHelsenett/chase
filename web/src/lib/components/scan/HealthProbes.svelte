@@ -1,8 +1,12 @@
 <script lang="ts">
-  export let probes: {
+  interface Props {
+    probes?: {
     paths?: Record<string, number>;
     findings?: { description: string }[];
-  } | null = null;
+  } | null;
+  }
+
+  let { probes = null }: Props = $props();
 
   const statusClass = (code: number) => {
     if (code >= 500) return 'text-red-400';

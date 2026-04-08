@@ -1,10 +1,12 @@
 <!-- RadioToggle.svelte -->
 <script lang="ts">
-	import { createEventDispatcher } from 'svelte';
-	const dispatch = createEventDispatcher();
+	interface Props {
+		value?: boolean;
+		label?: string;
+		onchange?: (value: boolean) => void;
+	}
 
-	export let value = true;
-	export let label = '';
+	let { value = true, label = '', onchange }: Props = $props();
 
 	const options = [
 		{ value: true, label: 'Active' },
@@ -12,7 +14,7 @@
 	];
 
 	function handleClick(newValue: boolean) {
-		dispatch('change', newValue);
+		onchange?.(newValue);
 	}
 </script>
 
@@ -27,7 +29,7 @@
 				class="px-3 py-1.5 rounded text-sm transition-all duration-200 {value === option.value
 					? 'bg-green-600 text-white'
 					: 'text-gray-400 hover:text-gray-200'}"
-				on:click={() => handleClick(option.value)}
+				onclick={() => handleClick(option.value)}
 			>
 				{option.label}
 			</button>

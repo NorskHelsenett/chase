@@ -1,4 +1,6 @@
 <script lang="ts">
+	import { run } from 'svelte/legacy';
+
 	import { onMount } from 'svelte';
 	import { page } from '$app/stores';
 	import type { Server } from '$lib/models';
@@ -9,15 +11,17 @@
 	import { statusFilter } from '$lib/stores/filterStore';
 	import { pingData } from '$lib/stores/pingStore';
 	import { getEffectiveStatus } from '$lib/utils/status';
-	let filteredServers: Server[] = [];
-	let searchTerm = '';
-	let hasMounted = false;
-	let lastActiveFilter: string | null | undefined = undefined;
-	let activeFilter: string | null = null;
+	let filteredServers: Server[] = $state([]);
+	let searchTerm = $state('');
+	let hasMounted = $state(false);
+	let lastActiveFilter: string | null | undefined = $state(undefined);
+	let activeFilter: string | null = $state(null);
 
-	$: activeFilter = $page.url.searchParams.get('active');
+	run(() => {
+		activeFilter = $page.url.searchParams.get('active');
+	});
 
-	$: {
+	run(() => {
 		void $pingData;
 		const allServers = $servers || [];
 		if (allServers.length === 0) {
@@ -56,7 +60,7 @@
 
 			filteredServers = result;
 		}
-	}
+	});
 
 	async function loadData(force = false) {
 		await serverStoreActions.setFilter(activeFilter ?? null, force);
@@ -66,10 +70,12 @@ onMount(async () => {
 	hasMounted = true;
 });
 
-$: if (hasMounted && activeFilter !== undefined && activeFilter !== lastActiveFilter) {
-	lastActiveFilter = activeFilter;
-	loadData();
-}
+run(() => {
+		if (hasMounted && activeFilter !== undefined && activeFilter !== lastActiveFilter) {
+		lastActiveFilter = activeFilter;
+		loadData();
+	}
+	});
 </script>
 
 <div class="p-4 min-h-screen w-full">
@@ -102,7 +108,7 @@ $: if (hasMounted && activeFilter !== undefined && activeFilter !== lastActiveFi
 					{#if searchTerm}
 						<button
 							class="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-200 transition-colors p-1"
-							on:click={() => (searchTerm = '')}
+							onclick={() => (searchTerm = '')}
 							aria-label="Clear search"
 						>
 							<svg
@@ -151,7 +157,7 @@ $: if (hasMounted && activeFilter !== undefined && activeFilter !== lastActiveFi
 								icon: '<div class="flex items-center"><span class="w-2 h-2 bg-gray-400 rounded-full mr-2"></span><span class="text-gray-300">New</span></div>'
 							}
 						]}
-						on:change={() => {}}
+						onchange={() => {}}
 					/>
 				</div>
 			</div>

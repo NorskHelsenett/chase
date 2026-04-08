@@ -1,16 +1,20 @@
 <!-- ServerControls.svelte -->
 <script lang="ts">
-	import { createEventDispatcher } from 'svelte';
 	import type { Server } from '$lib/models';
 	import ServerDialog from '../ServerDialog.svelte';
 
-	const dispatch = createEventDispatcher();
+	interface Props {
+		server: Server;
+		isLoading?: boolean;
+		onupdate?: (detail: { data: any }) => void;
+		ondelete?: () => void;
+		ontoggleActive?: (detail: { active: boolean }) => void;
+	}
 
-	export let server: Server;
-	export let isLoading = false;
+	let { server, isLoading = false, onupdate, ondelete, ontoggleActive }: Props = $props();
 
-	let showDialog = false;
-	let dialogData: Partial<Server> | null = null;
+	let showDialog = $state(false);
+	let dialogData: Partial<Server> | null = $state(null);
 
 	function handleDialogOpen() {
 		// Create a deep copy of the server data when opening the dialog
@@ -27,19 +31,19 @@
 		showDialog = true;
 	}
 
-	function handleDialogSubmit(event: CustomEvent) {
-		const { data } = event.detail;
-		dispatch('update', { data });
+	function handleDialogSubmit(detail) {
+		const { data } = detail;
+		onupdate?.({ data });
 		showDialog = false;
 	}
 
 	function handleDialogDelete() {
-		dispatch('delete');
+		ondelete?.();
 		showDialog = false;
 	}
 
-	function handleToggleActive(event: CustomEvent) {
-		dispatch('toggleActive', { active: event.detail });
+	function handleToggleActive(active: boolean) {
+		ontoggleActive?.({ active });
 	}
 
 	function onClose() {
@@ -49,7 +53,7 @@
 </script>
 
 <button
-	on:click={handleDialogOpen}
+	onclick={handleDialogOpen}
 	disabled={isLoading}
 	class="edit-btn"
 	title="Edit server"
@@ -95,8 +99,8 @@
 	{isLoading}
 	mode="edit"
 	initialData={dialogData}
-	on:submit={handleDialogSubmit}
-	on:delete={handleDialogDelete}
-	on:toggleActive={handleToggleActive}
-	on:close={onClose}
+	onsubmit={handleDialogSubmit}
+	ondelete={handleDialogDelete}
+	ontoggleActive={handleToggleActive}
+	onclose={onClose}
 />

@@ -1,4 +1,6 @@
 <script lang="ts">
+	import { run } from 'svelte/legacy';
+
 	import { page } from '$app/stores';
 	import { onMount } from 'svelte';
 	import MonitorStats from '$lib/components/dashboard/MonitorStats.svelte';
@@ -11,17 +13,19 @@
 	import { exportServersToCSV } from '$lib/utils/csv.js';
 	import { getEffectiveStatus } from '$lib/utils/status';
 
-	let filteredServers: Server[] = [];
+	let filteredServers: Server[] = $state([]);
 
-	let searchQuery = '';
-	let hasMounted = false;
-	let lastActiveFilter: string | null | undefined = undefined;
-	let activeFilter: string | null = null;
+	let searchQuery = $state('');
+	let hasMounted = $state(false);
+	let lastActiveFilter: string | null | undefined = $state(undefined);
+	let activeFilter: string | null = $state(null);
 
-	$: activeFilter = $page.url.searchParams.get('active');
+	run(() => {
+		activeFilter = $page.url.searchParams.get('active');
+	});
 
 	// Filter servers based on search query and status
-	$: {
+	run(() => {
 		// Reference pingData so this block re-runs when SSE updates arrive
 		void $pingData;
 		let result = $servers;
@@ -47,10 +51,10 @@
 		}
 
 		filteredServers = result;
-	}
+	});
 
 	// Compute stats from the filtered list using SSE-aware status
-	$: stats = filteredServers.reduce(
+	let stats = $derived(filteredServers.reduce(
 		(acc, server) => {
 			if (getEffectiveStatus(server) === 'up') {
 				acc.up += 1;
@@ -66,22 +70,22 @@
 			return acc;
 		},
 		{ up: 0, down: 0, secretsExposed: 0, highRisks: 0 }
-	);
+	));
 
 	async function fetchServers(forceRefresh = false) {
 		await serverStoreActions.setFilter(activeFilter ?? null, forceRefresh);
 	}
 
-	function handleSearch(event: CustomEvent) {
-		searchQuery = event.detail.query.toLowerCase();
+	function handleSearch(detail) {
+		searchQuery = detail.query.toLowerCase();
 	}
 
 	function handleRefresh() {
 		fetchServers(true);
 	}
 
-	function handleFilter(event: CustomEvent) {
-		$statusFilter = event.detail.status;
+	function handleFilter(detail) {
+		$statusFilter = detail.status;
 	}
 
 	function handleExport() {
@@ -96,10 +100,12 @@
 		hasMounted = true;
 	});
 
-	$: if (hasMounted && activeFilter !== undefined && activeFilter !== lastActiveFilter) {
-		lastActiveFilter = activeFilter;
-		fetchServers();
-	}
+	run(() => {
+		if (hasMounted && activeFilter !== undefined && activeFilter !== lastActiveFilter) {
+			lastActiveFilter = activeFilter;
+			fetchServers();
+		}
+	});
 </script>
 
 <div class="dashboard">
@@ -107,11 +113,11 @@
 		<MonitorStats {stats} />
 		<MonitorControls
 			isLoading={$isLoading}
-			on:search={handleSearch}
-			on:refresh={handleRefresh}
-			on:filter={handleFilter}
-			on:export={handleExport}
-			on:serverAdded={() => fetchServers(true)}
+			onsearch={handleSearch}
+			onrefresh={handleRefresh}
+			onfilter={handleFilter}
+			onexport={handleExport}
+			onserverAdded={() => fetchServers(true)}
 		/>
 	</div>
 	<div class="dashboard-table">

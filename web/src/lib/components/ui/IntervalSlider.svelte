@@ -1,10 +1,12 @@
 <!-- IntervalSlider.svelte -->
 <script lang="ts">
-	import { createEventDispatcher } from 'svelte';
-	const dispatch = createEventDispatcher();
+	interface Props {
+		value?: number;
+		label?: string;
+		onchange?: (value: number) => void;
+	}
 
-	export let value = 5;
-	export let label = 'Update Interval';
+	let { value = 5, label = 'Update Interval', onchange }: Props = $props();
 
 	const intervals = [
 		{ value: 5, label: '5m' },
@@ -20,15 +22,15 @@
 		{ value: 43200, label: '30d' }
 	];
 
-	let currentStepIndex = intervals.findIndex((interval) => interval.value === value);
+	let currentStepIndex = $state(intervals.findIndex((interval) => interval.value === value));
 	if (currentStepIndex === -1) currentStepIndex = 0;
 
 	function handleClick(index: number) {
 		currentStepIndex = index;
-		dispatch('change', intervals[index].value);
+		onchange?.(intervals[index].value);
 	}
 
-	$: displayValue = intervals[currentStepIndex].label;
+	let displayValue = $derived(intervals[currentStepIndex].label);
 </script>
 
 <div class="space-y-2">
@@ -44,7 +46,7 @@
 			<div
 				class="absolute h-1.5 bg-green-600 rounded-full transition-all duration-200"
 				style="width: {(currentStepIndex / (intervals.length - 1)) * 98}%"
-			/>
+			></div>
 		</div>
 
 		<!-- Step markers -->
@@ -52,7 +54,7 @@
 			{#each intervals as interval, i}
 				<button
 					class="group relative w-4 h-4 -ml-2 first:ml-0 last:mr-0 focus:outline-none"
-					on:click={() => handleClick(i)}
+					onclick={() => handleClick(i)}
 					type="button"
 				>
 					<!-- Marker dot -->
@@ -65,7 +67,7 @@
 							class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-2.5 h-2.5
               rounded-full transition-all duration-200
               {i <= currentStepIndex ? 'bg-green-600' : 'bg-[#2b2b2b] group-hover:bg-[#333]'}"
-						/>
+						></div>
 					</div>
 
 					<!-- Tooltip -->

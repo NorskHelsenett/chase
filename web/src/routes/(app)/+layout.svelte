@@ -3,6 +3,13 @@
 	import Navbar from '$lib/components/Navbar.svelte';
 	import { connectPingSSE, disconnectPingSSE } from '$lib/stores/pingStore';
 	import { onMount, onDestroy } from 'svelte';
+	/**
+	 * @typedef {Object} Props
+	 * @property {import('svelte').Snippet} [children]
+	 */
+
+	/** @type {Props} */
+	let { children } = $props();
 
 	onMount(async () => {
 		await initializeAuth();
@@ -59,7 +66,7 @@
 		style="margin-left: 200px; height: 98vh; position: fixed; width: calc(100% - 210px); overflow: hidden;"
 	>
 		<div class="w-full h-full overflow-auto">
-			<slot />
+			{@render children?.()}
 		</div>
 	</main>
 </div>

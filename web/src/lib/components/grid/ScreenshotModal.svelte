@@ -1,5 +1,7 @@
 <!-- filepath: /workspaces/chase/web/src/lib/components/grid/ScreenShotModal.svelte -->
 <script lang="ts">
+	import { self, preventDefault } from 'svelte/legacy';
+
 	import { onMount, onDestroy } from 'svelte';
 	import { fade, fly, scale } from 'svelte/transition';
 	import {
@@ -23,19 +25,23 @@
 	} from 'lucide-svelte';
 	import type { Server } from '$lib/models';
 
-	export let sites: Server[] = [];
-	export let currentIndex: number;
-	export let onClose: () => void;
+	interface Props {
+		sites?: Server[];
+		currentIndex: number;
+		onClose: () => void;
+	}
 
-	let modalOpen = false;
-	let currentReport: any = null;
-	let loading = false;
-	let error: string | null = null;
-	let focusTrap: HTMLInputElement;
-	let showingFullscreenImage = false;
-	let imageLoaded = false;
-	let imageLoadError = false;
-	let latestPing: any = null;
+	let { sites = [], currentIndex = $bindable(), onClose }: Props = $props();
+
+	let modalOpen = $state(false);
+	let currentReport: any = $state(null);
+	let loading = $state(false);
+	let error: string | null = $state(null);
+	let focusTrap: HTMLInputElement = $state();
+	let showingFullscreenImage = $state(false);
+	let imageLoaded = $state(false);
+	let imageLoadError = $state(false);
+	let latestPing: any = $state(null);
 	let pingError: string | null = null;
 	let pingQueryParams = {
 		limit: 1,
@@ -48,18 +54,18 @@
 	let originalOverflow: string;
 
 	// Reactive values derived from ping data
-	$: pingStatusCode =
-		latestPing?.status_code !== undefined
+	let pingStatusCode =
+		$derived(latestPing?.status_code !== undefined
 			? latestPing.status_code === 0
 				? 'down'
 				: latestPing.status_code?.toString()
-			: 'N/A';
+			: 'N/A');
 
-	$: pingResponseTime = latestPing?.response_time_ms
+	let pingResponseTime = $derived(latestPing?.response_time_ms
 		? `${latestPing.response_time_ms.toFixed(2)}ms`
-		: 'N/A';
+		: 'N/A');
 
-	$: pingTimestamp = (() => {
+	let pingTimestamp = $derived((() => {
 		if (!latestPing?.timestamp) return 'N/A';
 		try {
 			const date = new Date(latestPing.timestamp);
@@ -67,10 +73,10 @@
 		} catch (e) {
 			return 'N/A';
 		}
-	})();
+	})());
 
-	$: pingDetails = latestPing?.detail || null;
-	$: pingErrorMessage = latestPing?.error || '';
+	let pingDetails = $derived(latestPing?.detail || null);
+	let pingErrorMessage = $derived(latestPing?.error || '');
 
 	// Combined function to fetch both server report and ping data
 	async function fetchServerData(serverId: string) {
@@ -204,7 +210,7 @@
 		window.removeEventListener('keydown', handleKeydown);
 	});
 
-	$: currentSite = sites[currentIndex];
+	let currentSite = $derived(sites[currentIndex]);
 
 	function getScoreColor(score: string) {
 		switch (score) {
@@ -264,7 +270,7 @@
 	<div
 		transition:fade={{ duration: 200 }}
 		class="fixed inset-0 z-50 flex items-center justify-center"
-		on:click|self={closeModal}
+		onclick={self(closeModal)}
 	>
 		<!-- Backdrop -->
 		<div class="absolute inset-0 bg-black/80 backdrop-blur-md"></div>
@@ -299,14 +305,14 @@
 					</h2>
 					<div class="flex items-center gap-2">
 						<button
-							on:click={() => openSiteUrl(currentSite.url)}
+							onclick={() => openSiteUrl(currentSite.url)}
 							class="p-2 hover:bg-green-900/30 rounded-lg transition-colors text-green-400 hover:text-green-300"
 							title="Open site in new tab"
 						>
 							<ExternalLink size={20} />
 						</button>
 						<button
-							on:click={toggleFullscreen}
+							onclick={toggleFullscreen}
 							class="p-2 hover:bg-green-900/30 rounded-lg transition-colors text-green-400 hover:text-green-300"
 							title={showingFullscreenImage ? 'Exit fullscreen' : 'Fullscreen'}
 						>
@@ -317,7 +323,7 @@
 							{/if}
 						</button>
 						<button
-							on:click={closeModal}
+							onclick={closeModal}
 							class="p-2 hover:bg-green-900/30 rounded-lg transition-colors"
 							title="Close"
 						>
@@ -332,7 +338,7 @@
 						<!-- Fullscreen Screenshot View -->
 						<div
 							class="flex-1 p-4 flex items-center justify-center bg-black/80"
-							on:click={toggleFullscreen}
+							onclick={toggleFullscreen}
 							transition:fade={{ duration: 200 }}
 						>
 							<!-- Loading indicator for image -->
@@ -366,8 +372,8 @@
 									alt={`Screenshot of ${currentSite.url}`}
 									class="w-full h-full object-contain drop-shadow-2xl rounded-lg"
 									loading="lazy"
-									on:load={() => (imageLoaded = true)}
-									on:error={handleImageError}
+									onload={() => (imageLoaded = true)}
+									onerror={handleImageError}
 									style={!imageLoaded ? 'visibility: hidden' : ''}
 								/>
 							{/if}
@@ -378,7 +384,7 @@
 						<div class="flex-1 p-6 bg-gradient-to-br from-black/40 to-black/60 overflow-hidden">
 							<div
 								class="w-full h-full flex items-center justify-center relative rounded-lg overflow-hidden"
-								on:click={toggleFullscreen}
+								onclick={toggleFullscreen}
 								title="Click to enlarge"
 							>
 								<!-- Loading indicator for image -->
@@ -409,8 +415,8 @@
 										alt={`Screenshot of ${currentSite.url}`}
 										class="w-full h-full object-contain rounded-lg shadow-xl"
 										loading="lazy"
-										on:load={() => (imageLoaded = true)}
-										on:error={handleImageError}
+										onload={() => (imageLoaded = true)}
+										onerror={handleImageError}
 										style={!imageLoaded ? 'visibility: hidden' : ''}
 									/>
 								{/if}
@@ -459,7 +465,7 @@
 										</a>
 										<a
 											href="#"
-											on:click|preventDefault={() => openSiteUrl(currentSite.url)}
+											onclick={preventDefault(() => openSiteUrl(currentSite.url))}
 											class="mt-2 block text-sm text-gray-300 break-all hover:text-white transition-colors"
 										>
 											<span class="text-gray-500">URL:</span>
@@ -738,7 +744,7 @@
 					<button
 						class="flex items-center gap-2 px-4 py-2 bg-[#2b2b2b] hover:bg-[#333] rounded-lg text-gray-200 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm"
 						disabled={currentIndex === 0}
-						on:click={() => navigateImage(-1)}
+						onclick={() => navigateImage(-1)}
 					>
 						<ArrowLeft size={16} />
 						<span>Previous</span>
@@ -749,7 +755,7 @@
 					<button
 						class="flex items-center gap-2 px-4 py-2 bg-[#2b2b2b] hover:bg-[#333] rounded-lg text-gray-200 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm"
 						disabled={currentIndex === sites.length - 1}
-						on:click={() => navigateImage(1)}
+						onclick={() => navigateImage(1)}
 					>
 						<span>Next</span>
 						<ArrowRight size={16} />

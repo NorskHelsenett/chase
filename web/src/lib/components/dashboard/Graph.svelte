@@ -12,15 +12,19 @@
 	};
 	type GraphEdge = { from: string | number; to: string | number; [k: string]: any };
 
-	export let graphData: Writable<{ nodes: GraphNode[]; edges: GraphEdge[] }>;
 
-	let container: HTMLDivElement;
+	let container: HTMLDivElement = $state();
 	let network: any;
 	let nodeDataSet: any;
 	let edgeDataSet: any;
 	let unsubscribe: () => void;
-	export let loading = true;
-	let loadPct = 0;
+	interface Props {
+		graphData: Writable<{ nodes: GraphNode[]; edges: GraphEdge[] }>;
+		loading?: boolean;
+	}
+
+	let { graphData, loading = $bindable(true) }: Props = $props();
+	let loadPct = $state(0);
 
 	// --- helpers ---
 	const edgeId = (e: GraphEdge, idx?: number) =>

@@ -4,8 +4,12 @@
 	import LazyScreenshot from './LazyScreenshot.svelte';
 	import { fade, scale } from 'svelte/transition';
 	import { getEffectiveStatus } from '$lib/utils/status';
-	export let sites: Server[] = [];
-	let selectedImageIndex: number | null = null;
+	interface Props {
+		sites?: Server[];
+	}
+
+	let { sites = [] }: Props = $props();
+	let selectedImageIndex: number | null = $state(null);
 
 	function getScreenshotUrl(url: string) {
 		const cleanUrl = url.replace(/^(https?:\/\/)/, '').replace(/\/$/, '');
@@ -67,8 +71,8 @@
 				<div
 					in:fade={{ duration: 300, delay: index * 70 }}
 					class="relative group rounded-xl transition-all duration-300 overflow-hidden cursor-pointer bg-gradient-to-br from-[#1a1a1a] to-[#222] shadow-md hover:border-green-500/50 hover:shadow-xl hover:shadow-green-900/5 hover:ring-2 hover:ring-green-500"
-					on:click={(e) => handleClick(e, site, index)}
-					on:keydown={(e) => handleKeyDown(e, site, index)}
+					onclick={(e) => handleClick(e, site, index)}
+					onkeydown={(e) => handleKeyDown(e, site, index)}
 					title="Click to view, Cmd/Ctrl+Click to open website"
 					tabindex="0"
 					role="button"

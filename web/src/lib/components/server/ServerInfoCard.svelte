@@ -3,9 +3,13 @@
 	import { formatDistanceToNow } from 'date-fns';
 	import { Globe, ExternalLink } from 'lucide-svelte';
 
-	export let server: Server;
+	interface Props {
+		server: Server;
+	}
 
-	$: nextCheckIn = formatDistanceToNow(new Date(server.next_check), { addSuffix: true });
+	let { server }: Props = $props();
+
+	let nextCheckIn = $derived(formatDistanceToNow(new Date(server.next_check), { addSuffix: true }));
 
 	function getLatestPingResult(server) {
 		if (!server.ping_results?.length) return null;
