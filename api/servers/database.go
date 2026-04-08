@@ -47,12 +47,19 @@ type aggRow struct {
 	MaxResponseTime float64
 }
 
-// aggregateAndPrunePings implements a three-tier retention policy:
+// aggregateAndPrunePings implements a three-tier retention policy.
+// Runs in a goroutine — must not crash the process.
 //
 //	Last 7 days  → every raw ping kept
 //	7–30 days    → aggregated to hourly, raw pings deleted
 //	30+ days     → aggregated to daily, hourly summaries deleted
 func aggregateAndPrunePings(db *gorm.DB) {
+	defer func() {
+		if r := recover(); r != nil {
+			log.Printf("Ping aggregation recovered from panic: %v", r)
+		}
+	}()
+
 	now := time.Now()
 	weekAgo := now.AddDate(0, 0, -7)
 	monthAgo := now.AddDate(0, -1, 0)
