@@ -322,38 +322,6 @@
 	{:else if error}
 		<div class="error">{error}</div>
 	{:else}
-		{#if Object.keys(allLocationGroups).length > 0 || localIPs.length > 0}
-			<div class="country-strip">
-				{#each Object.entries(Object.values(allLocationGroups).reduce((acc, loc) => {
-						const cc = loc.country_code || '??';
-						if (!acc[cc]) acc[cc] = { country: loc.country, count: 0, cities: new Set() };
-						acc[cc].count += loc.ips.reduce((s, g) => s + g.servers.length, 0);
-						acc[cc].cities.add(loc.city);
-						return acc;
-					}, {})).sort((a, b) => b[1].count - a[1].count) as [cc, info]}
-					<button
-						class="country-chip"
-						class:selected={selectedCountry === cc}
-						onclick={() => handleCountryClick(cc)}
-					>
-						<span class="country-flag">{getFlagEmoji(cc)}</span>
-						<span class="country-name">{info.country}</span>
-						<span class="country-count">{info.count}</span>
-					</button>
-				{/each}
-				{#if localIPs.length > 0}
-					<button
-						class="country-chip"
-						class:selected={selectedCountry === 'LOCAL'}
-						onclick={() => handleCountryClick('LOCAL')}
-					>
-						<span class="country-name">Local</span>
-						<span class="country-count">{localIPs.length}</span>
-					</button>
-				{/if}
-			</div>
-		{/if}
-
 		{#if view === 'map'}
 			<div class="map-wrap" bind:this={mapContainer}></div>
 		{:else}
@@ -397,6 +365,38 @@
 						</div>
 					</div>
 				{/each}
+			</div>
+		{/if}
+
+		{#if Object.keys(allLocationGroups).length > 0 || localIPs.length > 0}
+			<div class="country-strip">
+				{#each Object.entries(Object.values(allLocationGroups).reduce((acc, loc) => {
+						const cc = loc.country_code || '??';
+						if (!acc[cc]) acc[cc] = { country: loc.country, count: 0, cities: new Set() };
+						acc[cc].count += loc.ips.reduce((s, g) => s + g.servers.length, 0);
+						acc[cc].cities.add(loc.city);
+						return acc;
+					}, {})).sort((a, b) => b[1].count - a[1].count) as [cc, info]}
+					<button
+						class="country-chip"
+						class:selected={selectedCountry === cc}
+						onclick={() => handleCountryClick(cc)}
+					>
+						<span class="country-flag">{getFlagEmoji(cc)}</span>
+						<span class="country-name">{info.country}</span>
+						<span class="country-count">{info.count}</span>
+					</button>
+				{/each}
+				{#if localIPs.length > 0}
+					<button
+						class="country-chip"
+						class:selected={selectedCountry === 'LOCAL'}
+						onclick={() => handleCountryClick('LOCAL')}
+					>
+						<span class="country-name">Local</span>
+						<span class="country-count">{localIPs.length}</span>
+					</button>
+				{/if}
 			</div>
 		{/if}
 	{/if}
