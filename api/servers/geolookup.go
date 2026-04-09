@@ -54,8 +54,9 @@ type ServerGeo struct {
 }
 
 type ServerGeoResponse struct {
-	Servers []ServerGeo          `json:"servers"`
-	Geo     map[string]GeoResult `json:"geo"`
+	Servers  []ServerGeo          `json:"servers"`
+	Geo      map[string]GeoResult `json:"geo"`
+	LocalIPs []string             `json:"local_ips"` // Private IPs that can't be geo-located
 }
 
 var (
@@ -70,6 +71,18 @@ var (
 	geoResponseTTL         = 8 * time.Hour
 	geoResponseCacheAt     time.Time
 )
+
+// InvalidateGeoResponseCache clears the geo response cache and triggers a background rebuild
+// Call this when servers are added, updated, or deleted
+func InvalidateGeoResponseCache() {
+	geoResponseCacheMu.Lock()
+	geoResponseCache = nil
+	geoResponseFingerprint = ""
+	geoResponseCacheMu.Unlock()
+
+	// Trigger immediate rebuild in background
+	go rebuildGeoResponseCache()
+}
 
 // privateRanges contains all RFC 1918 and other non-routable IP ranges
 var privateRanges []*net.IPNet
@@ -180,17 +193,36 @@ func cacheGeo(ip string, result *GeoResult) {
 	}
 }
 
-// StartGeoCacheRefresh runs a background loop that refreshes stale geo cache entries once a day
+// StartGeoCacheRefresh runs background jobs:
+// 1. Refreshes stale individual geo cache entries once a day
+// 2. Rebuilds the geo response cache every 5 minutes for status updates
 func StartGeoCacheRefresh() {
-	ticker := time.NewTicker(24 * time.Hour)
-	defer ticker.Stop()
+	// Individual geo entry refresh (runs daily)
+	go func() {
+		ticker := time.NewTicker(24 * time.Hour)
+		defer ticker.Stop()
 
-	// Run once at startup
-	refreshStaleGeoEntries()
-
-	for range ticker.C {
+		// Run once at startup
 		refreshStaleGeoEntries()
-	}
+
+		for range ticker.C {
+			refreshStaleGeoEntries()
+		}
+	}()
+
+	// Geo response cache rebuild (runs every 5 minutes + at startup)
+	go func() {
+		// Build initial cache at startup
+		log.Println("Building initial geo response cache...")
+		rebuildGeoResponseCache()
+
+		ticker := time.NewTicker(5 * time.Minute)
+		defer ticker.Stop()
+
+		for range ticker.C {
+			rebuildGeoResponseCache()
+		}
+	}()
 }
 
 func refreshStaleGeoEntries() {
@@ -391,41 +423,51 @@ func computeStatusFingerprint(db *gorm.DB) (string, []Server, map[uint]*PingResu
 	return fmt.Sprintf("%x", h.Sum(nil)), srvs, pingByServer
 }
 
-// GetServersGeo returns all active servers with their IP and geolocation data.
-// Response is deduplicated: servers reference IPs by string, geo data is a separate map.
-// Cached for up to 8 hours, invalidated immediately when server statuses change.
-func GetServersGeo(c *gin.Context) {
+// rebuildGeoResponseCache performs the expensive rebuild of the geo response cache in the background
+// This includes DNS lookups and geo API calls for all servers
+func rebuildGeoResponseCache() {
 	db := database.GetDB()
 
 	// Compute cheap fingerprint from server IDs + statuses (no DNS, no geo)
 	fingerprint, srvs, pingByServer := computeStatusFingerprint(db)
 	if srvs == nil {
-		c.JSON(500, gin.H{"error": "Failed to fetch servers"})
+		log.Println("Failed to compute status fingerprint for geo cache rebuild")
 		return
 	}
 
 	if len(srvs) == 0 {
-		c.JSON(200, ServerGeoResponse{Servers: []ServerGeo{}, Geo: map[string]GeoResult{}})
+		geoResponseCacheMu.Lock()
+		geoResponseCache = &ServerGeoResponse{
+			Servers:  []ServerGeo{},
+			Geo:      map[string]GeoResult{},
+			LocalIPs: []string{},
+		}
+		geoResponseFingerprint = fingerprint
+		geoResponseCacheAt = time.Now()
+		geoResponseCacheMu.Unlock()
 		return
 	}
 
-	// Serve from cache if fingerprint matches and TTL hasn't expired
+	// Check if we need to rebuild (fingerprint changed or TTL expired)
 	geoResponseCacheMu.RLock()
-	if geoResponseCache != nil && geoResponseFingerprint == fingerprint && time.Since(geoResponseCacheAt) < geoResponseTTL {
-		resp := geoResponseCache
-		geoResponseCacheMu.RUnlock()
-		c.JSON(200, resp)
-		return
-	}
+	shouldRebuild := geoResponseCache == nil ||
+		geoResponseFingerprint != fingerprint ||
+		time.Since(geoResponseCacheAt) >= geoResponseTTL
 	geoResponseCacheMu.RUnlock()
 
-	// Cache miss — full rebuild with preloaded ping details
+	if !shouldRebuild {
+		return
+	}
+
+	log.Printf("Rebuilding geo response cache for %d servers...", len(srvs))
+	startTime := time.Now()
+
+	// Fetch pings with PingDetail preloaded
 	serverIDs := make([]uint, len(srvs))
 	for i := range srvs {
 		serverIDs[i] = srvs[i].ID
 	}
 
-	// Re-fetch pings with PingDetail preloaded (fingerprint query skipped preload for speed)
 	var latestPings []PingResult
 	db.Where("id IN (?)",
 		db.Model(&PingResult{}).
@@ -452,16 +494,20 @@ func GetServersGeo(c *gin.Context) {
 		host  string
 	}
 	var needDNS []dnsPending
-	pingIPs := make(map[int]string, len(srvs)) // index -> IP from ping
+	pingIPs := make(map[int]string, len(srvs))        // index -> public IP from ping
+	pingPrivateIPs := make(map[int]string, len(srvs)) // index -> private IP from ping
 
 	for i, srv := range srvs {
 		if ping, ok := pingByServerWithDetail[srv.ID]; ok && ping.PingDetail != nil && ping.PingDetail.IP != "" {
-			if !isPrivateIP(ping.PingDetail.IP) {
+			if isPrivateIP(ping.PingDetail.IP) {
+				// Track private IP but still try DNS for public IP
+				pingPrivateIPs[i] = ping.PingDetail.IP
+			} else {
 				pingIPs[i] = ping.PingDetail.IP
 				continue
 			}
 		}
-		// No ping IP — need DNS fallback
+		// No public ping IP — need DNS fallback
 		host := strings.TrimPrefix(strings.TrimPrefix(srv.URL, "https://"), "http://")
 		if idx := strings.Index(host, "/"); idx != -1 {
 			host = host[:idx]
@@ -469,12 +515,13 @@ func GetServersGeo(c *gin.Context) {
 		needDNS = append(needDNS, dnsPending{index: i, host: host})
 	}
 
-	// Parallel DNS only for servers without a ping IP
+	// Parallel DNS only for servers without a public ping IP
 	type dnsResult struct {
-		index int
-		ips   []string
+		index      int
+		publicIPs  []string
+		privateIPs []string
 	}
-	dnsResultsByIdx := make(map[int][]string, len(needDNS))
+	dnsResultsByIdx := make(map[int]dnsResult, len(needDNS))
 
 	if len(needDNS) > 0 {
 		dnsCh := make(chan dnsResult, len(needDNS))
@@ -488,37 +535,53 @@ func GetServersGeo(c *gin.Context) {
 				dnsSem <- struct{}{}
 				defer func() { <-dnsSem }()
 
-				var ips []string
+				var publicIPs, privateIPs []string
 				if resolved, err := net.LookupHost(h); err == nil {
 					for _, ip := range resolved {
-						if !isPrivateIP(ip) {
-							ips = append(ips, ip)
+						if isPrivateIP(ip) {
+							privateIPs = append(privateIPs, ip)
+						} else {
+							publicIPs = append(publicIPs, ip)
 						}
 					}
 				}
-				dnsCh <- dnsResult{index: idx, ips: ips}
+				dnsCh <- dnsResult{index: idx, publicIPs: publicIPs, privateIPs: privateIPs}
 			}(pending.index, pending.host)
 		}
 		dnsWg.Wait()
 		close(dnsCh)
 
 		for r := range dnsCh {
-			dnsResultsByIdx[r.index] = r.ips
+			dnsResultsByIdx[r.index] = r
 		}
 	}
 
-	// Assemble server data from ping IPs + DNS fallback
+	// Assemble server data from ping IPs + DNS fallback, tracking both public and private
 	allData := make([]serverData, 0, len(srvs))
-	allIPs := make(map[string]bool)
+	allPublicIPs := make(map[string]bool)
+	allPrivateIPs := make(map[string]bool)
 
 	for i, srv := range srvs {
 		ipSet := make(map[string]bool)
 
+		// Add public IPs
 		if ip, ok := pingIPs[i]; ok {
 			ipSet[ip] = true
 		}
-		for _, ip := range dnsResultsByIdx[i] {
+		if dnsRes, ok := dnsResultsByIdx[i]; ok {
+			for _, ip := range dnsRes.publicIPs {
+				ipSet[ip] = true
+			}
+		}
+
+		// Add private IPs
+		if ip, ok := pingPrivateIPs[i]; ok {
 			ipSet[ip] = true
+		}
+		if dnsRes, ok := dnsResultsByIdx[i]; ok {
+			for _, ip := range dnsRes.privateIPs {
+				ipSet[ip] = true
+			}
 		}
 
 		if len(ipSet) == 0 {
@@ -527,8 +590,12 @@ func GetServersGeo(c *gin.Context) {
 
 		ips := make([]string, 0, len(ipSet))
 		for ip := range ipSet {
-			allIPs[ip] = true
 			ips = append(ips, ip)
+			if isPrivateIP(ip) {
+				allPrivateIPs[ip] = true
+			} else {
+				allPublicIPs[ip] = true
+			}
 		}
 
 		status := "unknown"
@@ -545,13 +612,13 @@ func GetServersGeo(c *gin.Context) {
 		allData = append(allData, serverData{srv: &srv, ips: ips, status: status})
 	}
 
-	// Phase 3: Geo-lookup all unique IPs in parallel
+	// Phase 3: Geo-lookup all unique public IPs in parallel
 	geoResults := make(map[string]*GeoResult)
 	var geoMu sync.Mutex
 	var wg sync.WaitGroup
 	sem := make(chan struct{}, 10)
 
-	for ip := range allIPs {
+	for ip := range allPublicIPs {
 		wg.Add(1)
 		go func(ip string) {
 			defer wg.Done()
@@ -585,7 +652,18 @@ func GetServersGeo(c *gin.Context) {
 		geo[ip] = *g
 	}
 
-	resp := &ServerGeoResponse{Servers: servers, Geo: geo}
+	// Collect local IPs as a sorted list
+	localIPs := make([]string, 0, len(allPrivateIPs))
+	for ip := range allPrivateIPs {
+		localIPs = append(localIPs, ip)
+	}
+	sort.Strings(localIPs)
+
+	resp := &ServerGeoResponse{
+		Servers:  servers,
+		Geo:      geo,
+		LocalIPs: localIPs,
+	}
 
 	geoResponseCacheMu.Lock()
 	geoResponseCache = resp
@@ -593,5 +671,54 @@ func GetServersGeo(c *gin.Context) {
 	geoResponseCacheAt = time.Now()
 	geoResponseCacheMu.Unlock()
 
-	c.JSON(200, resp)
+	log.Printf("Geo response cache rebuilt in %v (public IPs: %d, local IPs: %d)",
+		time.Since(startTime), len(allPublicIPs), len(allPrivateIPs))
+}
+
+// GetServersGeo returns all active servers with their IP and geolocation data.
+// Response is served from a background-maintained cache for performance.
+// If cache is empty, triggers a background rebuild and returns empty response or waits briefly.
+func GetServersGeo(c *gin.Context) {
+	// Serve from cache if available
+	geoResponseCacheMu.RLock()
+	if geoResponseCache != nil {
+		resp := geoResponseCache
+		geoResponseCacheMu.RUnlock()
+		c.JSON(200, resp)
+		return
+	}
+	geoResponseCacheMu.RUnlock()
+
+	// Cache is empty - trigger rebuild and wait briefly with timeout
+	done := make(chan struct{})
+	go func() {
+		rebuildGeoResponseCache()
+		close(done)
+	}()
+
+	// Wait up to 2 seconds for rebuild to complete
+	select {
+	case <-done:
+		// Rebuild completed, serve the result
+		geoResponseCacheMu.RLock()
+		resp := geoResponseCache
+		geoResponseCacheMu.RUnlock()
+		if resp != nil {
+			c.JSON(200, resp)
+		} else {
+			c.JSON(200, ServerGeoResponse{
+				Servers:  []ServerGeo{},
+				Geo:      map[string]GeoResult{},
+				LocalIPs: []string{},
+			})
+		}
+	case <-time.After(2 * time.Second):
+		// Timeout - return empty response, rebuild continues in background
+		log.Println("Geo cache rebuild timeout, returning empty response")
+		c.JSON(200, ServerGeoResponse{
+			Servers:  []ServerGeo{},
+			Geo:      map[string]GeoResult{},
+			LocalIPs: []string{},
+		})
+	}
 }

@@ -331,6 +331,9 @@ export const serverStoreActions = {
 
 			const newServer = await response.json();
 
+			// Clear the cache to ensure all views get fresh data
+			memoryCache.clear();
+
 			// Add the new server to the store
 			serverStore.update((state) => ({
 				...state,
@@ -359,6 +362,9 @@ export const serverStoreActions = {
 			if (!response.ok) throw new Error(`Failed to update server ${serverId}`);
 
 			const updatedServer = await response.json();
+
+			// Clear the cache to ensure all views get fresh data
+			memoryCache.clear();
 
 			// Update the server in the store
 			serverStore.update((state) => {
@@ -391,6 +397,9 @@ export const serverStoreActions = {
 			});
 
 			if (!response.ok) throw new Error(`Failed to delete server ${serverId}`);
+
+			// Clear the cache to ensure all views get fresh data
+			memoryCache.clear();
 
 			// Remove the server from the store
 			serverStore.update((state) => ({

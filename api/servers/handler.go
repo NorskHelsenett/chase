@@ -118,6 +118,9 @@ func DeleteServer(c *gin.Context) {
 		return
 	}
 
+	// Invalidate geo cache since server was deleted
+	go InvalidateGeoResponseCache()
+
 	// Send push notification for deleted server (after committing, but before losing server data)
 	go NotifyServerDeleted(server.ID, server.URL)
 
@@ -172,6 +175,9 @@ func AddServer(c *gin.Context) {
 
 	// Send push notification for new server
 	go NotifyServerAdded(server.ID, server.URL)
+
+	// Invalidate geo cache since we have a new server
+	go InvalidateGeoResponseCache()
 
 	// Start ping and security scan in background
 	go checkServer(server.ID, nil)
@@ -374,6 +380,9 @@ func PatchServer(c *gin.Context) {
 		return
 	}
 
+	// Invalidate geo cache since server properties changed
+	go InvalidateGeoResponseCache()
+
 	c.JSON(200, server)
 }
 
@@ -396,6 +405,9 @@ func UpdateServer(c *gin.Context) {
 	server.NextCheck = time.Now().Add(time.Duration(server.UpdateInterval) * time.Minute)
 
 	db.Save(&server)
+
+	// Invalidate geo cache since server was updated
+	go InvalidateGeoResponseCache()
 
 	// Send notification if server was manually deactivated
 	if wasActive && !server.Active {
