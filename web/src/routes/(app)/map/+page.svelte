@@ -241,6 +241,10 @@
 				)
 			: allLocationGroups
 	);
+
+	// Filter local IPs based on current filtered servers
+	let filteredLocalIPs = $derived(localIPs.filter((ip) => ipGroups[ip] !== undefined));
+
 	// Reset map when switching to clusters
 	run(() => {
 		if (view === 'cluster' && map) {
@@ -368,7 +372,7 @@
 			</div>
 		{/if}
 
-		{#if Object.keys(allLocationGroups).length > 0 || localIPs.length > 0}
+		{#if Object.keys(allLocationGroups).length > 0 || filteredLocalIPs.length > 0}
 			<div class="country-strip">
 				{#each Object.entries(Object.values(allLocationGroups).reduce((acc, loc) => {
 						const cc = loc.country_code || '??';
@@ -387,14 +391,14 @@
 						<span class="country-count">{info.count}</span>
 					</button>
 				{/each}
-				{#if localIPs.length > 0}
+				{#if filteredLocalIPs.length > 0}
 					<button
 						class="country-chip"
 						class:selected={selectedCountry === 'LOCAL'}
 						onclick={() => handleCountryClick('LOCAL')}
 					>
 						<span class="country-name">Local</span>
-						<span class="country-count">{localIPs.length}</span>
+						<span class="country-count">{filteredLocalIPs.length}</span>
 					</button>
 				{/if}
 			</div>
