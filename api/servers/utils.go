@@ -132,8 +132,8 @@ func pingServer(server Server) PingResult {
 			result.PingDetail = extractConnectionDetails(resp, fullURL)
 		}
 
-		// Extract site metadata (favicon, title, etc.) if not yet stored
-		if server.Favicon == "" && resp.StatusCode >= 200 && resp.StatusCode < 400 {
+		// Extract site metadata (favicon, title, etc.) on every successful HTML response
+		if resp.StatusCode >= 200 && resp.StatusCode < 400 {
 			ct := resp.Header.Get("Content-Type")
 			if strings.Contains(ct, "text/html") {
 				result.siteMetadata = extractSiteMetadata(resp.Body)
