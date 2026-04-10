@@ -34,7 +34,10 @@
 			const query = searchQuery.toLowerCase();
 			result = result.filter(
 				(server) =>
-					server.url.toLowerCase().includes(query) || server.comment?.toLowerCase().includes(query)
+					server.url.toLowerCase().includes(query) ||
+					server.comment?.toLowerCase().includes(query) ||
+					server.site_title?.toLowerCase().includes(query) ||
+					server.site_description?.toLowerCase().includes(query)
 			);
 		}
 

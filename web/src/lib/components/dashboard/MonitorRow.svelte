@@ -33,7 +33,9 @@
 		const ts = pingInfo?.latest?.timestamp;
 		if (ts && lastTimestamp && ts !== lastTimestamp) {
 			pulsing = true;
-			setTimeout(() => { pulsing = false; }, 600);
+			setTimeout(() => {
+				pulsing = false;
+			}, 600);
 		}
 		if (ts) lastTimestamp = ts;
 	});
@@ -404,7 +406,9 @@
 		width: 4px;
 		height: 1rem;
 		border-radius: 2px;
-		transition: transform 0.15s ease, filter 0.15s ease;
+		transition:
+			transform 0.15s ease,
+			filter 0.15s ease;
 	}
 
 	.uptime-bar-wrap:hover .uptime-bar {
@@ -482,8 +486,6 @@
 		text-align: right;
 		width: 1%;
 		white-space: nowrap;
-		padding-left: 0;
-		padding-right: 0.25rem;
 	}
 
 	.response-time {

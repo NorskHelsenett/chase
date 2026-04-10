@@ -240,7 +240,7 @@
 							<span class="sort-indicator">{getSortIndicator('uptime')}</span>
 						</th>
 						<th class="sortable col-response-time" onclick={() => toggleSort('responseTime')}>
-							<span>Response</span>
+							<span>Ms</span>
 							<span class="sort-indicator">{getSortIndicator('responseTime')}</span>
 						</th>
 					</tr>
@@ -350,7 +350,10 @@
 	}
 
 	.monitor-table th.col-response-time {
-		text-align: right;
+		text-align: right !important;
+		white-space: nowrap;
+		width: 1px;
+		padding-right: 0.25rem;
 	}
 
 	.sort-indicator {
