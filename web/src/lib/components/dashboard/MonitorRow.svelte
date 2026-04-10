@@ -26,6 +26,18 @@
 
 	let rowData: ServerRowData = $derived(mapServerToRowData(server, pingInfo));
 
+	let pulsing = $state(false);
+	let lastTimestamp = $state('');
+
+	$effect(() => {
+		const ts = pingInfo?.latest?.timestamp;
+		if (ts && lastTimestamp && ts !== lastTimestamp) {
+			pulsing = true;
+			setTimeout(() => { pulsing = false; }, 600);
+		}
+		if (ts) lastTimestamp = ts;
+	});
+
 	function mapServerToRowData(server: Server, pingInfo: any): ServerRowData {
 		let status: 'up' | 'down' = 'down';
 		let days: DaySummary[] = [];
@@ -112,7 +124,12 @@
 
 <td class="cell cell-domain" class:hoverable={hover}>
 	<div class="domain-info">
-		<span class="status-dot {rowData.status}" title={rowData.status.toUpperCase()}></span>
+		<span class="status-dot-wrap">
+			<span class="status-dot {rowData.status}" title={rowData.status.toUpperCase()}></span>
+			{#if pulsing}
+				<span class="pulse-ring {rowData.status}"></span>
+			{/if}
+		</span>
 		{#if server.favicon}
 			<img
 				class="favicon"
@@ -250,12 +267,21 @@
 		line-height: 1.2;
 	}
 
+	.status-dot-wrap {
+		position: relative;
+		width: 10px;
+		height: 10px;
+		flex-shrink: 0;
+		margin-right: 0.5rem;
+	}
+
 	.status-dot {
 		width: 10px;
 		height: 10px;
 		border-radius: 50%;
-		flex-shrink: 0;
-		margin-right: 0.5rem;
+		position: absolute;
+		top: 0;
+		left: 0;
 	}
 
 	.status-dot.up {
@@ -266,6 +292,39 @@
 	.status-dot.down {
 		background: #ef4444;
 		box-shadow: 0 0 6px rgba(239, 68, 68, 0.6);
+	}
+
+	.pulse-ring {
+		position: absolute;
+		top: 50%;
+		left: 50%;
+		width: 10px;
+		height: 10px;
+		border-radius: 50%;
+		transform: translate(-50%, -50%);
+		animation: pulse-fade 0.6s ease-out forwards;
+		pointer-events: none;
+	}
+
+	.pulse-ring.up {
+		border: 2px solid #22c55e;
+	}
+
+	.pulse-ring.down {
+		border: 2px solid #ef4444;
+	}
+
+	@keyframes pulse-fade {
+		0% {
+			width: 10px;
+			height: 10px;
+			opacity: 0.7;
+		}
+		100% {
+			width: 28px;
+			height: 28px;
+			opacity: 0;
+		}
 	}
 
 	.cell-score {
