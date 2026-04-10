@@ -480,6 +480,10 @@
 
 	.cell-response-time {
 		text-align: right;
+		width: 1%;
+		white-space: nowrap;
+		padding-left: 0;
+		padding-right: 0.25rem;
 	}
 
 	.response-time {
