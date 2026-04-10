@@ -5,7 +5,7 @@ import { browser } from '$app/environment';
  * Per-server ping data from SSE.
  * Map<serverID, { latest, days, expectedStatus }>
  *   latest: { server_id, status_code, response_time_ms, error?, timestamp }
- *   days: [{ date, total, successful, uptime }]  (last 10 days, oldest first)
+ *   days: [{ date, total, successful, uptime }]  (last 14 days, oldest first)
  *   expectedStatus: number
  */
 export const pingData = writable(new Map());
@@ -60,9 +60,9 @@ export function connectPingSSE() {
 					successful: isSuccess ? 1 : 0,
 					uptime: isSuccess ? 100 : 0
 				});
-				// Keep only last 10 days
-				if (existing.days.length > 10) {
-					existing.days = existing.days.slice(-10);
+				// Keep only last 14 days
+				if (existing.days.length > 14) {
+					existing.days = existing.days.slice(-14);
 				}
 			}
 

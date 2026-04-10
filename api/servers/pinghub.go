@@ -111,7 +111,7 @@ func PingStreamSSE(c *gin.Context) {
 		return
 	}
 
-	cutoff := time.Now().AddDate(0, 0, -10) // Last 10 days
+	cutoff := time.Now().AddDate(0, 0, -14) // Last 14 days
 
 	for _, srv := range servers {
 		// Get daily aggregates using a single query

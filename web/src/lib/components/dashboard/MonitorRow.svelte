@@ -44,12 +44,10 @@
 		let responseTimeMs: number | null = null;
 
 		if (pingInfo?.latest) {
-			// SSE has real-time data — use it for live status
 			const s = pingInfo.latest.status_code;
 			status = s > 0 && s === server.expected_status && !pingInfo.latest.error ? 'up' : 'down';
 			responseTimeMs = pingInfo.latest.response_time_ms ?? null;
 		} else {
-			// Use API-provided status (available immediately)
 			status = server.status === 'up' ? 'up' : 'down';
 		}
 
@@ -111,14 +109,12 @@
 	}
 
 	function getDayBarClass(day: DaySummary): string {
-		if (day.uptime >= 99.9) return 'uptime-up';
-		if (day.uptime >= 95) return 'uptime-degraded';
-		return 'uptime-down';
+		if (day.total === 0) return 'uptime-missing';
+		if (day.uptime === 0) return 'uptime-down';
+		if (day.uptime < 100) return 'uptime-missing';
+		return 'uptime-up';
 	}
 
-	function formatDayTooltip(day: DaySummary): string {
-		return `${day.date}\n${day.uptime.toFixed(1)}% (${day.successful}/${day.total})`;
-	}
 	let pingInfo = $derived($pingData.get(server.ID));
 </script>
 
@@ -181,12 +177,23 @@
 
 <td class="cell cell-uptime" class:hoverable={hover}>
 	<div class="uptime-bars">
-		{#each Array(10) as _, i}
-			{#if i < 10 - rowData.days.length}
+		{#each Array(14) as _, i}
+			{#if i < 14 - rowData.days.length}
 				<div class="uptime-bar uptime-empty"></div>
 			{:else}
-				{@const day = rowData.days[i - (10 - rowData.days.length)]}
-				<div class="uptime-bar {getDayBarClass(day)}" title={formatDayTooltip(day)}></div>
+				{@const day = rowData.days[i - (14 - rowData.days.length)]}
+				<div class="uptime-bar-wrap">
+					<div class="uptime-bar {getDayBarClass(day)}"></div>
+					<div class="uptime-tooltip">
+						<span class="tooltip-date">{day.date}</span>
+						{#if day.total === 0}
+							<span class="tooltip-detail">No pings</span>
+						{:else}
+							<span class="tooltip-uptime">{day.uptime.toFixed(1)}%</span>
+							<span class="tooltip-detail">{day.successful}/{day.total} ok</span>
+						{/if}
+					</div>
+				</div>
 			{/if}
 		{/each}
 	</div>
@@ -389,17 +396,77 @@
 		gap: 2px;
 	}
 
+	.uptime-bar-wrap {
+		position: relative;
+	}
+
 	.uptime-bar {
 		width: 4px;
 		height: 1rem;
 		border-radius: 2px;
+		transition: transform 0.15s ease, filter 0.15s ease;
+	}
+
+	.uptime-bar-wrap:hover .uptime-bar {
+		transform: scaleY(1.4);
+		filter: brightness(1.3);
+	}
+
+	.uptime-tooltip {
+		display: none;
+		position: absolute;
+		bottom: calc(100% + 8px);
+		left: 50%;
+		transform: translateX(-50%);
+		background: #1a1a1a;
+		border: 1px solid #333;
+		border-radius: 6px;
+		padding: 0.375rem 0.5rem;
+		white-space: nowrap;
+		z-index: 10;
+		flex-direction: column;
+		align-items: center;
+		gap: 2px;
+		pointer-events: none;
+		box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+	}
+
+	.uptime-tooltip::after {
+		content: '';
+		position: absolute;
+		top: 100%;
+		left: 50%;
+		transform: translateX(-50%);
+		border: 5px solid transparent;
+		border-top-color: #333;
+	}
+
+	.uptime-bar-wrap:hover .uptime-tooltip {
+		display: flex;
+	}
+
+	.tooltip-date {
+		font-size: 0.625rem;
+		color: #6b7280;
+		letter-spacing: 0.02em;
+	}
+
+	.tooltip-uptime {
+		font-size: 0.75rem;
+		font-weight: 600;
+		color: #e5e7eb;
+	}
+
+	.tooltip-detail {
+		font-size: 0.625rem;
+		color: #9ca3af;
 	}
 
 	.uptime-up {
-		background: rgba(163, 230, 53, 0.7);
+		background: rgba(34, 197, 94, 0.7);
 	}
 
-	.uptime-degraded {
+	.uptime-missing {
 		background: #eab308;
 	}
 
@@ -408,7 +475,7 @@
 	}
 
 	.uptime-empty {
-		background: rgba(34, 197, 94, 0.1);
+		background: rgba(107, 114, 128, 0.15);
 	}
 
 	.cell-response-time {
