@@ -596,6 +596,12 @@ func RunBackgroundScan(serverURL string) {
 	runBackgroundScan(serverURL)
 }
 
+// CaptureScreenshotForDomain captures and stores a screenshot for the given domain.
+// This is the entry point used by the jobs system and event triggers.
+func CaptureScreenshotForDomain(domain string) error {
+	return captureAndSendScreenshot(nil, domain, false, 0)
+}
+
 func runBackgroundScan(serverURL string) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
@@ -615,6 +621,13 @@ func runBackgroundScan(serverURL string) {
 	}
 
 	clearScanStatus(serverURL)
+
+	// Capture screenshot after successful security scan
+	go func() {
+		if err := CaptureScreenshotForDomain(serverURL); err != nil {
+			log.Printf("Screenshot capture after security scan failed for %s: %v", serverURL, err)
+		}
+	}()
 }
 
 var (

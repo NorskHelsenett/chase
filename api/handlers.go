@@ -35,8 +35,14 @@ func getProfile(c *gin.Context) {
 	user, err := getUserFromCookie(c)
 	if err != nil {
 		c.AbortWithStatus(http.StatusUnauthorized)
+		return
 	}
-	c.JSON(http.StatusOK, user)
+	admin := types.IsAdmin(database.GetDB(), user.Email)
+	c.JSON(http.StatusOK, gin.H{
+		"name":     user.Name,
+		"email":    user.Email,
+		"is_admin": admin,
+	})
 }
 
 func registerToken(c *gin.Context) {

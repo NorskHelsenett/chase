@@ -10,6 +10,7 @@ import (
 	"github.com/norskhelsenett/chase/auth"
 	"github.com/norskhelsenett/chase/database"
 	"github.com/norskhelsenett/chase/handlers"
+	"github.com/norskhelsenett/chase/jobs"
 	"github.com/norskhelsenett/chase/security"
 	"github.com/norskhelsenett/chase/servers"
 	"github.com/norskhelsenett/chase/session"
@@ -122,6 +123,9 @@ func setupRoutes(r *gin.Engine) {
 			// Web Push notification routes
 			pushHandler := webpush.NewHandler(db)
 			pushHandler.RegisterRoutes(api)
+
+			// Job management routes (admin only)
+			jobs.RegisterRoutes(api)
 		}
 	}
 
@@ -152,6 +156,11 @@ func main() {
 	db.AutoMigrate(&security.BatchJobStore{}, &security.BatchResultStore{})
 	security.InitDatabase()
 	security.SetMaxParallelScreenshots(2)
+
+	if err := jobs.AutoMigrate(db); err != nil {
+		log.Printf("Failed to initialize jobs table: %v", err)
+	}
+	jobs.RegisterScreenshotJobs(security.CaptureScreenshotForDomain)
 
 	if err := webpush.InitDatabase(db); err != nil {
 		log.Printf("Failed to initialize web push: %v", err)
@@ -185,6 +194,7 @@ func main() {
 
 	go servers.StartMonitoring()
 	go servers.StartGeoCacheRefresh()
+	go jobs.StartScheduler()
 
 	// Run all cleanup in background — doesn't block serving
 	go func() {

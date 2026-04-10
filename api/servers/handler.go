@@ -2,6 +2,7 @@ package servers
 
 import (
 	"errors"
+	"log"
 	"strconv"
 	"strings"
 	"time"
@@ -182,6 +183,13 @@ func AddServer(c *gin.Context) {
 	// Start ping and security scan in background
 	go checkServer(server.ID, nil)
 	go security.RunBackgroundScan(server.URL)
+
+	// Capture screenshot for the new server
+	go func() {
+		if err := security.CaptureScreenshotForDomain(server.URL); err != nil {
+			log.Printf("Screenshot capture failed for new server %s: %v", server.URL, err)
+		}
+	}()
 
 	c.JSON(201, server)
 }
