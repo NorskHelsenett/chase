@@ -14,6 +14,7 @@
 		secretsRisk: 'critical' | 'high' | 'medium' | 'low' | '';
 		secretsCount: number;
 		days: DaySummary[];
+		responseTimeMs: number | null;
 	};
 
 	interface Props {
@@ -25,16 +26,16 @@
 
 	let rowData: ServerRowData = $derived(mapServerToRowData(server, pingInfo));
 
-
-
 	function mapServerToRowData(server: Server, pingInfo: any): ServerRowData {
 		let status: 'up' | 'down' = 'down';
 		let days: DaySummary[] = [];
+		let responseTimeMs: number | null = null;
 
 		if (pingInfo?.latest) {
 			// SSE has real-time data — use it for live status
 			const s = pingInfo.latest.status_code;
 			status = s > 0 && s === server.expected_status && !pingInfo.latest.error ? 'up' : 'down';
+			responseTimeMs = pingInfo.latest.response_time_ms ?? null;
 		} else {
 			// Use API-provided status (available immediately)
 			status = server.status === 'up' ? 'up' : 'down';
@@ -53,30 +54,47 @@
 			apiRisk: server.api_risk?.toLowerCase() || server.security?.apiRisk || '',
 			secretsRisk: server.secrets_risk?.toLowerCase() || '',
 			secretsCount: server.secrets_count || 0,
-			days
+			days,
+			responseTimeMs
 		};
+	}
+
+	function formatResponseTime(ms: number | null): { value: string; unit: string } | null {
+		if (ms === null || ms === undefined) return null;
+		if (ms >= 1000) return { value: (ms / 1000).toFixed(1), unit: 's' };
+		return { value: String(Math.round(ms)), unit: 'ms' };
 	}
 
 	function getRiskClass(risk: string): string {
 		switch (risk?.toLowerCase()) {
-			case 'critical': return 'risk-critical';
-			case 'high': return 'risk-high';
-			case 'medium': return 'risk-medium';
-			case 'low': return 'risk-low';
-			default: return 'risk-none';
+			case 'critical':
+				return 'risk-critical';
+			case 'high':
+				return 'risk-high';
+			case 'medium':
+				return 'risk-medium';
+			case 'low':
+				return 'risk-low';
+			default:
+				return 'risk-none';
 		}
 	}
 
 	function getScoreClass(score: string): string {
 		switch (score) {
 			case 'A+':
-			case 'A': return 'score-a';
+			case 'A':
+				return 'score-a';
 			case 'B+':
-			case 'B': return 'score-b';
-			case 'C': return 'score-c';
+			case 'B':
+				return 'score-b';
+			case 'C':
+				return 'score-c';
 			case 'D':
-			case 'F': return 'score-f';
-			default: return 'score-none';
+			case 'F':
+				return 'score-f';
+			default:
+				return 'score-none';
 		}
 	}
 
@@ -90,23 +108,19 @@
 		return `${day.date}\n${day.uptime.toFixed(1)}% (${day.successful}/${day.total})`;
 	}
 	let pingInfo = $derived($pingData.get(server.ID));
-	
 </script>
-
-<td class="cell cell-status" class:hoverable={hover}>
-	<span class="status-badge {rowData.status}">
-		{rowData.status.toUpperCase()}
-	</span>
-</td>
 
 <td class="cell cell-domain" class:hoverable={hover}>
 	<div class="domain-info">
+		<span class="status-dot {rowData.status}" title={rowData.status.toUpperCase()}></span>
 		{#if server.favicon}
 			<img
 				class="favicon"
-				src={server.favicon.startsWith('http') ? server.favicon : `https://${server.url}${server.favicon.startsWith('/') ? '' : '/'}${server.favicon}`}
+				src={server.favicon.startsWith('http')
+					? server.favicon
+					: `https://${server.url}${server.favicon.startsWith('/') ? '' : '/'}${server.favicon}`}
 				alt=""
-				onerror={(e) => e.currentTarget.style.display = 'none'}
+				onerror={(e) => (e.currentTarget.style.display = 'none')}
 			/>
 		{/if}
 		<div class="domain-text-wrap">
@@ -155,13 +169,21 @@
 				<div class="uptime-bar uptime-empty"></div>
 			{:else}
 				{@const day = rowData.days[i - (10 - rowData.days.length)]}
-				<div
-					class="uptime-bar {getDayBarClass(day)}"
-					title={formatDayTooltip(day)}
-				></div>
+				<div class="uptime-bar {getDayBarClass(day)}" title={formatDayTooltip(day)}></div>
 			{/if}
 		{/each}
 	</div>
+</td>
+
+<td class="cell cell-response-time" class:hoverable={hover}>
+	{#if formatResponseTime(rowData.responseTimeMs)}
+		{@const rt = formatResponseTime(rowData.responseTimeMs)}
+		<span class="response-time"
+			><span class="rt-value">{rt.value}</span><span class="rt-unit">{rt.unit}</span></span
+		>
+	{:else}
+		<span class="response-time rt-unit">—</span>
+	{/if}
 </td>
 
 <style>
@@ -178,11 +200,11 @@
 		background: #2b2b2b;
 	}
 
-	:global(tr:hover) .cell-status.hoverable {
+	:global(tr:hover) .cell-domain.hoverable {
 		border-radius: 0.5rem 0 0 0.5rem;
 	}
 
-	:global(tr:hover) .cell-uptime.hoverable {
+	:global(tr:hover) .cell-response-time.hoverable {
 		border-radius: 0 0.5rem 0.5rem 0;
 	}
 
@@ -228,41 +250,43 @@
 		line-height: 1.2;
 	}
 
-	.status-badge {
-		display: inline-flex;
-		align-items: center;
-		justify-content: center;
-		padding: 0.125rem 0.5rem;
-		min-width: 5em;
-		font-size: 0.6875rem;
-		font-weight: 500;
-		text-transform: uppercase;
-		letter-spacing: 0.025em;
-		border-radius: 9999px;
-		border: 1px solid;
+	.status-dot {
+		width: 10px;
+		height: 10px;
+		border-radius: 50%;
+		flex-shrink: 0;
+		margin-right: 0.5rem;
 	}
 
-	.status-badge.up {
-		background: rgba(34, 197, 94, 0.15);
-		color: #4ade80;
-		border-color: rgba(34, 197, 94, 0.3);
+	.status-dot.up {
+		background: #22c55e;
+		box-shadow: 0 0 6px rgba(34, 197, 94, 0.6);
 	}
 
-	.status-badge.down {
-		background: rgba(239, 68, 68, 0.15);
-		color: #f87171;
-		border-color: rgba(239, 68, 68, 0.3);
+	.status-dot.down {
+		background: #ef4444;
+		box-shadow: 0 0 6px rgba(239, 68, 68, 0.6);
 	}
 
 	.cell-score {
 		font-weight: 500;
 	}
 
-	.score-a { color: #22c55e; }
-	.score-b { color: #eab308; }
-	.score-c { color: #3b82f6; }
-	.score-f { color: #ef4444; }
-	.score-none { color: #6b7280; }
+	.score-a {
+		color: #22c55e;
+	}
+	.score-b {
+		color: #eab308;
+	}
+	.score-c {
+		color: #3b82f6;
+	}
+	.score-f {
+		color: #ef4444;
+	}
+	.score-none {
+		color: #6b7280;
+	}
 
 	.risk-badge {
 		display: inline-flex;
@@ -326,5 +350,22 @@
 
 	.uptime-empty {
 		background: rgba(34, 197, 94, 0.1);
+	}
+
+	.cell-response-time {
+		text-align: right;
+	}
+
+	.response-time {
+		font-size: 0.75rem;
+		font-variant-numeric: tabular-nums;
+	}
+
+	.rt-value {
+		color: #9ca3af;
+	}
+
+	.rt-unit {
+		color: #4b5563;
 	}
 </style>
