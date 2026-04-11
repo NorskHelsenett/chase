@@ -1,15 +1,18 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/norskhelsenett/chase/auth"
 	"github.com/norskhelsenett/chase/database"
 	"github.com/norskhelsenett/chase/handlers"
+	"github.com/norskhelsenett/chase/scheduler"
 	"github.com/norskhelsenett/chase/security"
 	"github.com/norskhelsenett/chase/servers"
 	"github.com/norskhelsenett/chase/session"
@@ -25,6 +28,7 @@ import (
 
 var db *gorm.DB
 var appStart = time.Now()
+var sched *scheduler.Scheduler
 
 func loadEnv() error {
 	// Try to load from .env file
@@ -122,6 +126,9 @@ func setupRoutes(r *gin.Engine) {
 			// Web Push notification routes
 			pushHandler := webpush.NewHandler(db)
 			pushHandler.RegisterRoutes(api)
+
+			// Scheduler routes
+			sched.RegisterRoutes(api)
 		}
 	}
 
@@ -167,6 +174,14 @@ func main() {
 		log.Fatalf("Unable to initalize session storage: %v", err)
 	}
 
+	// Initialize scheduler and register all jobs (before routes so handlers can reference it)
+	sched = scheduler.New(db)
+	registerJobs(sched)
+	sched.Start()
+
+	// Build initial geo cache before serving
+	go servers.RebuildGeoResponseCache()
+
 	r := gin.Default()
 	r.Use(gin.Recovery())
 	r.Use(gzip.Gzip(gzip.DefaultCompression))
@@ -183,16 +198,74 @@ func main() {
 
 	log.Println("Application routes registered")
 
-	go servers.StartMonitoring()
-	go servers.StartGeoCacheRefresh()
-
-	// Run all cleanup in background — doesn't block serving
-	go func() {
-		log.Println("Starting database cleanup...")
-		security.RunDatabaseCleanup()
-		servers.AggregateAndPrunePings()
-		log.Println("Database cleanup complete")
-	}()
-
 	r.Run(":8080")
+}
+
+func getMonitoringInterval() time.Duration {
+	if s, err := strconv.Atoi(os.Getenv("MONITORING_INTERVAL")); err == nil && s > 0 {
+		return time.Duration(s) * time.Minute
+	}
+	return 1 * time.Minute
+}
+
+func registerJobs(s *scheduler.Scheduler) {
+	// Server monitoring — ping all active servers due for check
+	s.Register("server-monitoring", "Ping all active servers due for check",
+		scheduler.Schedule{Interval: getMonitoringInterval()},
+		func(ctx context.Context, progress func(string)) (string, error) {
+			servers.RunMonitoring()
+			return "monitoring cycle complete", nil
+		},
+	)
+
+	// Geo cache entry refresh — refresh stale geo IP entries
+	s.Register("geo-cache-refresh", "Refresh stale geo IP cache entries",
+		scheduler.Schedule{TimeOfDay: &scheduler.TimeOfDay{Hour: 3, Minute: 0}},
+		func(ctx context.Context, progress func(string)) (string, error) {
+			servers.RefreshStaleGeoEntries()
+			return "geo entries refreshed", nil
+		},
+	)
+
+	// Geo response cache rebuild — rebuild full geo response cache
+	s.Register("geo-response-rebuild", "Rebuild server geo response cache",
+		scheduler.Schedule{Interval: 1 * time.Hour},
+		func(ctx context.Context, progress func(string)) (string, error) {
+			servers.RebuildGeoResponseCache()
+			return "geo response cache rebuilt", nil
+		},
+	)
+
+	// Database cleanup — dedup, prune old data, vacuum
+	s.Register("database-cleanup", "Dedup screenshots/reports, prune old data, vacuum",
+		scheduler.Schedule{TimeOfDay: &scheduler.TimeOfDay{Hour: 2, Minute: 0}},
+		func(ctx context.Context, progress func(string)) (string, error) {
+			return security.RunDatabaseCleanup(), nil
+		},
+	)
+
+	// Aggregate & prune pings — three-tier retention policy
+	s.Register("aggregate-prune-pings", "Three-tier ping retention: raw -> hourly -> daily",
+		scheduler.Schedule{TimeOfDay: &scheduler.TimeOfDay{Hour: 2, Minute: 30}},
+		func(ctx context.Context, progress func(string)) (string, error) {
+			servers.AggregateAndPrunePings()
+			return "ping aggregation complete", nil
+		},
+	)
+
+	// Backfill thumbnails — generate missing screenshot thumbnails
+	s.Register("backfill-thumbnails", "Generate thumbnails for screenshots missing them",
+		scheduler.Schedule{TimeOfDay: &scheduler.TimeOfDay{Hour: 4, Minute: 0}},
+		func(ctx context.Context, progress func(string)) (string, error) {
+			return security.BackfillThumbnails(), nil
+		},
+	)
+
+	// Inactive server recheck — ping deactivated servers to see if they're back
+	s.Register("inactive-server-recheck", "Ping deactivated servers to check if they're back online",
+		scheduler.Schedule{TimeOfDay: &scheduler.TimeOfDay{Hour: 5, Minute: 0}},
+		func(ctx context.Context, progress func(string)) (string, error) {
+			return servers.RecheckInactiveServers(ctx, progress)
+		},
+	)
 }

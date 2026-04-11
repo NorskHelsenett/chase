@@ -3,8 +3,6 @@ package servers
 import (
 	"fmt"
 	"log"
-	"os"
-	"strconv"
 	"sync/atomic"
 	"time"
 
@@ -191,28 +189,8 @@ func aggregateAndPrunePings(db *gorm.DB) {
 	log.Printf("Ping aggregation complete")
 }
 
-func StartMonitoring() {
-	interval := getMonitoringInterval()
-	ticker := time.NewTicker(time.Duration(interval) * time.Minute)
-	defer ticker.Stop()
-
-	go runMonitoring()
-
-	for range ticker.C {
-		go runMonitoring()
-	}
-}
-
-func getMonitoringInterval() int {
-	intervalStr := os.Getenv("MONITORING_INTERVAL")
-	interval, err := strconv.Atoi(intervalStr)
-	if err != nil || interval <= 0 {
-		return 1
-	}
-	return interval
-}
-
-func runMonitoring() {
+// RunMonitoring executes a single monitoring cycle for all active servers due for check.
+func RunMonitoring() {
 	if !monitoringInProgress.CompareAndSwap(false, true) {
 		log.Printf("Monitoring run already in progress, skipping")
 		return

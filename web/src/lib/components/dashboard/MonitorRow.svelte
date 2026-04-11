@@ -316,23 +316,27 @@
 	}
 
 	.pulse-ring.up {
-		border: 2px solid #22c55e;
+		background: #22c55e;
+		box-shadow: 0 0 6px rgba(34, 197, 94, 0.6);
 	}
 
 	.pulse-ring.down {
-		border: 2px solid #ef4444;
+		background: #ef4444;
+		box-shadow: 0 0 6px rgba(239, 68, 68, 0.6);
 	}
 
 	@keyframes pulse-fade {
 		0% {
 			width: 10px;
 			height: 10px;
-			opacity: 0.7;
+			opacity: 0.8;
+			transform: translate(-50%, -50%) scale(1);
 		}
 		100% {
 			width: 28px;
 			height: 28px;
 			opacity: 0;
+			transform: translate(-50%, -50%) scale(2.8);
 		}
 	}
 
