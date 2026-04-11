@@ -3,6 +3,7 @@ package scheduler
 import (
 	"net/http"
 	"os"
+	"path/filepath"
 	"strconv"
 
 	"github.com/gin-gonic/gin"
@@ -65,7 +66,11 @@ func (s *Scheduler) handleSystemStats(c *gin.Context) {
 	var dbSize int64
 	dbPath := os.Getenv("DATABASE_PATH")
 	if dbPath == "" {
-		dbPath = "chase.db"
+		dataFolder := os.Getenv("DATA_FOLDER")
+		if dataFolder == "" {
+			dataFolder = "/data"
+		}
+		dbPath = filepath.Join(dataFolder, "chase.db")
 	}
 	if info, err := os.Stat(dbPath); err == nil {
 		dbSize = info.Size()

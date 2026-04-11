@@ -249,12 +249,18 @@
 		</div>
 	</div>
 	<div class="stat-card">
-		<div class="stat-icon" class:icon-green={stats?.running_jobs === 0} class:icon-blue={stats && stats.running_jobs > 0}>
+		<div
+			class="stat-icon"
+			class:icon-green={stats?.running_jobs === 0}
+			class:icon-blue={stats && stats.running_jobs > 0}
+		>
 			<Zap size={24} />
 		</div>
 		<div class="stat-body">
 			{#if stats}
-				<span class="stat-number">{stats.running_jobs}<span class="stat-sub">/{stats.total_jobs}</span></span>
+				<span class="stat-number"
+					>{stats.running_jobs}<span class="stat-sub">/{stats.total_jobs}</span></span
+				>
 			{:else}
 				<span class="stat-skeleton"></span>
 			{/if}
@@ -306,7 +312,10 @@
 								{@const parsed = parseProgress(job.progress)}
 								{#if parsed}
 									<div class="progress-pill">
-										<div class="progress-pill-fill" style="width: {(parsed.current / parsed.total) * 100}%"></div>
+										<div
+											class="progress-pill-fill"
+											style="width: {(parsed.current / parsed.total) * 100}%"
+										></div>
 										<span class="progress-pill-label">{parsed.current}/{parsed.total}</span>
 									</div>
 								{:else}
@@ -405,14 +414,30 @@
 		padding: 0.75rem 1rem;
 	}
 
-	.stat-icon { color: #6b7280; flex-shrink: 0; }
-	.icon-green { color: #22c55e; }
-	.icon-red { color: #ef4444; }
-	.icon-blue { color: #3b82f6; }
-	.icon-purple { color: #a855f7; }
-	.icon-orange { color: #f59e0b; }
+	.stat-icon {
+		color: #6b7280;
+		flex-shrink: 0;
+	}
+	.icon-green {
+		color: #22c55e;
+	}
+	.icon-red {
+		color: #ef4444;
+	}
+	.icon-blue {
+		color: #3b82f6;
+	}
+	.icon-purple {
+		color: #a855f7;
+	}
+	.icon-orange {
+		color: #f59e0b;
+	}
 
-	.stat-body { display: flex; flex-direction: column; }
+	.stat-body {
+		display: flex;
+		flex-direction: column;
+	}
 
 	.stat-number {
 		font-size: 1.125rem;
@@ -422,7 +447,11 @@
 		font-variant-numeric: tabular-nums;
 	}
 
-	.stat-sub { font-size: 0.75rem; font-weight: 400; color: #6b7280; }
+	.stat-sub {
+		font-size: 0.75rem;
+		font-weight: 400;
+		color: #6b7280;
+	}
 
 	.stat-label {
 		font-size: 0.6875rem;
@@ -443,8 +472,13 @@
 	}
 
 	@keyframes pulse {
-		0%, 100% { opacity: 1; }
-		50% { opacity: 0.5; }
+		0%,
+		100% {
+			opacity: 1;
+		}
+		50% {
+			opacity: 0.5;
+		}
 	}
 
 	/* Table */
@@ -470,7 +504,9 @@
 		border-spacing: 0 0.25rem;
 	}
 
-	.jobs-table thead tr { color: #9ca3af; }
+	.jobs-table thead tr {
+		color: #9ca3af;
+	}
 
 	.jobs-table th {
 		text-align: left;
@@ -486,22 +522,46 @@
 		transition: background-color 0.15s ease;
 	}
 
-	.job-row:hover td { background: #2b2b2b; }
-	.job-row:hover td:first-child { border-radius: 0.5rem 0 0 0.5rem; }
-	.job-row:hover td:last-child { border-radius: 0 0.5rem 0.5rem 0; }
+	.job-row:hover td {
+		background: #2b2b2b;
+	}
+	.job-row:hover td:first-child {
+		border-radius: 0.5rem 0 0 0.5rem;
+	}
+	.job-row:hover td:last-child {
+		border-radius: 0 0.5rem 0.5rem 0;
+	}
 
 	/* Icon cell */
-	.cell-icon { width: 1px; }
-	.job-row :global(.lucide-check-circle) { color: #22c55e; }
-	.job-row :global(.lucide-x-circle) { color: #ef4444; }
-	.job-row :global(.lucide-clock) { color: #4b5563; }
-	.job-row :global(.lucide-loader) { color: #3b82f6; }
+	.cell-icon {
+		width: 1px;
+	}
+	.job-row :global(.lucide-check-circle) {
+		color: #22c55e;
+	}
+	.job-row :global(.lucide-x-circle) {
+		color: #ef4444;
+	}
+	.job-row :global(.lucide-clock) {
+		color: #4b5563;
+	}
+	.job-row :global(.lucide-loader) {
+		color: #3b82f6;
+	}
 
-	:global(.spin) { animation: spin 1s linear infinite; }
-	@keyframes spin { to { transform: rotate(360deg); } }
+	:global(.spin) {
+		animation: spin 1s linear infinite;
+	}
+	@keyframes spin {
+		to {
+			transform: rotate(360deg);
+		}
+	}
 
 	/* Name cell */
-	.cell-name { min-width: 200px; }
+	.cell-name {
+		min-width: 200px;
+	}
 
 	.name-btn {
 		display: block;
@@ -515,7 +575,9 @@
 		text-align: left;
 		font-family: ui-monospace, SFMono-Regular, monospace;
 	}
-	.name-btn:hover { color: #3b82f6; }
+	.name-btn:hover {
+		color: #3b82f6;
+	}
 
 	.job-desc {
 		display: block;
@@ -560,7 +622,7 @@
 		font-size: 0.625rem;
 		font-weight: 600;
 		color: #fff;
-		text-shadow: 0 1px 2px rgba(0,0,0,0.3);
+		text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
 	}
 
 	/* Other cells */
@@ -589,9 +651,13 @@
 		white-space: nowrap;
 	}
 
-	.cell-status { white-space: nowrap; }
+	.cell-status {
+		white-space: nowrap;
+	}
 
-	.cell-action { width: 1px; }
+	.cell-action {
+		width: 1px;
+	}
 
 	/* Action button */
 	.action-btn {
@@ -607,26 +673,55 @@
 		cursor: pointer;
 		transition: all 0.15s;
 	}
-	.action-btn:hover { background: rgba(34, 197, 94, 0.15); border-color: rgba(34, 197, 94, 0.3); }
-	.action-btn.busy { color: #3b82f6; border-color: rgba(59, 130, 246, 0.3); background: rgba(59, 130, 246, 0.1); cursor: default; }
+	.action-btn:hover {
+		background: rgba(34, 197, 94, 0.15);
+		border-color: rgba(34, 197, 94, 0.3);
+	}
+	.action-btn.busy {
+		color: #3b82f6;
+		border-color: rgba(59, 130, 246, 0.3);
+		background: rgba(59, 130, 246, 0.1);
+		cursor: default;
+	}
 
 	/* Badges */
-	.status-badge, .trigger-badge {
+	.status-badge,
+	.trigger-badge {
 		display: inline-block;
 		padding: 0.0625rem 0.375rem;
 		border-radius: 9999px;
 		font-size: 0.625rem;
 		font-weight: 500;
 	}
-	.status-badge.success { background: rgba(34, 197, 94, 0.15); color: #22c55e; }
-	.status-badge.failed { background: rgba(239, 68, 68, 0.15); color: #ef4444; }
-	.status-badge.running { background: rgba(59, 130, 246, 0.15); color: #3b82f6; }
-	.status-badge.idle { background: rgba(107, 114, 128, 0.15); color: #6b7280; }
-	.trigger-badge.manual { background: rgba(168, 85, 247, 0.15); color: #a855f7; }
-	.trigger-badge.scheduled { background: rgba(107, 114, 128, 0.15); color: #6b7280; }
+	.status-badge.success {
+		background: rgba(34, 197, 94, 0.15);
+		color: #22c55e;
+	}
+	.status-badge.failed {
+		background: rgba(239, 68, 68, 0.15);
+		color: #ef4444;
+	}
+	.status-badge.running {
+		background: rgba(59, 130, 246, 0.15);
+		color: #3b82f6;
+	}
+	.status-badge.idle {
+		background: rgba(107, 114, 128, 0.15);
+		color: #6b7280;
+	}
+	.trigger-badge.manual {
+		background: rgba(168, 85, 247, 0.15);
+		color: #a855f7;
+	}
+	.trigger-badge.scheduled {
+		background: rgba(107, 114, 128, 0.15);
+		color: #6b7280;
+	}
 
 	/* Logs */
-	.logs-row td { padding: 0 !important; }
+	.logs-row td {
+		padding: 0 !important;
+	}
 
 	.logs-panel {
 		background: #1a1a1a;
@@ -634,7 +729,8 @@
 		padding: 0.75rem 1rem;
 	}
 
-	.logs-loading, .logs-empty {
+	.logs-loading,
+	.logs-empty {
 		display: flex;
 		align-items: center;
 		gap: 0.5rem;
@@ -671,13 +767,19 @@
 		white-space: nowrap;
 	}
 
-	tr.log-err td { color: #f87171; }
+	tr.log-err td {
+		color: #f87171;
+	}
 
 	/* Responsive */
 	@media (max-width: 900px) {
-		.stats-row { grid-template-columns: repeat(3, 1fr); }
+		.stats-row {
+			grid-template-columns: repeat(3, 1fr);
+		}
 	}
 	@media (max-width: 550px) {
-		.stats-row { grid-template-columns: repeat(2, 1fr); }
+		.stats-row {
+			grid-template-columns: repeat(2, 1fr);
+		}
 	}
 </style>
