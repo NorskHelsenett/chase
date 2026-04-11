@@ -2,6 +2,7 @@ package scheduler
 
 import (
 	"net/http"
+	"os"
 	"strconv"
 
 	"github.com/gin-gonic/gin"
@@ -17,6 +18,7 @@ func (s *Scheduler) RegisterRoutes(rg *gin.RouterGroup) {
 		jobs.POST("/:name/cancel", s.handleCancel)
 		jobs.GET("/:name/logs", s.handleGetLogs)
 	}
+	rg.GET("/system-stats", s.handleSystemStats)
 }
 
 func (s *Scheduler) handleListJobs(c *gin.Context) {
@@ -49,6 +51,44 @@ func (s *Scheduler) handleCancel(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"status": "cancelled", "job": name})
+}
+
+func (s *Scheduler) handleSystemStats(c *gin.Context) {
+	var activeServers, inactiveServers, totalPings, userCount int64
+
+	s.db.Table("servers").Where("active = ? AND deleted_at IS NULL", true).Count(&activeServers)
+	s.db.Table("servers").Where("active = ? AND deleted_at IS NULL", false).Count(&inactiveServers)
+	s.db.Table("ping_results").Count(&totalPings)
+	s.db.Table("users").Count(&userCount)
+
+	// Database file size
+	var dbSize int64
+	dbPath := os.Getenv("DATABASE_PATH")
+	if dbPath == "" {
+		dbPath = "chase.db"
+	}
+	if info, err := os.Stat(dbPath); err == nil {
+		dbSize = info.Size()
+	}
+
+	// Running jobs count
+	jobs := s.ListJobs()
+	running := 0
+	for _, j := range jobs {
+		if j.Status == StatusRunning {
+			running++
+		}
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"active_servers":   activeServers,
+		"inactive_servers": inactiveServers,
+		"total_pings":      totalPings,
+		"users":            userCount,
+		"database_bytes":   dbSize,
+		"total_jobs":       len(jobs),
+		"running_jobs":     running,
+	})
 }
 
 func (s *Scheduler) handleGetLogs(c *gin.Context) {

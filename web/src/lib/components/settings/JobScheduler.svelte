@@ -1,6 +1,18 @@
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
-	import { Play, Clock, CheckCircle, XCircle, Loader, RefreshCw } from 'lucide-svelte';
+	import {
+		Play,
+		Clock,
+		CheckCircle,
+		XCircle,
+		Loader,
+		Server,
+		ServerOff,
+		Users,
+		Database,
+		Activity,
+		Zap
+	} from 'lucide-svelte';
 
 	interface JobInfo {
 		name: string;
@@ -26,7 +38,18 @@
 		error: string;
 	}
 
+	interface SystemStats {
+		active_servers: number;
+		inactive_servers: number;
+		total_pings: number;
+		users: number;
+		database_bytes: number;
+		total_jobs: number;
+		running_jobs: number;
+	}
+
 	let jobs: JobInfo[] = $state([]);
+	let stats: SystemStats | null = $state(null);
 	let loading = $state(true);
 	let expandedJob: string | null = $state(null);
 	let jobLogs: JobLog[] = $state([]);
@@ -34,7 +57,7 @@
 	let pollTimer: ReturnType<typeof setInterval>;
 
 	onMount(() => {
-		fetchJobs();
+		fetchAll();
 		pollTimer = setInterval(fetchJobs, 5000);
 	});
 
@@ -42,29 +65,34 @@
 		clearInterval(pollTimer);
 	});
 
+	async function fetchAll() {
+		await Promise.all([fetchJobs(), fetchStats()]);
+		loading = false;
+	}
+
 	async function fetchJobs() {
 		try {
 			const res = await fetch('/api/jobs', { credentials: 'include' });
-			if (res.ok) {
-				jobs = await res.json();
-			}
+			if (res.ok) jobs = await res.json();
 		} catch {
-			// silent
-		} finally {
-			loading = false;
+			/* silent */
+		}
+	}
+
+	async function fetchStats() {
+		try {
+			const res = await fetch('/api/system-stats', { credentials: 'include' });
+			if (res.ok) stats = await res.json();
+		} catch {
+			/* silent */
 		}
 	}
 
 	async function triggerJob(name: string) {
-		// Optimistic: immediately show running state
 		jobs = jobs.map((j) =>
 			j.name === name ? { ...j, status: 'running' as const, progress: 'starting...' } : j
 		);
-		await fetch(`/api/jobs/${name}/trigger`, {
-			method: 'POST',
-			credentials: 'include'
-		});
-		// Poll faster while running
+		await fetch(`/api/jobs/${name}/trigger`, { method: 'POST', credentials: 'include' });
 		pollWhileRunning(name);
 	}
 
@@ -74,33 +102,34 @@
 			const job = jobs.find((j) => j.name === name);
 			if (!job || job.status !== 'running') {
 				clearInterval(fast);
-				// Refresh logs if expanded
 				if (expandedJob === name) {
-					toggleLogs(name);
-					toggleLogs(name);
+					expandedJob = null;
+					await loadLogs(name);
 				}
+				fetchStats();
 			}
 		}, 500);
-		// Safety: stop after 5 minutes
 		setTimeout(() => clearInterval(fast), 5 * 60 * 1000);
 	}
 
-	async function toggleLogs(name: string) {
-		if (expandedJob === name) {
-			expandedJob = null;
-			return;
-		}
+	async function loadLogs(name: string) {
 		expandedJob = name;
 		logsLoading = true;
 		try {
 			const res = await fetch(`/api/jobs/${name}/logs?limit=10`, { credentials: 'include' });
-			if (res.ok) {
-				jobLogs = await res.json();
-			}
+			if (res.ok) jobLogs = await res.json();
 		} catch {
 			jobLogs = [];
 		} finally {
 			logsLoading = false;
+		}
+	}
+
+	function toggleLogs(name: string) {
+		if (expandedJob === name) {
+			expandedJob = null;
+		} else {
+			loadLogs(name);
 		}
 	}
 
@@ -140,223 +169,328 @@
 		if (hours < 24) return `${hours}h ${mins % 60}m`;
 		return `${Math.floor(hours / 24)}d`;
 	}
+
+	function formatBytes(bytes: number): string {
+		if (bytes === 0) return '0 B';
+		const k = 1024;
+		const sizes = ['B', 'KB', 'MB', 'GB'];
+		const i = Math.floor(Math.log(bytes) / Math.log(k));
+		return `${(bytes / Math.pow(k, i)).toFixed(i > 1 ? 1 : 0)} ${sizes[i]}`;
+	}
+
+	function formatNumber(n: number): string {
+		if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
+		if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
+		return String(n);
+	}
 </script>
 
-<div class="job-scheduler">
-	<div class="header">
-		<h3>Scheduled Jobs</h3>
-		<button class="refresh-btn" onclick={fetchJobs} title="Refresh">
-			<RefreshCw size={14} />
-		</button>
+<!-- Stats Row -->
+<div class="stats-row">
+	<div class="stat-card">
+		<div class="stat-icon icon-green"><Server size={24} /></div>
+		<div class="stat-body">
+			{#if stats}
+				<span class="stat-number">{stats.active_servers}</span>
+			{:else}
+				<span class="stat-skeleton"></span>
+			{/if}
+			<span class="stat-label">Active Servers</span>
+		</div>
 	</div>
+	<div class="stat-card">
+		<div class="stat-icon icon-red"><ServerOff size={24} /></div>
+		<div class="stat-body">
+			{#if stats}
+				<span class="stat-number">{stats.inactive_servers}</span>
+			{:else}
+				<span class="stat-skeleton"></span>
+			{/if}
+			<span class="stat-label">Inactive</span>
+		</div>
+	</div>
+	<div class="stat-card">
+		<div class="stat-icon icon-blue"><Activity size={24} /></div>
+		<div class="stat-body">
+			{#if stats}
+				<span class="stat-number">{formatNumber(stats.total_pings)}</span>
+			{:else}
+				<span class="stat-skeleton"></span>
+			{/if}
+			<span class="stat-label">Total Pings</span>
+		</div>
+	</div>
+	<div class="stat-card">
+		<div class="stat-icon icon-purple"><Users size={24} /></div>
+		<div class="stat-body">
+			{#if stats}
+				<span class="stat-number">{stats.users}</span>
+			{:else}
+				<span class="stat-skeleton"></span>
+			{/if}
+			<span class="stat-label">Users</span>
+		</div>
+	</div>
+	<div class="stat-card">
+		<div class="stat-icon icon-orange"><Database size={24} /></div>
+		<div class="stat-body">
+			{#if stats}
+				<span class="stat-number">{formatBytes(stats.database_bytes)}</span>
+			{:else}
+				<span class="stat-skeleton"></span>
+			{/if}
+			<span class="stat-label">Database</span>
+		</div>
+	</div>
+	<div class="stat-card">
+		<div class="stat-icon" class:icon-green={stats?.running_jobs === 0} class:icon-blue={stats && stats.running_jobs > 0}>
+			<Zap size={24} />
+		</div>
+		<div class="stat-body">
+			{#if stats}
+				<span class="stat-number">{stats.running_jobs}<span class="stat-sub">/{stats.total_jobs}</span></span>
+			{:else}
+				<span class="stat-skeleton"></span>
+			{/if}
+			<span class="stat-label">Jobs Running</span>
+		</div>
+	</div>
+</div>
 
+<!-- Jobs Table -->
+<div class="table-card">
 	{#if loading}
-		<div class="loading">
+		<div class="empty-state">
 			<Loader size={20} class="spin" />
 			<span>Loading jobs...</span>
 		</div>
-	{:else if jobs.length === 0}
-		<p class="empty">No jobs registered.</p>
 	{:else}
-		<div class="job-list">
-			{#each jobs as job}
-				<div class="job-card" class:running={job.status === 'running'}>
-					<div class="job-main">
-						<div class="job-left">
-							<div class="job-status-icon">
-								{#if job.status === 'running'}
-									<Loader size={16} class="spin" />
-								{:else if job.status === 'success'}
-									<CheckCircle size={16} />
-								{:else if job.status === 'failed'}
-									<XCircle size={16} />
-								{:else}
-									<Clock size={16} />
-								{/if}
-							</div>
-							<div class="job-info">
-								<button class="job-name" onclick={() => toggleLogs(job.name)}>
-									{job.name}
-								</button>
-								<span class="job-desc">{job.description}</span>
-							</div>
-						</div>
-						<div class="job-right">
-							<div class="job-meta">
-								<span class="job-schedule">{job.schedule}</span>
-								<span class="job-timing">
-									{#if job.status === 'running' && job.progress}
-										<span class="progress-text">{job.progress}</span>
-									{:else if job.schedule === 'manual'}
-										{#if job.last_run && job.last_run !== '0001-01-01T00:00:00Z'}
-											last: {timeAgo(job.last_run)}
-										{:else}
-											never run
-										{/if}
-									{:else}
-										last: {timeAgo(job.last_run)} · next: {timeUntil(job.next_run)}
-									{/if}
-								</span>
-								{#if job.last_error}
-									<span class="job-error">{job.last_error}</span>
-								{/if}
-							</div>
-							<div class="job-actions">
-								{#if job.status === 'running'}
-									<div class="action-btn running-indicator" title="Running...">
-										<Loader size={14} class="spin" />
-									</div>
-								{:else}
-									<button class="action-btn trigger" onclick={() => triggerJob(job.name)} title="Run now">
-										<Play size={14} />
-									</button>
-								{/if}
-							</div>
-						</div>
-					</div>
-
-					{#if expandedJob === job.name}
-						<div class="job-logs">
-							{#if logsLoading}
-								<div class="loading-inline"><Loader size={14} class="spin" /> Loading...</div>
-							{:else if jobLogs.length === 0}
-								<p class="empty-logs">No run history yet.</p>
+		<table class="jobs-table">
+			<thead>
+				<tr>
+					<th></th>
+					<th>Job</th>
+					<th>Schedule</th>
+					<th>Last Run</th>
+					<th>Duration</th>
+					<th>Status</th>
+					<th></th>
+				</tr>
+			</thead>
+			<tbody>
+				{#each jobs as job}
+					<tr class="job-row" class:running={job.status === 'running'}>
+						<td class="cell-icon">
+							{#if job.status === 'running'}
+								<Loader size={14} class="spin" />
+							{:else if job.status === 'success'}
+								<CheckCircle size={14} />
+							{:else if job.status === 'failed'}
+								<XCircle size={14} />
 							{:else}
-								<table class="logs-table">
-									<thead>
-										<tr>
-											<th>Time</th>
-											<th>Trigger</th>
-											<th>Status</th>
-											<th>Duration</th>
-											<th>Summary</th>
-										</tr>
-									</thead>
-									<tbody>
-										{#each jobLogs as log}
-											<tr class:log-failed={log.status === 'failed'}>
-												<td class="log-time">{formatTime(log.started_at)}</td>
-												<td><span class="trigger-badge {log.trigger}">{log.trigger}</span></td>
-												<td><span class="status-badge {log.status}">{log.status}</span></td>
-												<td class="log-duration">{formatDuration(log.duration_seconds)}</td>
-												<td class="log-summary">{log.error || log.summary || '—'}</td>
-											</tr>
-										{/each}
-									</tbody>
-								</table>
+								<Clock size={14} />
 							{/if}
-						</div>
+						</td>
+						<td class="cell-name">
+							<button class="name-btn" onclick={() => toggleLogs(job.name)}>
+								{job.name}
+							</button>
+							<span class="job-desc">{job.description}</span>
+							{#if job.status === 'running' && job.progress}
+								<span class="progress-text">{job.progress}</span>
+							{/if}
+						</td>
+						<td class="cell-schedule">{job.schedule}</td>
+						<td class="cell-time">
+							{#if job.schedule === 'manual'}
+								{timeAgo(job.last_run)}
+							{:else}
+								{timeAgo(job.last_run)}
+								{#if job.status !== 'running'}
+									<span class="next-run">next {timeUntil(job.next_run)}</span>
+								{/if}
+							{/if}
+						</td>
+						<td class="cell-duration">{formatDuration(job.last_duration_seconds)}</td>
+						<td class="cell-status">
+							{#if job.status === 'running'}
+								<span class="status-badge running">running</span>
+							{:else if job.last_error}
+								<span class="status-badge failed" title={job.last_error}>failed</span>
+							{:else if job.status === 'success'}
+								<span class="status-badge success">ok</span>
+							{/if}
+						</td>
+						<td class="cell-action">
+							{#if job.status === 'running'}
+								<div class="action-btn busy"><Loader size={12} class="spin" /></div>
+							{:else}
+								<button class="action-btn" onclick={() => triggerJob(job.name)} title="Run now">
+									<Play size={12} />
+								</button>
+							{/if}
+						</td>
+					</tr>
+					{#if expandedJob === job.name}
+						<tr class="logs-row">
+							<td colspan="7">
+								<div class="logs-panel">
+									{#if logsLoading}
+										<span class="logs-loading"><Loader size={12} class="spin" /> Loading...</span>
+									{:else if jobLogs.length === 0}
+										<span class="logs-empty">No history yet</span>
+									{:else}
+										<table class="inner-table">
+											<thead>
+												<tr>
+													<th>Time</th>
+													<th>Trigger</th>
+													<th>Status</th>
+													<th>Duration</th>
+													<th>Summary</th>
+												</tr>
+											</thead>
+											<tbody>
+												{#each jobLogs as log}
+													<tr class:log-err={log.status === 'failed'}>
+														<td>{formatTime(log.started_at)}</td>
+														<td><span class="trigger-badge {log.trigger}">{log.trigger}</span></td>
+														<td><span class="status-badge {log.status}">{log.status}</span></td>
+														<td>{formatDuration(log.duration_seconds)}</td>
+														<td class="cell-summary">{log.error || log.summary || '—'}</td>
+													</tr>
+												{/each}
+											</tbody>
+										</table>
+									{/if}
+								</div>
+							</td>
+						</tr>
 					{/if}
-				</div>
-			{/each}
-		</div>
+				{/each}
+			</tbody>
+		</table>
 	{/if}
 </div>
 
 <style>
-	.job-scheduler {
-		padding: 1rem 1.5rem;
-	}
-
-	.header {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
+	/* Stats */
+	.stats-row {
+		display: grid;
+		grid-template-columns: repeat(6, 1fr);
+		gap: 0.75rem;
 		margin-bottom: 1rem;
 	}
 
-	.header h3 {
-		font-size: 1rem;
-		font-weight: 600;
-		color: #e5e7eb;
-	}
-
-	.refresh-btn {
+	.stat-card {
 		display: flex;
 		align-items: center;
-		padding: 0.375rem;
-		border-radius: 0.375rem;
-		color: #6b7280;
-		background: none;
-		border: none;
-		cursor: pointer;
-		transition: color 0.15s;
+		gap: 0.625rem;
+		background: #202020;
+		border-radius: 0.5rem;
+		padding: 0.75rem 1rem;
 	}
-	.refresh-btn:hover { color: #e5e7eb; }
 
-	.loading, .empty {
-		text-align: center;
+	.stat-icon { color: #6b7280; flex-shrink: 0; }
+	.icon-green { color: #22c55e; }
+	.icon-red { color: #ef4444; }
+	.icon-blue { color: #3b82f6; }
+	.icon-purple { color: #a855f7; }
+	.icon-orange { color: #f59e0b; }
+
+	.stat-body { display: flex; flex-direction: column; }
+
+	.stat-number {
+		font-size: 1.125rem;
+		font-weight: 600;
+		line-height: 1.2;
+		color: #e5e7eb;
+		font-variant-numeric: tabular-nums;
+	}
+
+	.stat-sub { font-size: 0.75rem; font-weight: 400; color: #6b7280; }
+
+	.stat-label {
+		font-size: 0.6875rem;
+		font-weight: 500;
 		color: #6b7280;
-		padding: 2rem 0;
-		font-size: 0.875rem;
+		text-transform: uppercase;
+		letter-spacing: 0.04em;
+		white-space: nowrap;
+	}
+
+	.stat-skeleton {
+		display: block;
+		height: 1.125rem;
+		width: 2rem;
+		background: #2b2b2b;
+		border-radius: 0.25rem;
+		animation: pulse 2s ease-in-out infinite;
+	}
+
+	@keyframes pulse {
+		0%, 100% { opacity: 1; }
+		50% { opacity: 0.5; }
+	}
+
+	/* Table */
+	.table-card {
+		background: #202020;
+		border-radius: 0.5rem;
+		padding: 0 1rem 1rem;
+	}
+
+	.empty-state {
 		display: flex;
 		align-items: center;
 		justify-content: center;
 		gap: 0.5rem;
+		padding: 3rem 0;
+		color: #6b7280;
+		font-size: 0.875rem;
 	}
 
-	.job-list {
-		display: flex;
-		flex-direction: column;
-		gap: 0.5rem;
+	.jobs-table {
+		width: 100%;
+		border-collapse: separate;
+		border-spacing: 0 0.25rem;
 	}
 
-	.job-card {
-		background: #1a1a1a;
-		border: 1px solid #2a2a2a;
-		border-radius: 0.5rem;
-		overflow: hidden;
-		transition: border-color 0.15s;
-	}
-	.job-card:hover { border-color: #333; }
-	.job-card.running { border-color: rgba(59, 130, 246, 0.3); }
+	.jobs-table thead tr { color: #9ca3af; }
 
-	.job-main {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		padding: 0.75rem 1rem;
-		gap: 1rem;
+	.jobs-table th {
+		text-align: left;
+		padding: 0.5rem;
+		font-size: 0.75rem;
+		font-weight: 500;
+		text-transform: uppercase;
+		letter-spacing: 0.025em;
 	}
 
-	.job-left {
-		display: flex;
-		align-items: center;
-		gap: 0.75rem;
-		min-width: 0;
+	.job-row td {
+		padding: 0.5rem;
+		transition: background-color 0.15s ease;
 	}
 
-	.job-status-icon {
-		flex-shrink: 0;
-		display: flex;
-	}
-	.job-card:has(.job-status-icon) :global(.spin) {
-		animation: spin 1s linear infinite;
-	}
-	:global(.spin) {
-		animation: spin 1s linear infinite;
-	}
-	@keyframes spin {
-		to { transform: rotate(360deg); }
-	}
+	.job-row:hover td { background: #2b2b2b; }
+	.job-row:hover td:first-child { border-radius: 0.5rem 0 0 0.5rem; }
+	.job-row:hover td:last-child { border-radius: 0 0.5rem 0.5rem 0; }
 
-	.job-card .job-status-icon { color: #6b7280; }
-	.job-card.running .job-status-icon { color: #3b82f6; }
-	.job-card:has(.status-badge) .job-status-icon { color: #6b7280; }
+	/* Icon cell */
+	.cell-icon { width: 1px; }
+	.job-row :global(.lucide-check-circle) { color: #22c55e; }
+	.job-row :global(.lucide-x-circle) { color: #ef4444; }
+	.job-row :global(.lucide-clock) { color: #4b5563; }
+	.job-row :global(.lucide-loader) { color: #3b82f6; }
 
-	/* Status icon colors based on job status */
-	.job-card :global(.lucide-check-circle) { color: #22c55e; }
-	.job-card :global(.lucide-x-circle) { color: #ef4444; }
-	.job-card :global(.lucide-clock) { color: #6b7280; }
-	.job-card :global(.lucide-loader) { color: #3b82f6; }
+	:global(.spin) { animation: spin 1s linear infinite; }
+	@keyframes spin { to { transform: rotate(360deg); } }
 
-	.job-info {
-		display: flex;
-		flex-direction: column;
-		min-width: 0;
-	}
+	/* Name cell */
+	.cell-name { min-width: 200px; }
 
-	.job-name {
+	.name-btn {
+		display: block;
 		font-size: 0.8125rem;
 		font-weight: 500;
 		color: #e5e7eb;
@@ -365,11 +499,12 @@
 		padding: 0;
 		cursor: pointer;
 		text-align: left;
-		font-family: ui-monospace, monospace;
+		font-family: ui-monospace, SFMono-Regular, monospace;
 	}
-	.job-name:hover { color: #3b82f6; }
+	.name-btn:hover { color: #3b82f6; }
 
 	.job-desc {
+		display: block;
 		font-size: 0.6875rem;
 		color: #6b7280;
 		white-space: nowrap;
@@ -377,123 +512,63 @@
 		text-overflow: ellipsis;
 	}
 
-	.job-right {
-		display: flex;
-		align-items: center;
-		gap: 1rem;
-		flex-shrink: 0;
-	}
-
-	.job-meta {
-		display: flex;
-		flex-direction: column;
-		align-items: flex-end;
-		gap: 2px;
-	}
-
-	.job-schedule {
+	.progress-text {
+		display: block;
 		font-size: 0.6875rem;
-		color: #9ca3af;
-		font-weight: 500;
+		color: #3b82f6;
 	}
 
-	.job-timing {
+	/* Other cells */
+	.cell-schedule {
+		font-size: 0.75rem;
+		color: #9ca3af;
+		white-space: nowrap;
+	}
+
+	.cell-time {
+		font-size: 0.75rem;
+		color: #9ca3af;
+		white-space: nowrap;
+	}
+
+	.next-run {
+		display: block;
 		font-size: 0.625rem;
 		color: #4b5563;
 	}
 
-	.progress-text {
-		color: #3b82f6;
-	}
-
-	.job-error {
-		font-size: 0.625rem;
-		color: #ef4444;
-		max-width: 200px;
-		overflow: hidden;
-		text-overflow: ellipsis;
+	.cell-duration {
+		font-size: 0.75rem;
+		color: #6b7280;
+		font-variant-numeric: tabular-nums;
 		white-space: nowrap;
 	}
 
-	.job-actions {
-		display: flex;
-	}
+	.cell-status { white-space: nowrap; }
 
+	.cell-action { width: 1px; }
+
+	/* Action button */
 	.action-btn {
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		width: 28px;
-		height: 28px;
+		width: 26px;
+		height: 26px;
 		border-radius: 0.375rem;
 		border: 1px solid #333;
 		background: #252525;
+		color: #22c55e;
 		cursor: pointer;
 		transition: all 0.15s;
 	}
-	.action-btn.trigger { color: #22c55e; }
-	.action-btn.trigger:hover { background: rgba(34, 197, 94, 0.15); border-color: rgba(34, 197, 94, 0.3); }
-	.action-btn.running-indicator { color: #3b82f6; border-color: rgba(59, 130, 246, 0.3); background: rgba(59, 130, 246, 0.1); cursor: default; }
+	.action-btn:hover { background: rgba(34, 197, 94, 0.15); border-color: rgba(34, 197, 94, 0.3); }
+	.action-btn.busy { color: #3b82f6; border-color: rgba(59, 130, 246, 0.3); background: rgba(59, 130, 246, 0.1); cursor: default; }
 
-	/* Logs */
-	.job-logs {
-		border-top: 1px solid #2a2a2a;
-		padding: 0.75rem 1rem;
-		background: #161616;
-	}
-
-	.loading-inline {
-		display: flex;
-		align-items: center;
-		gap: 0.5rem;
-		color: #6b7280;
-		font-size: 0.75rem;
-		padding: 0.5rem 0;
-	}
-
-	.empty-logs {
-		color: #4b5563;
-		font-size: 0.75rem;
-		text-align: center;
-		padding: 0.5rem 0;
-	}
-
-	.logs-table {
-		width: 100%;
-		border-collapse: collapse;
-		font-size: 0.6875rem;
-	}
-
-	.logs-table th {
-		text-align: left;
-		color: #6b7280;
-		font-weight: 500;
-		padding: 0.25rem 0.5rem;
-		text-transform: uppercase;
-		letter-spacing: 0.03em;
-		border-bottom: 1px solid #2a2a2a;
-	}
-
-	.logs-table td {
-		padding: 0.375rem 0.5rem;
-		color: #9ca3af;
-		border-bottom: 1px solid #1f1f1f;
-	}
-
-	.log-time { white-space: nowrap; }
-	.log-duration { font-variant-numeric: tabular-nums; }
-	.log-summary {
-		max-width: 300px;
-		overflow: hidden;
-		text-overflow: ellipsis;
-		white-space: nowrap;
-	}
-
-	tr.log-failed td { color: #f87171; }
-
+	/* Badges */
 	.status-badge, .trigger-badge {
 		display: inline-block;
-		padding: 0.125rem 0.375rem;
+		padding: 0.0625rem 0.375rem;
 		border-radius: 9999px;
 		font-size: 0.625rem;
 		font-weight: 500;
@@ -504,4 +579,60 @@
 	.status-badge.idle { background: rgba(107, 114, 128, 0.15); color: #6b7280; }
 	.trigger-badge.manual { background: rgba(168, 85, 247, 0.15); color: #a855f7; }
 	.trigger-badge.scheduled { background: rgba(107, 114, 128, 0.15); color: #6b7280; }
+
+	/* Logs */
+	.logs-row td { padding: 0 !important; }
+
+	.logs-panel {
+		background: #1a1a1a;
+		border-top: 1px solid #2a2a2a;
+		padding: 0.75rem 1rem;
+	}
+
+	.logs-loading, .logs-empty {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		color: #4b5563;
+		font-size: 0.75rem;
+	}
+
+	.inner-table {
+		width: 100%;
+		border-collapse: collapse;
+		font-size: 0.6875rem;
+	}
+
+	.inner-table th {
+		text-align: left;
+		color: #6b7280;
+		font-weight: 500;
+		padding: 0.25rem 0.5rem;
+		text-transform: uppercase;
+		letter-spacing: 0.03em;
+		border-bottom: 1px solid #2a2a2a;
+	}
+
+	.inner-table td {
+		padding: 0.375rem 0.5rem;
+		color: #9ca3af;
+		border-bottom: 1px solid #1f1f1f;
+	}
+
+	.cell-summary {
+		max-width: 300px;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	tr.log-err td { color: #f87171; }
+
+	/* Responsive */
+	@media (max-width: 900px) {
+		.stats-row { grid-template-columns: repeat(3, 1fr); }
+	}
+	@media (max-width: 550px) {
+		.stats-row { grid-template-columns: repeat(2, 1fr); }
+	}
 </style>
