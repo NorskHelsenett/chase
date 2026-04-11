@@ -5,6 +5,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"strings"
 	"time"
@@ -137,6 +138,14 @@ func pingServer(server Server) PingResult {
 			ct := resp.Header.Get("Content-Type")
 			if strings.Contains(ct, "text/html") {
 				result.siteMetadata = extractSiteMetadata(resp.Body)
+				// Resolve relative favicon URL against the final response URL
+				if result.siteMetadata.Favicon != "" {
+					if baseURL := resp.Request.URL; baseURL != nil {
+						if parsed, err := url.Parse(result.siteMetadata.Favicon); err == nil && !parsed.IsAbs() {
+							result.siteMetadata.Favicon = baseURL.ResolveReference(parsed).String()
+						}
+					}
+				}
 			}
 		}
 
