@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"sort"
 	"sync"
 	"time"
 
@@ -112,27 +113,60 @@ func PingStreamSSE(c *gin.Context) {
 	}
 
 	cutoff := time.Now().AddDate(0, 0, -14) // Last 14 days
+	weekAgo := time.Now().AddDate(0, 0, -7)
 
 	for _, srv := range servers {
-		// Get daily aggregates using a single query
 		type dayRow struct {
 			Day        string
 			Total      int
 			Successful int
 		}
 
-		var rows []dayRow
+		// Raw pings (last ~7 days)
+		var rawRows []dayRow
 		if err := db.Model(&PingResult{}).
 			Select("DATE(timestamp) as day, COUNT(*) as total, SUM(CASE WHEN status_code = ? AND error = '' THEN 1 ELSE 0 END) as successful", srv.ExpectedStatusCode).
 			Where("server_id = ? AND timestamp >= ?", srv.ID, cutoff).
 			Group("DATE(timestamp)").
 			Order("day ASC").
-			Scan(&rows).Error; err != nil {
-			continue
+			Scan(&rawRows).Error; err != nil {
+			rawRows = nil
 		}
 
-		days := make([]DaySummary, len(rows))
-		for i, r := range rows {
+		// Hourly summaries (7-14 days ago, already aggregated)
+		var hourlyRows []dayRow
+		if err := db.Model(&PingHourlySummary{}).
+			Select("DATE(hour) as day, SUM(total) as total, SUM(successful) as successful").
+			Where("server_id = ? AND hour >= ? AND hour < ?", srv.ID, cutoff, weekAgo).
+			Group("DATE(hour)").
+			Order("day ASC").
+			Scan(&hourlyRows).Error; err != nil {
+			hourlyRows = nil
+		}
+
+		// Merge: hourly rows first, then raw rows (raw wins on overlap)
+		dayMap := make(map[string]dayRow)
+		for _, r := range hourlyRows {
+			dayMap[r.Day] = r
+		}
+		for _, r := range rawRows {
+			if existing, ok := dayMap[r.Day]; ok {
+				r.Total += existing.Total
+				r.Successful += existing.Successful
+			}
+			dayMap[r.Day] = r
+		}
+
+		// Sort by date
+		sortedKeys := make([]string, 0, len(dayMap))
+		for k := range dayMap {
+			sortedKeys = append(sortedKeys, k)
+		}
+		sort.Strings(sortedKeys)
+
+		days := make([]DaySummary, len(sortedKeys))
+		for i, k := range sortedKeys {
+			r := dayMap[k]
 			uptime := 0.0
 			if r.Total > 0 {
 				uptime = float64(r.Successful) / float64(r.Total) * 100
