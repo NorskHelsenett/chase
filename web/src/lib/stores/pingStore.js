@@ -1,5 +1,6 @@
 import { writable } from 'svelte/store';
 import { browser } from '$app/environment';
+import { serverStoreActions } from '$lib/stores/serverStore';
 
 /**
  * Per-server ping data from SSE.
@@ -27,6 +28,7 @@ export function connectPingSSE() {
 			});
 			return new Map(map);
 		});
+		serverStoreActions.applyPingMetadata(data.server_id, data);
 	});
 
 	eventSource.addEventListener('ping', (e) => {
@@ -69,6 +71,7 @@ export function connectPingSSE() {
 			map.set(ping.server_id, { ...existing });
 			return new Map(map);
 		});
+		serverStoreActions.applyPingMetadata(ping.server_id, ping);
 	});
 
 	eventSource.onerror = () => {

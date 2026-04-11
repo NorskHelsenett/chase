@@ -15,12 +15,16 @@ import (
 
 // PingEvent represents a single ping result for SSE streaming
 type PingEvent struct {
-	ServerID       uint      `json:"server_id"`
-	StatusCode     int       `json:"status_code"`
-	ExpectedStatus int       `json:"expected_status"`
-	ResponseTime   float64   `json:"response_time_ms"`
-	Error          string    `json:"error,omitempty"`
-	Timestamp      time.Time `json:"timestamp"`
+	ServerID        uint      `json:"server_id"`
+	StatusCode      int       `json:"status_code"`
+	ExpectedStatus  int       `json:"expected_status"`
+	ResponseTime    float64   `json:"response_time_ms"`
+	Error           string    `json:"error,omitempty"`
+	Timestamp       time.Time `json:"timestamp"`
+	Favicon         string    `json:"favicon,omitempty"`
+	SiteTitle       string    `json:"site_title,omitempty"`
+	SiteDescription string    `json:"site_description,omitempty"`
+	OGImage         string    `json:"og_image,omitempty"`
 }
 
 // DaySummary represents one day of aggregated ping results
@@ -59,12 +63,16 @@ func (h *pingHub) unsubscribe(ch chan []byte) {
 // BroadcastPing sends a ping result to all connected SSE clients
 func BroadcastPing(serverID uint, expectedStatus int, result PingResult) {
 	evt := PingEvent{
-		ServerID:       serverID,
-		StatusCode:     result.StatusCode,
-		ExpectedStatus: expectedStatus,
-		ResponseTime:   result.ResponseTime,
-		Error:          result.Error,
-		Timestamp:      result.Timestamp,
+		ServerID:        serverID,
+		StatusCode:      result.StatusCode,
+		ExpectedStatus:  expectedStatus,
+		ResponseTime:    result.ResponseTime,
+		Error:           result.Error,
+		Timestamp:       result.Timestamp,
+		Favicon:         result.siteMetadata.Favicon,
+		SiteTitle:       result.siteMetadata.Title,
+		SiteDescription: result.siteMetadata.Description,
+		OGImage:         result.siteMetadata.OGImage,
 	}
 	data, err := json.Marshal(evt)
 	if err != nil {
@@ -85,10 +93,14 @@ func BroadcastPing(serverID uint, expectedStatus int, result PingResult) {
 
 // serverInitData is the initial payload sent per server on SSE connect
 type serverInitData struct {
-	ServerID       uint         `json:"server_id"`
-	ExpectedStatus int          `json:"expected_status"`
-	Latest         *PingEvent   `json:"latest"`
-	Days           []DaySummary `json:"days"`
+	ServerID        uint         `json:"server_id"`
+	ExpectedStatus  int          `json:"expected_status"`
+	Latest          *PingEvent   `json:"latest"`
+	Days            []DaySummary `json:"days"`
+	Favicon         string       `json:"favicon,omitempty"`
+	SiteTitle       string       `json:"site_title,omitempty"`
+	SiteDescription string       `json:"site_description,omitempty"`
+	OGImage         string       `json:"og_image,omitempty"`
 }
 
 // PingStreamSSE handles GET /api/servers/pings/stream
@@ -201,10 +213,14 @@ func PingStreamSSE(c *gin.Context) {
 		}
 
 		initData := serverInitData{
-			ServerID:       srv.ID,
-			ExpectedStatus: srv.ExpectedStatusCode,
-			Latest:         latestEvent,
-			Days:           days,
+			ServerID:        srv.ID,
+			ExpectedStatus:  srv.ExpectedStatusCode,
+			Latest:          latestEvent,
+			Days:            days,
+			Favicon:         srv.Favicon,
+			SiteTitle:       srv.SiteTitle,
+			SiteDescription: srv.SiteDescription,
+			OGImage:         srv.OGImage,
 		}
 
 		data, err := json.Marshal(initData)

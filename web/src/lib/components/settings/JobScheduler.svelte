@@ -183,6 +183,12 @@
 		if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
 		return String(n);
 	}
+
+	function parseProgress(progress: string): { current: number; total: number } | null {
+		const match = progress.match(/^(\d+)\s*\/\s*(\d+)/);
+		if (!match) return null;
+		return { current: parseInt(match[1], 10), total: parseInt(match[2], 10) };
+	}
 </script>
 
 <!-- Stats Row -->
@@ -297,7 +303,15 @@
 							</button>
 							<span class="job-desc">{job.description}</span>
 							{#if job.status === 'running' && job.progress}
-								<span class="progress-text">{job.progress}</span>
+								{@const parsed = parseProgress(job.progress)}
+								{#if parsed}
+									<div class="progress-pill">
+										<div class="progress-pill-fill" style="width: {(parsed.current / parsed.total) * 100}%"></div>
+										<span class="progress-pill-label">{parsed.current}/{parsed.total}</span>
+									</div>
+								{:else}
+									<span class="progress-text">{job.progress}</span>
+								{/if}
 							{/if}
 						</td>
 						<td class="cell-schedule">{job.schedule}</td>
@@ -516,6 +530,37 @@
 		display: block;
 		font-size: 0.6875rem;
 		color: #3b82f6;
+	}
+
+	.progress-pill {
+		position: relative;
+		display: inline-flex;
+		align-items: center;
+		width: 100px;
+		height: 18px;
+		background: #2b2b2b;
+		border-radius: 9999px;
+		overflow: hidden;
+		margin-top: 0.25rem;
+	}
+
+	.progress-pill-fill {
+		position: absolute;
+		inset: 0;
+		background: linear-gradient(90deg, #3b82f6, #60a5fa);
+		border-radius: 9999px;
+		transition: width 0.3s ease;
+	}
+
+	.progress-pill-label {
+		position: relative;
+		z-index: 1;
+		width: 100%;
+		text-align: center;
+		font-size: 0.625rem;
+		font-weight: 600;
+		color: #fff;
+		text-shadow: 0 1px 2px rgba(0,0,0,0.3);
 	}
 
 	/* Other cells */
