@@ -187,6 +187,12 @@
 								<span class="job-timing">
 									{#if job.status === 'running' && job.progress}
 										<span class="progress-text">{job.progress}</span>
+									{:else if job.schedule === 'manual'}
+										{#if job.last_run && job.last_run !== '0001-01-01T00:00:00Z'}
+											last: {timeAgo(job.last_run)}
+										{:else}
+											never run
+										{/if}
 									{:else}
 										last: {timeAgo(job.last_run)} · next: {timeUntil(job.next_run)}
 									{/if}

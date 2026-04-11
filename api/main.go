@@ -261,6 +261,14 @@ func registerJobs(s *scheduler.Scheduler) {
 		},
 	)
 
+	// Batch security scan — scan all eligible servers (manual only)
+	s.Register("batch-security-scan", "Security scan + screenshot for all active servers",
+		scheduler.Schedule{Manual: true},
+		func(ctx context.Context, progress func(string)) (string, error) {
+			return security.RunBatchSecurityScan(ctx, progress)
+		},
+	)
+
 	// Inactive server recheck — ping deactivated servers to see if they're back
 	s.Register("inactive-server-recheck", "Ping deactivated servers to check if they're back online",
 		scheduler.Schedule{TimeOfDay: &scheduler.TimeOfDay{Hour: 5, Minute: 0}},

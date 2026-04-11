@@ -20,6 +20,7 @@ type JobFunc func(ctx context.Context, progress func(msg string)) (summary strin
 type Schedule struct {
 	Interval  time.Duration // Run every N duration
 	TimeOfDay *TimeOfDay   // If set, run once daily at this time (overrides Interval)
+	Manual    bool          // If true, never auto-runs — manual trigger only
 }
 
 // TimeOfDay represents a specific time of day.
@@ -306,6 +307,10 @@ func (s *Scheduler) pruneHistory(jobName string, keep int) {
 }
 
 func calculateNextRun(sched Schedule, after time.Time) time.Time {
+	if sched.Manual {
+		// Far future — never auto-fires
+		return after.Add(100 * 365 * 24 * time.Hour)
+	}
 	if sched.TimeOfDay != nil {
 		next := time.Date(after.Year(), after.Month(), after.Day(),
 			sched.TimeOfDay.Hour, sched.TimeOfDay.Minute, 0, 0, after.Location())
@@ -318,6 +323,9 @@ func calculateNextRun(sched Schedule, after time.Time) time.Time {
 }
 
 func formatSchedule(sched Schedule) string {
+	if sched.Manual {
+		return "manual"
+	}
 	if sched.TimeOfDay != nil {
 		return fmt.Sprintf("daily at %02d:%02d", sched.TimeOfDay.Hour, sched.TimeOfDay.Minute)
 	}

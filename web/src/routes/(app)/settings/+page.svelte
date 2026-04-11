@@ -1,5 +1,4 @@
 <script>
-	import BatchComponent from '$lib/components/batch/BatchComponent.svelte';
 	import MassImport from '$lib/components/batch/MassImport.svelte';
 	import JobScheduler from '$lib/components/settings/JobScheduler.svelte';
 </script>
@@ -16,11 +15,6 @@
 		<!-- Mass Import Section -->
 		<div class="p-6 card text-card-foreground rounded-lg shadow-md">
 			<MassImport />
-		</div>
-
-		<!-- Batch Operations Section -->
-		<div class="p-6 card text-card-foreground rounded-lg shadow-md">
-			<BatchComponent />
 		</div>
 	</div>
 </div>
