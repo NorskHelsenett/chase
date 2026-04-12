@@ -131,9 +131,7 @@
 		{#if server.favicon}
 			<img
 				class="favicon"
-				src={server.favicon.startsWith('http')
-					? server.favicon
-					: `https://${server.url}${server.favicon.startsWith('/') ? '' : '/'}${server.favicon}`}
+				src={`/api/servers/${server.ID}/favicon`}
 				alt=""
 				onerror={(e) => (e.currentTarget.style.display = 'none')}
 			/>
