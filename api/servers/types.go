@@ -50,6 +50,7 @@ type PingResult struct {
 // SiteMetadata holds lightweight metadata extracted from an HTML page's <head>.
 type SiteMetadata struct {
 	Favicon     string
+	ManifestURL string
 	Title       string
 	Description string
 	OGImage     string
