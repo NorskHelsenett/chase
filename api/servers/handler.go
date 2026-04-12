@@ -39,6 +39,11 @@ func checkServer(serverID uint, resultChan chan<- any) {
 		server.OGImage = result.siteMetadata.OGImage
 	}
 	db.Save(&server)
+	if server.Favicon != "" {
+		if err := refreshServerFavicon(db, &server); err != nil {
+			// Keep the last known favicon cache on refresh failures.
+		}
+	}
 
 	db.Create(&result)
 

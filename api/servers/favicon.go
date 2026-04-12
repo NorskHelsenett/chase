@@ -1,7 +1,10 @@
 package servers
 
 import (
+	"bytes"
+	"crypto/sha256"
 	"crypto/tls"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"net"
@@ -13,9 +16,11 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/norskhelsenett/chase/database"
+	"gorm.io/gorm"
 )
 
 const faviconFetchTimeout = 8 * time.Second
+const maxFaviconBytes = 1024 * 1024
 
 func GetServerFavicon(c *gin.Context) {
 	db := database.GetDB()
@@ -26,32 +31,13 @@ func GetServerFavicon(c *gin.Context) {
 		return
 	}
 
-	for _, faviconURL := range faviconCandidates(server) {
-		resp, err := fetchFavicon(server, faviconURL)
-		if err != nil {
-			continue
-		}
+	if len(server.FaviconData) > 0 {
+		serveCachedFavicon(c, server)
+		return
+	}
 
-		contentType := resp.Header.Get("Content-Type")
-		if !isAllowedFaviconContentType(contentType) {
-			resp.Body.Close()
-			continue
-		}
-		if strings.TrimSpace(contentType) == "" {
-			contentType = "image/x-icon"
-		}
-
-		c.Header("Cache-Control", "private, max-age=3600")
-		c.Header("Content-Type", contentType)
-		if lastModified := resp.Header.Get("Last-Modified"); lastModified != "" {
-			c.Header("Last-Modified", lastModified)
-		}
-		if etag := resp.Header.Get("ETag"); etag != "" {
-			c.Header("ETag", etag)
-		}
-
-		_, _ = io.Copy(c.Writer, resp.Body)
-		resp.Body.Close()
+	if err := refreshServerFavicon(db, &server); err == nil && len(server.FaviconData) > 0 {
+		serveCachedFavicon(c, server)
 		return
 	}
 
@@ -90,6 +76,71 @@ func faviconCandidates(server Server) []string {
 	add(resolveServerURL(server, "/favicon.ico"))
 
 	return candidates
+}
+
+func refreshServerFavicon(db *gorm.DB, server *Server) error {
+	if server == nil {
+		return fmt.Errorf("server is nil")
+	}
+
+	icon, err := fetchBestFavicon(*server)
+	if err != nil {
+		return err
+	}
+
+	now := time.Now()
+	server.Favicon = icon.SourceURL
+	server.FaviconMime = icon.ContentType
+	server.FaviconData = icon.Data
+	server.FaviconFetchedAt = &now
+
+	return db.Model(server).Updates(map[string]any{
+		"favicon":            server.Favicon,
+		"favicon_mime":       server.FaviconMime,
+		"favicon_data":       server.FaviconData,
+		"favicon_fetched_at": server.FaviconFetchedAt,
+	}).Error
+}
+
+type cachedFavicon struct {
+	SourceURL   string
+	ContentType string
+	Data        []byte
+}
+
+func fetchBestFavicon(server Server) (*cachedFavicon, error) {
+	for _, faviconURL := range faviconCandidates(server) {
+		resp, err := fetchFavicon(server, faviconURL)
+		if err != nil {
+			continue
+		}
+
+		contentType := resp.Header.Get("Content-Type")
+		if !isAllowedFaviconContentType(contentType) {
+			resp.Body.Close()
+			continue
+		}
+		if strings.TrimSpace(contentType) == "" {
+			contentType = "image/x-icon"
+		}
+
+		data, err := io.ReadAll(io.LimitReader(resp.Body, maxFaviconBytes+1))
+		resp.Body.Close()
+		if err != nil {
+			continue
+		}
+		if len(data) == 0 || len(data) > maxFaviconBytes {
+			continue
+		}
+
+		return &cachedFavicon{
+			SourceURL:   faviconURL,
+			ContentType: contentType,
+			Data:        data,
+		}, nil
+	}
+
+	return nil, fmt.Errorf("no favicon available")
 }
 
 func resolveServerURL(server Server, raw string) string {
@@ -165,6 +216,34 @@ func fetchFavicon(server Server, targetURL string) (*http.Response, error) {
 	}
 
 	return resp, nil
+}
+
+func serveCachedFavicon(c *gin.Context, server Server) {
+	etag := serverFaviconETag(server.FaviconData)
+	if match := strings.TrimSpace(c.GetHeader("If-None-Match")); match != "" && match == etag {
+		c.Status(http.StatusNotModified)
+		return
+	}
+
+	contentType := server.FaviconMime
+	if strings.TrimSpace(contentType) == "" {
+		contentType = "image/x-icon"
+	}
+
+	c.Header("Cache-Control", "private, max-age=86400")
+	c.Header("ETag", etag)
+	c.Header("Content-Type", contentType)
+	modTime := server.UpdatedAt
+	if server.FaviconFetchedAt != nil {
+		modTime = *server.FaviconFetchedAt
+		c.Header("Last-Modified", server.FaviconFetchedAt.UTC().Format(http.TimeFormat))
+	}
+	http.ServeContent(c.Writer, c.Request, "", modTime, bytes.NewReader(server.FaviconData))
+}
+
+func serverFaviconETag(data []byte) string {
+	sum := sha256.Sum256(data)
+	return `"` + hex.EncodeToString(sum[:]) + `"`
 }
 
 func isAllowedFaviconContentType(contentType string) bool {
