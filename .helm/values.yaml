@@ -54,6 +54,16 @@ postgres:
   parameters:
     max_connections: "100"
     shared_buffers: "128MB"
+  # One-shot atomic import from a legacy SQLite chase.db. Mounts an existing
+  # PVC read-only into the chase pod and points MIGRATE_FROM_SQLITE at it.
+  # Idempotent: the binary marks completion in data_migrations and skips on
+  # subsequent boots, so leaving this enabled is safe across rollouts.
+  migrateFromSQLite:
+    enabled: true
+    legacyPVC: data-chase-0
+    # The legacy PVC is mounted read-only here; chase auto-detects any *.db
+    # file inside (preferring chase.db / fit.db).
+    mountPath: /legacy
 
 screenshotr:
   repository: ghcr.io/norskhelsenett/chase/screenshotr

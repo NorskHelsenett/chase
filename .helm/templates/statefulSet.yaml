@@ -85,6 +85,10 @@ spec:
         - name: PGSSLMODE
           value: "require"
         {{- end }}
+        {{- if and (eq $key "chase") $.Values.postgres.migrateFromSQLite.enabled }}
+        - name: MIGRATE_FROM_SQLITE
+          value: {{ $.Values.postgres.migrateFromSQLite.mountPath | default "/legacy" | quote }}
+        {{- end }}
         {{- with $value.env }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
@@ -93,6 +97,11 @@ spec:
         - name: {{ .name }}
           mountPath: {{ .mountPath }}
           readOnly: {{ .readOnly | default false }}
+        {{- end }}
+        {{- if and (eq $key "chase") $.Values.postgres.migrateFromSQLite.enabled }}
+        - name: legacy-sqlite
+          mountPath: {{ $.Values.postgres.migrateFromSQLite.mountPath | default "/legacy" }}
+          readOnly: true
         {{- end }}
         {{- if $value.livenessProbe }}
         livenessProbe:
@@ -165,6 +174,12 @@ spec:
           name: {{ .name }}
         {{- end }}
       {{- end }}
+      {{- end }}
+      {{- if and (eq $key "chase") $.Values.postgres.migrateFromSQLite.enabled }}
+      - name: legacy-sqlite
+        persistentVolumeClaim:
+          claimName: {{ $.Values.postgres.migrateFromSQLite.legacyPVC | required "postgres.migrateFromSQLite.legacyPVC must name the existing SQLite-era PVC" }}
+          readOnly: true
       {{- end }}
 
       {{- if $value.sidecar }}
