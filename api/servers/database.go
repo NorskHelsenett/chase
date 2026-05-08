@@ -21,11 +21,14 @@ func AutoMigrate(db *gorm.DB) error {
 	}
 
 	// Create composite indexes if they don't exist
-	if err := db.Exec(`
-		CREATE INDEX IF NOT EXISTS idx_active_next_check ON servers (active, next_check);
-		CREATE INDEX IF NOT EXISTS idx_server_timestamp ON ping_results (server_id, timestamp);
-	`).Error; err != nil {
-		return err
+	stmts := []string{
+		`CREATE INDEX IF NOT EXISTS idx_active_next_check ON servers (active, next_check)`,
+		`CREATE INDEX IF NOT EXISTS idx_server_timestamp ON ping_results (server_id, timestamp)`,
+	}
+	for _, s := range stmts {
+		if err := db.Exec(s).Error; err != nil {
+			return err
+		}
 	}
 
 	return nil
@@ -69,7 +72,7 @@ func aggregateAndPrunePings(db *gorm.DB) {
 	var hourlyRows []aggRow
 	db.Raw(`
 		SELECT server_id,
-			strftime('%Y-%m-%d %H:00:00', timestamp) as bucket,
+			to_char(date_trunc('hour', timestamp), 'YYYY-MM-DD HH24:MI:SS') as bucket,
 			COUNT(*) as total,
 			SUM(CASE WHEN error = '' THEN 1 ELSE 0 END) as successful,
 			SUM(CASE WHEN error != '' THEN 1 ELSE 0 END) as failed,
@@ -78,7 +81,7 @@ func aggregateAndPrunePings(db *gorm.DB) {
 			MAX(CASE WHEN error = '' THEN response_time ELSE NULL END) as max_response_time
 		FROM ping_results
 		WHERE timestamp < ? AND timestamp >= ? AND deleted_at IS NULL
-		GROUP BY server_id, strftime('%Y-%m-%d %H', timestamp)
+		GROUP BY server_id, date_trunc('hour', timestamp)
 	`, weekAgo, monthAgo).Scan(&hourlyRows)
 
 	if len(hourlyRows) > 0 {

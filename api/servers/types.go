@@ -18,7 +18,7 @@ type Server struct {
 	UpdateInterval     int          `json:"update_interval" gorm:"default:15"` // in minutes
 	Favicon            string       `json:"favicon,omitempty"`
 	FaviconMime        string       `json:"-" gorm:"default:''"`
-	FaviconData        []byte       `json:"-" gorm:"type:blob"`
+	FaviconData        []byte       `json:"-"`
 	FaviconFetchedAt   *time.Time   `json:"-"`
 	SiteTitle          string       `json:"site_title,omitempty"`
 	SiteDescription    string       `json:"site_description,omitempty"`

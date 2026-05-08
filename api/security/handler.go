@@ -71,8 +71,8 @@ func RunDatabaseCleanup() string {
 	safeExec("expired sessions",
 		`DELETE FROM sessions WHERE expires_at < ?`, time.Now())
 
-	if result := db.Exec(`PRAGMA incremental_vacuum`); result.Error != nil {
-		log.Printf("Incremental vacuum: %v", result.Error)
+	if result := db.Exec(`VACUUM`); result.Error != nil {
+		log.Printf("Vacuum: %v", result.Error)
 	}
 
 	if totalRows == 0 {
@@ -140,8 +140,8 @@ type SecurityReportRecord struct {
 type Screenshot struct {
 	ID            uint   `gorm:"primaryKey"`
 	ServerURL     string `gorm:"index"`
-	Data          []byte `gorm:"type:blob"`
-	ThumbnailData []byte `gorm:"type:blob"`
+	Data          []byte
+	ThumbnailData []byte
 	ThumbnailW    int
 	CreatedAt     time.Time
 	MIMEType      string

@@ -28,22 +28,6 @@ spec:
           - 100
         runAsNonRoot: true
         runAsUser: 101
-      initContainers:
-      - name: volume-permissions
-        image: busybox
-        command: ["sh", "-c", "touch /data/.initialized"]
-        securityContext:
-          allowPrivilegeEscalation: false
-          capabilities:
-            drop:
-            - ALL
-          privileged: false
-          runAsNonRoot: true
-          runAsUser: 101
-          runAsGroup: 101
-        volumeMounts:
-        - name: data
-          mountPath: /data
       containers:
       - name: {{ $key }}
         image: {{ $value.repository }}:{{ $value.tag | default "latest" }}
@@ -71,6 +55,35 @@ spec:
             secretKeyRef:
               name: chase-api-secret
               key: secretKey
+        {{- end }}
+        {{- if and (eq $key "chase") $.Values.postgres.enabled }}
+        - name: PGHOST
+          valueFrom:
+            secretKeyRef:
+              name: {{ $.Values.postgres.name }}-app
+              key: host
+        - name: PGPORT
+          valueFrom:
+            secretKeyRef:
+              name: {{ $.Values.postgres.name }}-app
+              key: port
+        - name: PGDATABASE
+          valueFrom:
+            secretKeyRef:
+              name: {{ $.Values.postgres.name }}-app
+              key: dbname
+        - name: PGUSER
+          valueFrom:
+            secretKeyRef:
+              name: {{ $.Values.postgres.name }}-app
+              key: username
+        - name: PGPASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ $.Values.postgres.name }}-app
+              key: password
+        - name: PGSSLMODE
+          value: "require"
         {{- end }}
         {{- with $value.env }}
         {{- toYaml . | nindent 8 }}

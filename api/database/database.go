@@ -4,12 +4,11 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"path/filepath"
 	"time"
 
 	"github.com/norskhelsenett/chase/types"
 	"github.com/norskhelsenett/chase/utils"
-	"gorm.io/driver/sqlite"
+	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
 )
@@ -17,36 +16,40 @@ import (
 var db *gorm.DB
 
 func InitDatabase() error {
-	dataFolder := utils.GetEnv("DATA_FOLDER", "/data")
-
 	// Configure GORM logger
-	logLevel := logger.Error // Only show error logs
+	logLevel := logger.Error
 	if utils.GetEnv("GORM_LOG_LEVEL", "error") == "info" {
 		logLevel = logger.Info
 	}
 
-	// Create custom logger config
 	newLogger := logger.New(
-		log.New(os.Stdout, "\r\n", log.LstdFlags), // io writer
+		log.New(os.Stdout, "\r\n", log.LstdFlags),
 		logger.Config{
-			SlowThreshold:             1000 * time.Millisecond, // Slow SQL threshold set to 1s (increased from 200ms)
-			LogLevel:                  logLevel,                // Log level (Error by default to minimize logs)
-			IgnoreRecordNotFoundError: true,                    // Ignore ErrRecordNotFound error
-			Colorful:                  false,                   // Disable color
+			SlowThreshold:             1000 * time.Millisecond,
+			LogLevel:                  logLevel,
+			IgnoreRecordNotFoundError: true,
+			Colorful:                  false,
 		},
 	)
 
-	var err error
-	db, err = gorm.Open(sqlite.Open(filepath.Join(dataFolder, "chase.db?_loc=Local")), &gorm.Config{
+	dsn, err := buildDSN()
+	if err != nil {
+		return err
+	}
+
+	db, err = gorm.Open(postgres.Open(dsn), &gorm.Config{
 		Logger: newLogger,
 	})
 	if err != nil {
 		return fmt.Errorf("failed to connect database: %v", err)
 	}
 
-	optimizeSQLiteForWrites(db)
+	if sqlDB, err := db.DB(); err == nil {
+		sqlDB.SetMaxOpenConns(20)
+		sqlDB.SetMaxIdleConns(5)
+		sqlDB.SetConnMaxLifetime(30 * time.Minute)
+	}
 
-	// Auto Migrate the schema
 	if err := db.AutoMigrate(&types.User{}); err != nil {
 		return fmt.Errorf("failed to auto migrate: %v", err)
 	}
@@ -54,17 +57,28 @@ func InitDatabase() error {
 	return nil
 }
 
-func GetDB() *gorm.DB {
-	return db
+// buildDSN constructs a Postgres DSN. Prefers DATABASE_URL when set,
+// otherwise composes from PG* env vars (matching the convention used by
+// the CloudNativePG operator's generated app secret).
+func buildDSN() (string, error) {
+	if dsn := os.Getenv("DATABASE_URL"); dsn != "" {
+		return dsn, nil
+	}
+
+	host := utils.GetEnv("PGHOST", "")
+	if host == "" {
+		return "", fmt.Errorf("DATABASE_URL or PGHOST must be set")
+	}
+	port := utils.GetEnv("PGPORT", "5432")
+	user := utils.GetEnv("PGUSER", "chase")
+	password := os.Getenv("PGPASSWORD")
+	dbName := utils.GetEnv("PGDATABASE", "chase")
+	sslMode := utils.GetEnv("PGSSLMODE", "require")
+
+	return fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=%s",
+		host, port, user, password, dbName, sslMode), nil
 }
 
-func optimizeSQLiteForWrites(db *gorm.DB) {
-	db.Exec("PRAGMA journal_mode=WAL;")
-	db.Exec("PRAGMA synchronous=NORMAL;")
-	db.Exec("PRAGMA page_size=4096;")
-	db.Exec("PRAGMA cache_size=-131072;")
-	db.Exec("PRAGMA mmap_size=268435456;")
-	db.Exec("PRAGMA temp_store=MEMORY;")
-	db.Exec("PRAGMA journal_size_limit=33554432;")
-	db.Exec("PRAGMA busy_timeout=5000;")
+func GetDB() *gorm.DB {
+	return db
 }
