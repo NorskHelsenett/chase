@@ -2,8 +2,6 @@ package scheduler
 
 import (
 	"net/http"
-	"os"
-	"path/filepath"
 	"strconv"
 
 	"github.com/gin-gonic/gin"
@@ -62,18 +60,11 @@ func (s *Scheduler) handleSystemStats(c *gin.Context) {
 	s.db.Table("ping_results").Count(&totalPings)
 	s.db.Table("users").Count(&userCount)
 
-	// Database file size
+	// Database size (Postgres) — pg_database_size returns bytes for the
+	// currently connected database. Falls back to 0 on error.
 	var dbSize int64
-	dbPath := os.Getenv("DATABASE_PATH")
-	if dbPath == "" {
-		dataFolder := os.Getenv("DATA_FOLDER")
-		if dataFolder == "" {
-			dataFolder = "/data"
-		}
-		dbPath = filepath.Join(dataFolder, "chase.db")
-	}
-	if info, err := os.Stat(dbPath); err == nil {
-		dbSize = info.Size()
+	if err := s.db.Raw(`SELECT pg_database_size(current_database())`).Scan(&dbSize).Error; err != nil {
+		dbSize = 0
 	}
 
 	// Running jobs count

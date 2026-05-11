@@ -9,11 +9,6 @@ chase:
   auth:
     generateSecretKey: true
   mounts:
-    - name: data
-      mountPath: /data
-      readOnly: false
-      storage: 10Gi
-      statefulSet: true
     - name: tmp
       inMemory: true
       mountPath: /tmp
@@ -21,8 +16,6 @@ chase:
       storage: 50Mi
   host: chase.example.com
   env:
-    - name: DATA_FOLDER
-      value: "/data"
     - name: SCREENSHOT_SERVICE_URL
       value: "http://screenshotr-service:8080"
   services:
@@ -41,6 +34,36 @@ chase:
       limits:
         memory: "128Mi"
         cpu: "200m"
+
+postgres:
+  enabled: true
+  name: chase-postgres
+  database: chase
+  owner: chase
+  instances: 1
+  image: ghcr.io/cloudnative-pg/postgresql:17
+  storageSize: 10Gi
+  # storageClass: ""
+  resources:
+    requests:
+      memory: "256Mi"
+      cpu: "100m"
+    limits:
+      memory: "1Gi"
+      cpu: "1000m"
+  parameters:
+    max_connections: "100"
+    shared_buffers: "128MB"
+  # One-shot atomic import from a legacy SQLite chase.db. Mounts an existing
+  # PVC read-only into the chase pod and points MIGRATE_FROM_SQLITE at it.
+  # Idempotent: the binary marks completion in data_migrations and skips on
+  # subsequent boots, so leaving this enabled is safe across rollouts.
+  migrateFromSQLite:
+    enabled: true
+    legacyPVC: data-chase-0
+    # The legacy PVC is mounted read-only here; chase auto-detects any *.db
+    # file inside (preferring chase.db / fit.db).
+    mountPath: /legacy
 
 screenshotr:
   repository: ghcr.io/norskhelsenett/chase/screenshotr

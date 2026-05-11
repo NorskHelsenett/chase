@@ -24,8 +24,8 @@ type BatchJobStore struct {
 	Total     int       `gorm:"type:integer" json:"total"`
 	Completed int       `gorm:"type:integer" json:"completed"`
 	Failed    int       `gorm:"type:integer" json:"failed"`
-	StartTime time.Time `gorm:"type:datetime;index" json:"start_time"`
-	EndTime   time.Time `gorm:"type:datetime" json:"end_time"`
+	StartTime time.Time `gorm:"index" json:"start_time"`
+	EndTime   time.Time `json:"end_time"`
 	Errors    []string  `gorm:"-" json:"errors"`
 }
 
@@ -39,7 +39,7 @@ type BatchResultStore struct {
 	Error           string    `gorm:"type:text" json:"error"`
 	SecurityError   string    `gorm:"type:text" json:"security_error"`
 	ScreenshotError string    `gorm:"type:text" json:"screenshot_error"`
-	CreatedAt       time.Time `gorm:"type:datetime;index" json:"created_at"`
+	CreatedAt       time.Time `gorm:"index" json:"created_at"`
 }
 
 // BatchResult stores results for individual server processing
