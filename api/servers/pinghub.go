@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"sort"
 	"sync"
 	"time"
 
@@ -14,12 +15,16 @@ import (
 
 // PingEvent represents a single ping result for SSE streaming
 type PingEvent struct {
-	ServerID       uint      `json:"server_id"`
-	StatusCode     int       `json:"status_code"`
-	ExpectedStatus int       `json:"expected_status"`
-	ResponseTime   float64   `json:"response_time_ms"`
-	Error          string    `json:"error,omitempty"`
-	Timestamp      time.Time `json:"timestamp"`
+	ServerID        uint      `json:"server_id"`
+	StatusCode      int       `json:"status_code"`
+	ExpectedStatus  int       `json:"expected_status"`
+	ResponseTime    float64   `json:"response_time_ms"`
+	Error           string    `json:"error,omitempty"`
+	Timestamp       time.Time `json:"timestamp"`
+	Favicon         string    `json:"favicon,omitempty"`
+	SiteTitle       string    `json:"site_title,omitempty"`
+	SiteDescription string    `json:"site_description,omitempty"`
+	OGImage         string    `json:"og_image,omitempty"`
 }
 
 // DaySummary represents one day of aggregated ping results
@@ -58,12 +63,16 @@ func (h *pingHub) unsubscribe(ch chan []byte) {
 // BroadcastPing sends a ping result to all connected SSE clients
 func BroadcastPing(serverID uint, expectedStatus int, result PingResult) {
 	evt := PingEvent{
-		ServerID:       serverID,
-		StatusCode:     result.StatusCode,
-		ExpectedStatus: expectedStatus,
-		ResponseTime:   result.ResponseTime,
-		Error:          result.Error,
-		Timestamp:      result.Timestamp,
+		ServerID:        serverID,
+		StatusCode:      result.StatusCode,
+		ExpectedStatus:  expectedStatus,
+		ResponseTime:    result.ResponseTime,
+		Error:           result.Error,
+		Timestamp:       result.Timestamp,
+		Favicon:         result.siteMetadata.Favicon,
+		SiteTitle:       result.siteMetadata.Title,
+		SiteDescription: result.siteMetadata.Description,
+		OGImage:         result.siteMetadata.OGImage,
 	}
 	data, err := json.Marshal(evt)
 	if err != nil {
@@ -84,10 +93,14 @@ func BroadcastPing(serverID uint, expectedStatus int, result PingResult) {
 
 // serverInitData is the initial payload sent per server on SSE connect
 type serverInitData struct {
-	ServerID       uint         `json:"server_id"`
-	ExpectedStatus int          `json:"expected_status"`
-	Latest         *PingEvent   `json:"latest"`
-	Days           []DaySummary `json:"days"`
+	ServerID        uint         `json:"server_id"`
+	ExpectedStatus  int          `json:"expected_status"`
+	Latest          *PingEvent   `json:"latest"`
+	Days            []DaySummary `json:"days"`
+	Favicon         string       `json:"favicon,omitempty"`
+	SiteTitle       string       `json:"site_title,omitempty"`
+	SiteDescription string       `json:"site_description,omitempty"`
+	OGImage         string       `json:"og_image,omitempty"`
 }
 
 // PingStreamSSE handles GET /api/servers/pings/stream
@@ -111,28 +124,61 @@ func PingStreamSSE(c *gin.Context) {
 		return
 	}
 
-	cutoff := time.Now().AddDate(0, 0, -10) // Last 10 days
+	cutoff := time.Now().AddDate(0, 0, -14) // Last 14 days
+	weekAgo := time.Now().AddDate(0, 0, -7)
 
 	for _, srv := range servers {
-		// Get daily aggregates using a single query
 		type dayRow struct {
 			Day        string
 			Total      int
 			Successful int
 		}
 
-		var rows []dayRow
+		// Raw pings (last ~7 days)
+		var rawRows []dayRow
 		if err := db.Model(&PingResult{}).
 			Select("DATE(timestamp) as day, COUNT(*) as total, SUM(CASE WHEN status_code = ? AND error = '' THEN 1 ELSE 0 END) as successful", srv.ExpectedStatusCode).
 			Where("server_id = ? AND timestamp >= ?", srv.ID, cutoff).
 			Group("DATE(timestamp)").
 			Order("day ASC").
-			Scan(&rows).Error; err != nil {
-			continue
+			Scan(&rawRows).Error; err != nil {
+			rawRows = nil
 		}
 
-		days := make([]DaySummary, len(rows))
-		for i, r := range rows {
+		// Hourly summaries (7-14 days ago, already aggregated)
+		var hourlyRows []dayRow
+		if err := db.Model(&PingHourlySummary{}).
+			Select("DATE(hour) as day, SUM(total) as total, SUM(successful) as successful").
+			Where("server_id = ? AND hour >= ? AND hour < ?", srv.ID, cutoff, weekAgo).
+			Group("DATE(hour)").
+			Order("day ASC").
+			Scan(&hourlyRows).Error; err != nil {
+			hourlyRows = nil
+		}
+
+		// Merge: hourly rows first, then raw rows (raw wins on overlap)
+		dayMap := make(map[string]dayRow)
+		for _, r := range hourlyRows {
+			dayMap[r.Day] = r
+		}
+		for _, r := range rawRows {
+			if existing, ok := dayMap[r.Day]; ok {
+				r.Total += existing.Total
+				r.Successful += existing.Successful
+			}
+			dayMap[r.Day] = r
+		}
+
+		// Sort by date
+		sortedKeys := make([]string, 0, len(dayMap))
+		for k := range dayMap {
+			sortedKeys = append(sortedKeys, k)
+		}
+		sort.Strings(sortedKeys)
+
+		days := make([]DaySummary, len(sortedKeys))
+		for i, k := range sortedKeys {
+			r := dayMap[k]
 			uptime := 0.0
 			if r.Total > 0 {
 				uptime = float64(r.Successful) / float64(r.Total) * 100
@@ -167,10 +213,14 @@ func PingStreamSSE(c *gin.Context) {
 		}
 
 		initData := serverInitData{
-			ServerID:       srv.ID,
-			ExpectedStatus: srv.ExpectedStatusCode,
-			Latest:         latestEvent,
-			Days:           days,
+			ServerID:        srv.ID,
+			ExpectedStatus:  srv.ExpectedStatusCode,
+			Latest:          latestEvent,
+			Days:            days,
+			Favicon:         srv.Favicon,
+			SiteTitle:       srv.SiteTitle,
+			SiteDescription: srv.SiteDescription,
+			OGImage:         srv.OGImage,
 		}
 
 		data, err := json.Marshal(initData)

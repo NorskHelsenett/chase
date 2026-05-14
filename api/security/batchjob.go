@@ -24,8 +24,8 @@ type BatchJobStore struct {
 	Total     int       `gorm:"type:integer" json:"total"`
 	Completed int       `gorm:"type:integer" json:"completed"`
 	Failed    int       `gorm:"type:integer" json:"failed"`
-	StartTime time.Time `gorm:"type:datetime;index" json:"start_time"`
-	EndTime   time.Time `gorm:"type:datetime" json:"end_time"`
+	StartTime time.Time `gorm:"index" json:"start_time"`
+	EndTime   time.Time `json:"end_time"`
 	Errors    []string  `gorm:"-" json:"errors"`
 }
 
@@ -39,7 +39,7 @@ type BatchResultStore struct {
 	Error           string    `gorm:"type:text" json:"error"`
 	SecurityError   string    `gorm:"type:text" json:"security_error"`
 	ScreenshotError string    `gorm:"type:text" json:"screenshot_error"`
-	CreatedAt       time.Time `gorm:"type:datetime;index" json:"created_at"`
+	CreatedAt       time.Time `gorm:"index" json:"created_at"`
 }
 
 // BatchResult stores results for individual server processing
@@ -568,6 +568,83 @@ func randomString(n int) string {
 		b[i] = letterBytes[rand.Intn(len(letterBytes))]
 	}
 	return string(b)
+}
+
+// RunBatchSecurityScan runs a batch security scan on all eligible active servers.
+// Designed to be called from the scheduler.
+func RunBatchSecurityScan(ctx context.Context, progress func(string)) (string, error) {
+	db := database.GetDB()
+
+	query := `
+		WITH LatestPings AS (
+			SELECT server_id, status_code, error,
+				   ROW_NUMBER() OVER (PARTITION BY server_id ORDER BY timestamp DESC) as rn
+			FROM ping_results
+		)
+		SELECT s.*,
+			   lp.status_code as last_status_code,
+			   lp.error as last_error
+		FROM servers s
+		LEFT JOIN LatestPings lp ON s.id = lp.server_id AND lp.rn = 1
+		WHERE s.active = true`
+
+	type ServerWithPing struct {
+		types.Server
+		LastStatusCode *int    `gorm:"column:last_status_code"`
+		LastError      *string `gorm:"column:last_error"`
+	}
+
+	var serversWithPing []ServerWithPing
+	if err := db.Raw(query).Scan(&serversWithPing).Error; err != nil {
+		return "", fmt.Errorf("failed to fetch servers: %w", err)
+	}
+
+	var eligibleServers []types.Server
+	for _, s := range serversWithPing {
+		if s.LastStatusCode == nil ||
+			(s.LastError == nil || *s.LastError == "") &&
+				*s.LastStatusCode >= 200 && *s.LastStatusCode < 400 {
+			eligibleServers = append(eligibleServers, s.Server)
+		}
+	}
+
+	if len(eligibleServers) == 0 {
+		return "no eligible servers found", nil
+	}
+
+	progress(fmt.Sprintf("scanning %d servers", len(eligibleServers)))
+
+	jobID := generateJobID()
+	job := &BatchJob{
+		ID:        jobID,
+		Status:    "running",
+		Total:     len(eligibleServers),
+		StartTime: time.Now(),
+	}
+
+	// Use the existing batch infrastructure but hook into progress
+	batchCtx, cancel := context.WithCancel(ctx)
+	job.Cancel = cancel
+
+	jobsMutex.Lock()
+	activeJobs[jobID] = job
+	jobsMutex.Unlock()
+
+	// Run synchronously (we're already in a goroutine from the scheduler)
+	processBatch(batchCtx, eligibleServers, job)
+
+	jobsMutex.RLock()
+	completed := job.Completed
+	failed := job.Failed
+	total := job.Total
+	status := job.Status
+	jobsMutex.RUnlock()
+
+	if status == "cancelled" {
+		return fmt.Sprintf("cancelled — %d/%d completed, %d failed", completed, total, failed), ctx.Err()
+	}
+
+	return fmt.Sprintf("scanned %d servers — %d ok, %d failed", total, completed, failed), nil
 }
 
 func getBatchWorkerCount() int {

@@ -1,11 +1,12 @@
 import { writable } from 'svelte/store';
 import { browser } from '$app/environment';
+import { serverStoreActions } from '$lib/stores/serverStore';
 
 /**
  * Per-server ping data from SSE.
  * Map<serverID, { latest, days, expectedStatus }>
  *   latest: { server_id, status_code, response_time_ms, error?, timestamp }
- *   days: [{ date, total, successful, uptime }]  (last 10 days, oldest first)
+ *   days: [{ date, total, successful, uptime }]  (last 14 days, oldest first)
  *   expectedStatus: number
  */
 export const pingData = writable(new Map());
@@ -27,6 +28,7 @@ export function connectPingSSE() {
 			});
 			return new Map(map);
 		});
+		serverStoreActions.applyPingMetadata(data.server_id, data);
 	});
 
 	eventSource.addEventListener('ping', (e) => {
@@ -60,15 +62,16 @@ export function connectPingSSE() {
 					successful: isSuccess ? 1 : 0,
 					uptime: isSuccess ? 100 : 0
 				});
-				// Keep only last 10 days
-				if (existing.days.length > 10) {
-					existing.days = existing.days.slice(-10);
+				// Keep only last 14 days
+				if (existing.days.length > 14) {
+					existing.days = existing.days.slice(-14);
 				}
 			}
 
 			map.set(ping.server_id, { ...existing });
 			return new Map(map);
 		});
+		serverStoreActions.applyPingMetadata(ping.server_id, ping);
 	});
 
 	eventSource.onerror = () => {

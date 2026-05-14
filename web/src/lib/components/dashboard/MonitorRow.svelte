@@ -14,6 +14,7 @@
 		secretsRisk: 'critical' | 'high' | 'medium' | 'low' | '';
 		secretsCount: number;
 		days: DaySummary[];
+		responseTimeMs: number | null;
 	};
 
 	interface Props {
@@ -25,18 +26,30 @@
 
 	let rowData: ServerRowData = $derived(mapServerToRowData(server, pingInfo));
 
+	let pulsing = $state(false);
+	let lastTimestamp = $state('');
 
+	$effect(() => {
+		const ts = pingInfo?.latest?.timestamp;
+		if (ts && lastTimestamp && ts !== lastTimestamp) {
+			pulsing = true;
+			setTimeout(() => {
+				pulsing = false;
+			}, 600);
+		}
+		if (ts) lastTimestamp = ts;
+	});
 
 	function mapServerToRowData(server: Server, pingInfo: any): ServerRowData {
 		let status: 'up' | 'down' = 'down';
 		let days: DaySummary[] = [];
+		let responseTimeMs: number | null = null;
 
 		if (pingInfo?.latest) {
-			// SSE has real-time data — use it for live status
 			const s = pingInfo.latest.status_code;
 			status = s > 0 && s === server.expected_status && !pingInfo.latest.error ? 'up' : 'down';
+			responseTimeMs = pingInfo.latest.response_time_ms ?? null;
 		} else {
-			// Use API-provided status (available immediately)
 			status = server.status === 'up' ? 'up' : 'down';
 		}
 
@@ -53,60 +66,74 @@
 			apiRisk: server.api_risk?.toLowerCase() || server.security?.apiRisk || '',
 			secretsRisk: server.secrets_risk?.toLowerCase() || '',
 			secretsCount: server.secrets_count || 0,
-			days
+			days,
+			responseTimeMs
 		};
+	}
+
+	function formatResponseTime(ms: number | null): { value: string; unit: string } | null {
+		if (ms === null || ms === undefined) return null;
+		if (ms >= 1000) return { value: (ms / 1000).toFixed(1), unit: 's' };
+		return { value: String(Math.round(ms)), unit: 'ms' };
 	}
 
 	function getRiskClass(risk: string): string {
 		switch (risk?.toLowerCase()) {
-			case 'critical': return 'risk-critical';
-			case 'high': return 'risk-high';
-			case 'medium': return 'risk-medium';
-			case 'low': return 'risk-low';
-			default: return 'risk-none';
+			case 'critical':
+				return 'risk-critical';
+			case 'high':
+				return 'risk-high';
+			case 'medium':
+				return 'risk-medium';
+			case 'low':
+				return 'risk-low';
+			default:
+				return 'risk-none';
 		}
 	}
 
 	function getScoreClass(score: string): string {
 		switch (score) {
 			case 'A+':
-			case 'A': return 'score-a';
+			case 'A':
+				return 'score-a';
 			case 'B+':
-			case 'B': return 'score-b';
-			case 'C': return 'score-c';
+			case 'B':
+				return 'score-b';
+			case 'C':
+				return 'score-c';
 			case 'D':
-			case 'F': return 'score-f';
-			default: return 'score-none';
+			case 'F':
+				return 'score-f';
+			default:
+				return 'score-none';
 		}
 	}
 
 	function getDayBarClass(day: DaySummary): string {
-		if (day.uptime >= 99.9) return 'uptime-up';
-		if (day.uptime >= 95) return 'uptime-degraded';
-		return 'uptime-down';
+		if (day.total === 0) return 'uptime-missing';
+		if (day.uptime === 0) return 'uptime-down';
+		if (day.uptime < 100) return 'uptime-missing';
+		return 'uptime-up';
 	}
 
-	function formatDayTooltip(day: DaySummary): string {
-		return `${day.date}\n${day.uptime.toFixed(1)}% (${day.successful}/${day.total})`;
-	}
 	let pingInfo = $derived($pingData.get(server.ID));
-	
 </script>
-
-<td class="cell cell-status" class:hoverable={hover}>
-	<span class="status-badge {rowData.status}">
-		{rowData.status.toUpperCase()}
-	</span>
-</td>
 
 <td class="cell cell-domain" class:hoverable={hover}>
 	<div class="domain-info">
+		<span class="status-dot-wrap">
+			<span class="status-dot {rowData.status}" title={rowData.status.toUpperCase()}></span>
+			{#if pulsing}
+				<span class="pulse-ring {rowData.status}"></span>
+			{/if}
+		</span>
 		{#if server.favicon}
 			<img
 				class="favicon"
-				src={server.favicon.startsWith('http') ? server.favicon : `https://${server.url}${server.favicon.startsWith('/') ? '' : '/'}${server.favicon}`}
+				src={`/api/servers/${server.ID}/favicon`}
 				alt=""
-				onerror={(e) => e.currentTarget.style.display = 'none'}
+				onerror={(e) => (e.currentTarget.style.display = 'none')}
 			/>
 		{/if}
 		<div class="domain-text-wrap">
@@ -150,18 +177,37 @@
 
 <td class="cell cell-uptime" class:hoverable={hover}>
 	<div class="uptime-bars">
-		{#each Array(10) as _, i}
-			{#if i < 10 - rowData.days.length}
+		{#each Array(14) as _, i}
+			{#if i < 14 - rowData.days.length}
 				<div class="uptime-bar uptime-empty"></div>
 			{:else}
-				{@const day = rowData.days[i - (10 - rowData.days.length)]}
-				<div
-					class="uptime-bar {getDayBarClass(day)}"
-					title={formatDayTooltip(day)}
-				></div>
+				{@const day = rowData.days[i - (14 - rowData.days.length)]}
+				<div class="uptime-bar-wrap">
+					<div class="uptime-bar {getDayBarClass(day)}"></div>
+					<div class="uptime-tooltip">
+						<span class="tooltip-date">{day.date}</span>
+						{#if day.total === 0}
+							<span class="tooltip-detail">No pings</span>
+						{:else}
+							<span class="tooltip-uptime">{day.uptime.toFixed(1)}%</span>
+							<span class="tooltip-detail">{day.successful}/{day.total} ok</span>
+						{/if}
+					</div>
+				</div>
 			{/if}
 		{/each}
 	</div>
+</td>
+
+<td class="cell cell-response-time" class:hoverable={hover}>
+	{#if formatResponseTime(rowData.responseTimeMs)}
+		{@const rt = formatResponseTime(rowData.responseTimeMs)}
+		<span class="response-time"
+			><span class="rt-value">{rt.value}</span><span class="rt-unit">{rt.unit}</span></span
+		>
+	{:else}
+		<span class="response-time rt-unit">—</span>
+	{/if}
 </td>
 
 <style>
@@ -178,11 +224,11 @@
 		background: #2b2b2b;
 	}
 
-	:global(tr:hover) .cell-status.hoverable {
+	:global(tr:hover) .cell-domain.hoverable {
 		border-radius: 0.5rem 0 0 0.5rem;
 	}
 
-	:global(tr:hover) .cell-uptime.hoverable {
+	:global(tr:hover) .cell-response-time.hoverable {
 		border-radius: 0 0.5rem 0.5rem 0;
 	}
 
@@ -228,41 +274,89 @@
 		line-height: 1.2;
 	}
 
-	.status-badge {
-		display: inline-flex;
-		align-items: center;
-		justify-content: center;
-		padding: 0.125rem 0.5rem;
-		min-width: 5em;
-		font-size: 0.6875rem;
-		font-weight: 500;
-		text-transform: uppercase;
-		letter-spacing: 0.025em;
-		border-radius: 9999px;
-		border: 1px solid;
+	.status-dot-wrap {
+		position: relative;
+		width: 10px;
+		height: 10px;
+		flex-shrink: 0;
+		margin-right: 0.5rem;
 	}
 
-	.status-badge.up {
-		background: rgba(34, 197, 94, 0.15);
-		color: #4ade80;
-		border-color: rgba(34, 197, 94, 0.3);
+	.status-dot {
+		width: 10px;
+		height: 10px;
+		border-radius: 50%;
+		position: absolute;
+		top: 0;
+		left: 0;
 	}
 
-	.status-badge.down {
-		background: rgba(239, 68, 68, 0.15);
-		color: #f87171;
-		border-color: rgba(239, 68, 68, 0.3);
+	.status-dot.up {
+		background: #22c55e;
+		box-shadow: 0 0 6px rgba(34, 197, 94, 0.6);
+	}
+
+	.status-dot.down {
+		background: #ef4444;
+		box-shadow: 0 0 6px rgba(239, 68, 68, 0.6);
+	}
+
+	.pulse-ring {
+		position: absolute;
+		top: 50%;
+		left: 50%;
+		width: 10px;
+		height: 10px;
+		border-radius: 50%;
+		transform: translate(-50%, -50%);
+		animation: pulse-fade 0.6s ease-out forwards;
+		pointer-events: none;
+	}
+
+	.pulse-ring.up {
+		background: #22c55e;
+		box-shadow: 0 0 6px rgba(34, 197, 94, 0.6);
+	}
+
+	.pulse-ring.down {
+		background: #ef4444;
+		box-shadow: 0 0 6px rgba(239, 68, 68, 0.6);
+	}
+
+	@keyframes pulse-fade {
+		0% {
+			width: 10px;
+			height: 10px;
+			opacity: 0.8;
+			transform: translate(-50%, -50%) scale(1);
+		}
+		100% {
+			width: 28px;
+			height: 28px;
+			opacity: 0;
+			transform: translate(-50%, -50%) scale(2.8);
+		}
 	}
 
 	.cell-score {
 		font-weight: 500;
 	}
 
-	.score-a { color: #22c55e; }
-	.score-b { color: #eab308; }
-	.score-c { color: #3b82f6; }
-	.score-f { color: #ef4444; }
-	.score-none { color: #6b7280; }
+	.score-a {
+		color: #22c55e;
+	}
+	.score-b {
+		color: #eab308;
+	}
+	.score-c {
+		color: #3b82f6;
+	}
+	.score-f {
+		color: #ef4444;
+	}
+	.score-none {
+		color: #6b7280;
+	}
 
 	.risk-badge {
 		display: inline-flex;
@@ -306,17 +400,79 @@
 		gap: 2px;
 	}
 
+	.uptime-bar-wrap {
+		position: relative;
+	}
+
 	.uptime-bar {
 		width: 4px;
 		height: 1rem;
 		border-radius: 2px;
+		transition:
+			transform 0.15s ease,
+			filter 0.15s ease;
+	}
+
+	.uptime-bar-wrap:hover .uptime-bar {
+		transform: scaleY(1.4);
+		filter: brightness(1.3);
+	}
+
+	.uptime-tooltip {
+		display: none;
+		position: absolute;
+		bottom: calc(100% + 8px);
+		left: 50%;
+		transform: translateX(-50%);
+		background: #1a1a1a;
+		border: 1px solid #333;
+		border-radius: 6px;
+		padding: 0.375rem 0.5rem;
+		white-space: nowrap;
+		z-index: 10;
+		flex-direction: column;
+		align-items: center;
+		gap: 2px;
+		pointer-events: none;
+		box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+	}
+
+	.uptime-tooltip::after {
+		content: '';
+		position: absolute;
+		top: 100%;
+		left: 50%;
+		transform: translateX(-50%);
+		border: 5px solid transparent;
+		border-top-color: #333;
+	}
+
+	.uptime-bar-wrap:hover .uptime-tooltip {
+		display: flex;
+	}
+
+	.tooltip-date {
+		font-size: 0.625rem;
+		color: #6b7280;
+		letter-spacing: 0.02em;
+	}
+
+	.tooltip-uptime {
+		font-size: 0.75rem;
+		font-weight: 600;
+		color: #e5e7eb;
+	}
+
+	.tooltip-detail {
+		font-size: 0.625rem;
+		color: #9ca3af;
 	}
 
 	.uptime-up {
-		background: rgba(163, 230, 53, 0.7);
+		background: rgba(34, 197, 94, 0.7);
 	}
 
-	.uptime-degraded {
+	.uptime-missing {
 		background: #eab308;
 	}
 
@@ -325,6 +481,25 @@
 	}
 
 	.uptime-empty {
-		background: rgba(34, 197, 94, 0.1);
+		background: rgba(107, 114, 128, 0.15);
+	}
+
+	.cell-response-time {
+		text-align: right;
+		width: 1%;
+		white-space: nowrap;
+	}
+
+	.response-time {
+		font-size: 0.75rem;
+		font-variant-numeric: tabular-nums;
+	}
+
+	.rt-value {
+		color: #9ca3af;
+	}
+
+	.rt-unit {
+		color: #4b5563;
 	}
 </style>

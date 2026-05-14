@@ -3,7 +3,7 @@
 
 	const bubble = createBubbler();
 	import { onMount } from 'svelte';
-	import { Home, LogIn, Logs, Grid, Share2, Globe, X } from 'lucide-svelte';
+	import { Home, LogIn, Logs, Grid, Share2, Globe, Settings, X } from 'lucide-svelte';
 	import Avatar from './Avatar.svelte';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/stores';
@@ -78,6 +78,14 @@
 
 	<div class="nav-footer">
 		{#if $isLoggedIn}
+			<button
+				class="nav-link"
+				class:active={currentPath === '/settings'}
+				onclick={() => goto('/settings')}
+			>
+				<Settings size={18} />
+				<span>Settings</span>
+			</button>
 			<button class="nav-link profile-link" onclick={toProfile}>
 				<Avatar />
 				<span>Profile</span>

@@ -1,20 +1,21 @@
 <script>
-	import BatchComponent from '$lib/components/batch/BatchComponent.svelte';
 	import MassImport from '$lib/components/batch/MassImport.svelte';
+	import JobScheduler from '$lib/components/settings/JobScheduler.svelte';
 </script>
 
-<div class="max-w-2xl mx-auto mt-8">
-	<h2 class="text-2xl font-bold mb-4 text-foreground pl-6">Settings</h2>
-
-	<div class="space-y-6">
-		<!-- Mass Import Section -->
-		<div class="p-6 card text-card-foreground rounded-lg shadow-md">
-			<MassImport />
+<div class="flex-1 p-8">
+	<div class="max-w-7xl xl:max-w-[100rem] mx-auto">
+		<div class="mb-8">
+			<h1 class="text-3xl font-bold text-gray-100 mb-2">Settings</h1>
+			<p class="text-gray-400">System overview and job management</p>
 		</div>
 
-		<!-- Batch Operations Section -->
-		<div class="p-6 card text-card-foreground rounded-lg shadow-md">
-			<BatchComponent />
+		<JobScheduler />
+
+		<div class="mt-6">
+			<div class="bg-[#202020] rounded-lg p-6">
+				<MassImport />
+			</div>
 		</div>
 	</div>
 </div>

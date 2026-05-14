@@ -193,36 +193,14 @@ func cacheGeo(ip string, result *GeoResult) {
 	}
 }
 
-// StartGeoCacheRefresh runs background jobs:
-// 1. Refreshes stale individual geo cache entries once a day
-// 2. Rebuilds the geo response cache every 5 minutes for status updates
-func StartGeoCacheRefresh() {
-	// Individual geo entry refresh (runs daily)
-	go func() {
-		ticker := time.NewTicker(24 * time.Hour)
-		defer ticker.Stop()
+// RefreshStaleGeoEntries refreshes stale individual geo cache entries.
+func RefreshStaleGeoEntries() {
+	refreshStaleGeoEntries()
+}
 
-		// Run once at startup
-		refreshStaleGeoEntries()
-
-		for range ticker.C {
-			refreshStaleGeoEntries()
-		}
-	}()
-
-	// Geo response cache rebuild (runs every 5 minutes + at startup)
-	go func() {
-		// Build initial cache at startup
-		log.Println("Building initial geo response cache...")
-		rebuildGeoResponseCache()
-
-		ticker := time.NewTicker(5 * time.Minute)
-		defer ticker.Stop()
-
-		for range ticker.C {
-			rebuildGeoResponseCache()
-		}
-	}()
+// RebuildGeoResponseCache rebuilds the geo response cache.
+func RebuildGeoResponseCache() {
+	rebuildGeoResponseCache()
 }
 
 func refreshStaleGeoEntries() {

@@ -1,0 +1,35 @@
+{{- if .Values.postgres.enabled }}
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: {{ .Values.postgres.name }}
+  labels:
+    app: {{ .Values.postgres.name }}
+spec:
+  instances: {{ .Values.postgres.instances | default 1 }}
+  imageName: {{ .Values.postgres.image | default "ghcr.io/cloudnative-pg/postgresql:17" }}
+  imagePullPolicy: IfNotPresent
+
+  bootstrap:
+    initdb:
+      database: {{ .Values.postgres.database | default "chase" }}
+      owner: {{ .Values.postgres.owner | default "chase" }}
+      encoding: UTF8
+
+  storage:
+    size: {{ .Values.postgres.storageSize | default "10Gi" }}
+    {{- with .Values.postgres.storageClass }}
+    storageClass: {{ . }}
+    {{- end }}
+
+  {{- with .Values.postgres.resources }}
+  resources:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+
+  {{- with .Values.postgres.parameters }}
+  postgresql:
+    parameters:
+      {{- toYaml . | nindent 6 }}
+  {{- end }}
+{{- end }}

@@ -60,6 +60,7 @@
 		| 'apiRisk'
 		| 'secrets'
 		| 'uptime'
+		| 'responseTime'
 		| null = null;
 	let sortDirection: 'asc' | 'desc' = 'asc';
 
@@ -86,6 +87,11 @@
 			'': 0
 		};
 		return risks[risk.toLowerCase() as keyof typeof risks] || 0;
+	}
+
+	function getResponseTimeMs(server: Server): number {
+		const info = $pingData.get(server.ID);
+		return info?.latest?.response_time_ms ?? Infinity;
 	}
 
 	function getUptimePercentage(server: Server): number {
@@ -135,6 +141,10 @@
 				case 'uptime':
 					valueA = getUptimePercentage(a);
 					valueB = getUptimePercentage(b);
+					break;
+				case 'responseTime':
+					valueA = getResponseTimeMs(a);
+					valueB = getResponseTimeMs(b);
 					break;
 				default:
 					valueA = a[field as keyof Server];
@@ -201,10 +211,6 @@
 			<table class="monitor-table">
 				<thead>
 					<tr>
-						<th class="sortable" onclick={() => toggleSort('status')}>
-							<span>Status</span>
-							<span class="sort-indicator">{getSortIndicator('status')}</span>
-						</th>
 						<th class="sortable col-domain" onclick={() => toggleSort('url')}>
 							<span>Domain</span>
 							<span class="sort-indicator">{getSortIndicator('url')}</span>
@@ -232,6 +238,10 @@
 						<th class="sortable" onclick={() => toggleSort('uptime')}>
 							<span>Uptime</span>
 							<span class="sort-indicator">{getSortIndicator('uptime')}</span>
+						</th>
+						<th class="sortable col-response-time" onclick={() => toggleSort('responseTime')}>
+							<span>Ms</span>
+							<span class="sort-indicator">{getSortIndicator('responseTime')}</span>
 						</th>
 					</tr>
 				</thead>
@@ -337,6 +347,13 @@
 
 	.monitor-table th.col-domain {
 		width: 30%;
+	}
+
+	.monitor-table th.col-response-time {
+		text-align: right !important;
+		white-space: nowrap;
+		width: 1px;
+		padding-right: 0.25rem;
 	}
 
 	.sort-indicator {

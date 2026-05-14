@@ -36,16 +36,20 @@ func InitDatabase() error {
 }
 
 // RunDatabaseCleanup deduplicates and prunes old data.
-// Call from a single background goroutine to avoid SQLite lock contention.
-func RunDatabaseCleanup() {
+// Returns a summary of rows affected.
+func RunDatabaseCleanup() string {
 	db := database.GetDB()
 
-	// Each cleanup is wrapped to avoid crashing on tables that don't exist yet
+	totalRows := int64(0)
+
 	safeExec := func(desc, sql string, args ...interface{}) {
 		if result := db.Exec(sql, args...); result.Error != nil {
 			log.Printf("Cleanup (%s): %v", desc, result.Error)
-		} else if result.RowsAffected > 0 {
-			log.Printf("Cleanup (%s): %d rows", desc, result.RowsAffected)
+		} else {
+			totalRows += result.RowsAffected
+			if result.RowsAffected > 0 {
+				log.Printf("Cleanup (%s): %d rows", desc, result.RowsAffected)
+			}
 		}
 	}
 
@@ -67,18 +71,19 @@ func RunDatabaseCleanup() {
 	safeExec("expired sessions",
 		`DELETE FROM sessions WHERE expires_at < ?`, time.Now())
 
-	// VACUUM in a separate step — use incremental to avoid doubling disk usage
-	if result := db.Exec(`PRAGMA incremental_vacuum`); result.Error != nil {
-		log.Printf("Incremental vacuum: %v", result.Error)
-	} else {
-		log.Printf("Incremental vacuum complete")
+	if result := db.Exec(`VACUUM`); result.Error != nil {
+		log.Printf("Vacuum: %v", result.Error)
 	}
 
-	// Backfill thumbnails in background — slow, one-at-a-time, doesn't block cleanup
-	go backfillThumbnails()
+	if totalRows == 0 {
+		return "nothing to clean up"
+	}
+	return fmt.Sprintf("cleaned up %d rows", totalRows)
 }
 
-func backfillThumbnails() {
+// BackfillThumbnails generates thumbnails for screenshots that are missing them.
+// Returns a summary of what was done.
+func BackfillThumbnails() string {
 	db := database.GetDB()
 
 	// Get IDs only — don't load blobs into memory
@@ -88,10 +93,11 @@ func backfillThumbnails() {
 		Pluck("id", &ids)
 
 	if len(ids) == 0 {
-		return
+		return "no screenshots need thumbnails"
 	}
 
 	log.Printf("Backfilling thumbnails for %d screenshots", len(ids))
+	done := 0
 	for _, id := range ids {
 		// Load one screenshot at a time
 		var s Screenshot
@@ -110,12 +116,14 @@ func backfillThumbnails() {
 			"thumbnail_data": thumb,
 			"thumbnail_w":    thumbnailWidth,
 		})
+		done++
 		// Let GC reclaim memory and yield the SQLite write lock to other goroutines
 		s.Data = nil
 		thumb = nil
 		time.Sleep(100 * time.Millisecond)
 	}
 	log.Printf("Thumbnail backfill complete")
+	return fmt.Sprintf("backfilled %d/%d screenshots", done, len(ids))
 }
 
 type SecurityReportRecord struct {
@@ -132,8 +140,8 @@ type SecurityReportRecord struct {
 type Screenshot struct {
 	ID            uint   `gorm:"primaryKey"`
 	ServerURL     string `gorm:"index"`
-	Data          []byte `gorm:"type:blob"`
-	ThumbnailData []byte `gorm:"type:blob"`
+	Data          []byte
+	ThumbnailData []byte
 	ThumbnailW    int
 	CreatedAt     time.Time
 	MIMEType      string

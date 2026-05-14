@@ -17,6 +17,9 @@ type Server struct {
 	Comment            string       `json:"comment"`
 	UpdateInterval     int          `json:"update_interval" gorm:"default:15"` // in minutes
 	Favicon            string       `json:"favicon,omitempty"`
+	FaviconMime        string       `json:"-" gorm:"default:''"`
+	FaviconData        []byte       `json:"-"`
+	FaviconFetchedAt   *time.Time   `json:"-"`
 	SiteTitle          string       `json:"site_title,omitempty"`
 	SiteDescription    string       `json:"site_description,omitempty"`
 	OGImage            string       `json:"og_image,omitempty"`
@@ -50,6 +53,7 @@ type PingResult struct {
 // SiteMetadata holds lightweight metadata extracted from an HTML page's <head>.
 type SiteMetadata struct {
 	Favicon     string
+	ManifestURL string
 	Title       string
 	Description string
 	OGImage     string

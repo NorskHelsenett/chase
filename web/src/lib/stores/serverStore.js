@@ -132,6 +132,53 @@ serverStore.subscribe((state) => {
 
 // Helper functions to interact with the store
 export const serverStoreActions = {
+	applyPingMetadata(serverId, metadata = {}) {
+		const hasMetadata =
+			metadata.favicon || metadata.site_title || metadata.site_description || metadata.og_image;
+		if (!hasMetadata) return;
+
+		serverStore.update((state) => {
+			let changed = false;
+			const servers = state.servers.map((server) => {
+				if (server.ID !== serverId) return server;
+
+				const nextServer = {
+					...server,
+					favicon: metadata.favicon || server.favicon,
+					site_title: metadata.site_title || server.site_title,
+					site_description: metadata.site_description || server.site_description,
+					og_image: metadata.og_image || server.og_image
+				};
+
+				if (
+					nextServer.favicon !== server.favicon ||
+					nextServer.site_title !== server.site_title ||
+					nextServer.site_description !== server.site_description ||
+					nextServer.og_image !== server.og_image
+				) {
+					changed = true;
+					return nextServer;
+				}
+
+				return server;
+			});
+
+			if (!changed) return state;
+
+			const updatedAt = new Date();
+			memoryCache.set(state.currentFilter, {
+				data: servers,
+				lastUpdated: updatedAt
+			});
+
+			return {
+				...state,
+				servers,
+				lastUpdated: updatedAt
+			};
+		});
+	},
+
 	async setFilter(filter = null, force = false) {
 		const currentKey = get(serverStore).currentFilter;
 		const filterKey = getFilterKey(filter);

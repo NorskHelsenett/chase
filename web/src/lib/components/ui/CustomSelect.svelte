@@ -161,10 +161,6 @@
 <style>
 	/* Button styling is now handled via Tailwind classes */
 
-	.custom-select button:focus {
-		animation: pulse 1.5s ease-in-out infinite alternate;
-	}
-
 	/* Dropdown container styling */
 	.custom-select [role='listbox'] {
 		/* box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3), 0 0 8px rgba(34, 197, 94, 0.2); */
@@ -185,15 +181,6 @@
 	/* Selected option styling */
 	.custom-select [role='option'][aria-selected='true'] {
 		background-color: rgba(34, 197, 94, 0.2);
-	}
-
-	@keyframes pulse {
-		from {
-			box-shadow: 0 0 0 rgba(34, 197, 94, 0.4);
-		}
-		to {
-			box-shadow: 0 0 10px rgba(34, 197, 94, 0.7);
-		}
 	}
 
 	/* Custom scrollbar for the dropdown */

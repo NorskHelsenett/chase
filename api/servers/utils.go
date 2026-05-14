@@ -2,10 +2,15 @@ package servers
 
 import (
 	"crypto/tls"
+	"encoding/json"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
+	"path"
+	"strconv"
 	"strings"
 	"time"
 
@@ -137,6 +142,14 @@ func pingServer(server Server) PingResult {
 			ct := resp.Header.Get("Content-Type")
 			if strings.Contains(ct, "text/html") {
 				result.siteMetadata = extractSiteMetadata(resp.Body)
+				if baseURL := resp.Request.URL; baseURL != nil {
+					resolveSiteMetadataURLs(&result.siteMetadata, baseURL)
+					if shouldPreferManifestIcon(result.siteMetadata) {
+						if manifestIcon, err := fetchManifestIcon(client, req.Header.Get("User-Agent"), result.siteMetadata.ManifestURL); err == nil && manifestIcon != "" {
+							result.siteMetadata.Favicon = manifestIcon
+						}
+					}
+				}
 			}
 		}
 
@@ -251,6 +264,9 @@ func extractSiteMetadata(body io.Reader) SiteMetadata {
 				if (rel == "icon" || rel == "shortcut icon") && href != "" && meta.Favicon == "" {
 					meta.Favicon = href
 				}
+				if rel == "manifest" && href != "" && meta.ManifestURL == "" {
+					meta.ManifestURL = href
+				}
 			}
 
 			if tag == "meta" {
@@ -281,4 +297,166 @@ func extractSiteMetadata(body io.Reader) SiteMetadata {
 			}
 		}
 	}
+}
+
+func resolveSiteMetadataURLs(meta *SiteMetadata, baseURL *url.URL) {
+	if meta == nil || baseURL == nil {
+		return
+	}
+
+	meta.Favicon = resolveMetadataURL(baseURL, meta.Favicon)
+	meta.ManifestURL = resolveMetadataURL(baseURL, meta.ManifestURL)
+	meta.OGImage = resolveMetadataURL(baseURL, meta.OGImage)
+}
+
+func resolveMetadataURL(baseURL *url.URL, raw string) string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" || baseURL == nil {
+		return raw
+	}
+
+	parsed, err := url.Parse(raw)
+	if err != nil {
+		return raw
+	}
+	if parsed.IsAbs() {
+		return parsed.String()
+	}
+
+	return baseURL.ResolveReference(parsed).String()
+}
+
+func shouldPreferManifestIcon(meta SiteMetadata) bool {
+	if meta.ManifestURL == "" {
+		return false
+	}
+	if meta.Favicon == "" || meta.Favicon == "/favicon.ico" {
+		return true
+	}
+	return looksFingerprintAsset(meta.Favicon)
+}
+
+func looksFingerprintAsset(raw string) bool {
+	parsed, err := url.Parse(raw)
+	if err != nil {
+		return false
+	}
+
+	name := strings.ToLower(path.Base(parsed.Path))
+	dot := strings.LastIndexByte(name, '.')
+	if dot <= 0 {
+		return false
+	}
+
+	stem := name[:dot]
+	parts := strings.FieldsFunc(stem, func(r rune) bool {
+		return r == '.' || r == '-' || r == '_'
+	})
+	for _, part := range parts {
+		if len(part) < 8 {
+			continue
+		}
+		if isHexString(part) {
+			return true
+		}
+	}
+
+	return false
+}
+
+func isHexString(s string) bool {
+	for _, r := range s {
+		if (r < '0' || r > '9') && (r < 'a' || r > 'f') {
+			return false
+		}
+	}
+	return s != ""
+}
+
+type webManifest struct {
+	Icons []manifestIcon `json:"icons"`
+}
+
+type manifestIcon struct {
+	Src   string `json:"src"`
+	Sizes string `json:"sizes"`
+	Type  string `json:"type"`
+}
+
+func fetchManifestIcon(client *http.Client, userAgent string, manifestURL string) (string, error) {
+	req, err := http.NewRequest(http.MethodGet, manifestURL, nil)
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("User-Agent", userAgent)
+	req.Header.Set("Accept", "application/manifest+json,application/json;q=0.9,*/*;q=0.5")
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return "", fmt.Errorf("unexpected manifest status: %d", resp.StatusCode)
+	}
+
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 256*1024))
+	if err != nil {
+		return "", err
+	}
+
+	var manifest webManifest
+	if err := json.Unmarshal(body, &manifest); err != nil {
+		return "", err
+	}
+
+	baseURL := resp.Request.URL
+	bestIcon := ""
+	bestSize := -1
+
+	for _, icon := range manifest.Icons {
+		if icon.Src == "" {
+			continue
+		}
+		size := parseManifestIconSize(icon.Sizes)
+		if size > bestSize {
+			bestSize = size
+			bestIcon = resolveMetadataURL(baseURL, icon.Src)
+		}
+	}
+
+	return bestIcon, nil
+}
+
+func parseManifestIconSize(raw string) int {
+	best := 0
+	for _, candidate := range strings.Fields(strings.ToLower(strings.TrimSpace(raw))) {
+		if candidate == "any" {
+			if best < 1024 {
+				best = 1024
+			}
+			continue
+		}
+
+		parts := strings.Split(candidate, "x")
+		if len(parts) != 2 {
+			continue
+		}
+
+		width, err1 := strconv.Atoi(parts[0])
+		height, err2 := strconv.Atoi(parts[1])
+		if err1 != nil || err2 != nil {
+			continue
+		}
+
+		if width > best {
+			best = width
+		}
+		if height > best {
+			best = height
+		}
+	}
+
+	return best
 }
