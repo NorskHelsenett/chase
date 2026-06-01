@@ -9,6 +9,7 @@
 	import { Search, Grid, Filter } from 'lucide-svelte';
 	import { servers, isLoading, serverStoreActions } from '$lib/stores/serverStore';
 	import { statusFilter } from '$lib/stores/filterStore';
+	import { screenshotStatus } from '$lib/stores/screenshotStore';
 	import { pingData } from '$lib/stores/pingStore';
 	import { getEffectiveStatus } from '$lib/utils/status';
 	let filteredServers: Server[] = $state([]);
@@ -51,7 +52,16 @@
 
 			if ($statusFilter !== 'all') {
 				if ($statusFilter === 'online') {
-					result = result.filter((server: Server) => getEffectiveStatus(server) === 'up');
+					// Online = host is up AND it has a real screenshot (loaded, not all-white).
+					// Status is reported client-side as cards enter the viewport, so servers
+					// not yet checked stay visible until they're known to be failed/blank.
+					const statusMap = $screenshotStatus;
+					result = result.filter(
+						(server: Server) =>
+							getEffectiveStatus(server) === 'up' &&
+							statusMap[server.url] !== 'failed' &&
+							statusMap[server.url] !== 'blank'
+					);
 				} else if ($statusFilter === 'issues') {
 					result = result.filter(
 						(server: Server) => getEffectiveStatus(server) === 'down'

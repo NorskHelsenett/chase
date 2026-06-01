@@ -1,5 +1,6 @@
 <script>
 	import { run } from 'svelte/legacy';
+	import { reportScreenshotStatus } from '$lib/stores/screenshotStore';
 
 	let imageErrors = $state({});
 	let imageLoaded = $state({});
@@ -7,9 +8,38 @@
 	function checkImage(url) {
 		if (imageLoaded[url] || imageErrors[url]) return;
 		const img = new Image();
-		img.onload = () => (imageLoaded[url] = true);
-		img.onerror = () => (imageErrors[url] = true);
+		img.onload = () => {
+			imageLoaded[url] = true;
+			reportScreenshotStatus(site.url, isBlankImage(img) ? 'blank' : 'loaded');
+		};
+		img.onerror = () => {
+			imageErrors[url] = true;
+			reportScreenshotStatus(site.url, 'failed');
+		};
 		img.src = url;
+	}
+
+	// True when the screenshot is entirely (near-)white — an empty/blank capture.
+	// Screenshots are same-origin (/api/screenshot/*) so the canvas isn't tainted.
+	function isBlankImage(img) {
+		try {
+			const size = 32;
+			const canvas = document.createElement('canvas');
+			canvas.width = size;
+			canvas.height = size;
+			const ctx = canvas.getContext('2d');
+			if (!ctx) return false;
+			ctx.drawImage(img, 0, 0, size, size);
+			const { data } = ctx.getImageData(0, 0, size, size);
+			for (let i = 0; i < data.length; i += 4) {
+				if (data[i] < 245 || data[i + 1] < 245 || data[i + 2] < 245) {
+					return false;
+				}
+			}
+			return true;
+		} catch {
+			return false;
+		}
 	}
 
 	function lazyCheck(node, url) {
