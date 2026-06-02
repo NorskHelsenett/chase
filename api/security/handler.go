@@ -508,6 +508,18 @@ func ScreenshotHandler(c *gin.Context) {
 		}
 	}
 
+	// cached=true means serve-from-cache-only: never block on a live capture.
+	// A cache miss here returns 404 immediately instead of falling through to
+	// captureAndSendScreenshot, which blocks on the 2-slot screenshot semaphore
+	// and returns 503 once it's saturated. Grid/list views render many tiles at
+	// once, so every miss used to kick off a live capture and the semaphore would
+	// thrash. Missing screenshots are now populated by the capture-jobs flow.
+	if preferCached {
+		c.Header("Cache-Control", "no-store")
+		c.JSON(404, gin.H{"error": "Screenshot not cached yet"})
+		return
+	}
+
 	// Try to capture new screenshot
 	err = captureAndSendScreenshot(c, domain, fullSize, waitInt)
 	if err != nil {
