@@ -97,6 +97,10 @@ jobs:
 
           echo ${{ secrets.REGISTRY_ACCESS_TOKEN }} | helm registry login ${{ vars.REGISTRY }} -u ${{ github.actor }} --password-stdin
           cd .helm
+          # charts/ is gitignored, so fetch subchart dependencies (e.g. cloudnative-pg)
+          # from Chart.lock before packaging.
+          helm repo add cloudnative-pg https://cloudnative-pg.github.io/charts
+          helm dependency build .
           helm package .
 
           helm push *.tgz oci://${{ vars.REGISTRY }}/$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
