@@ -472,8 +472,10 @@ func ScreenshotHandler(c *gin.Context) {
 		waitInt = 3
 	}
 
-	// Try to get cached screenshot — use lightweight query when only thumbnail is needed
-	cachedScreenshot, cacheErr := getRecentScreenshot(domain, wantThumb && preferCached)
+	// Try to get cached screenshot — use the lightweight query when only the
+	// thumbnail is needed, and tolerate stale images when serving from cache
+	// (a slightly old image beats a 404; the capture-jobs flow handles refresh).
+	cachedScreenshot, cacheErr := getRecentScreenshot(domain, wantThumb && preferCached, preferCached)
 
 	// If preferCached is set and cache exists, return it immediately
 	if preferCached && cacheErr == nil {
@@ -494,7 +496,7 @@ func ScreenshotHandler(c *gin.Context) {
 		// No thumbnail available — need full data
 		if len(cachedScreenshot.Data) == 0 {
 			// We did a thumbOnly query but no thumb exists, re-fetch with full data
-			cachedScreenshot, cacheErr = getRecentScreenshot(domain)
+			cachedScreenshot, cacheErr = getRecentScreenshot(domain, false, true)
 			if cacheErr != nil {
 				// Fall through to capture
 			}
@@ -527,7 +529,7 @@ func ScreenshotHandler(c *gin.Context) {
 		log.Printf("Screenshot service error for %s: %v", domain, err)
 
 		// Fall back to cached screenshot if available (full query)
-		if cached, fallbackErr := getRecentScreenshot(domain); fallbackErr == nil {
+		if cached, fallbackErr := getRecentScreenshot(domain, false, true); fallbackErr == nil {
 			log.Printf("Returning cached screenshot for %s after service error", domain)
 			imgData := cached.Data
 			if wantThumb && len(cached.ThumbnailData) > 0 {
@@ -1132,13 +1134,17 @@ const screenshotCacheTTL = 14 * 24 * time.Hour // 14 days
 
 // getRecentScreenshot loads a cached screenshot. When thumbOnly is true,
 // it avoids loading the full-size blob from SQLite — much faster for grid views.
-func getRecentScreenshot(url string, thumbOnly ...bool) (*Screenshot, error) {
+// When allowStale is true, screenshots past the cache TTL are still returned —
+// used when serving from cache (cached=true), where a stale image beats a 404
+// and refreshing is left to the capture-jobs flow. Failure markers always
+// respect the retry window regardless of allowStale.
+func getRecentScreenshot(url string, thumbOnly bool, allowStale bool) (*Screenshot, error) {
 	db := database.GetDB()
 	var screenshot Screenshot
 
 	query := db.Where("server_url = ?", url)
 
-	if len(thumbOnly) > 0 && thumbOnly[0] {
+	if thumbOnly {
 		// Only load thumbnail + metadata, skip the heavy full-size blob
 		query = query.Select("id, server_url, thumbnail_data, thumbnail_w, created_at, mime_type")
 	}
@@ -1156,8 +1162,9 @@ func getRecentScreenshot(url string, thumbOnly ...bool) (*Screenshot, error) {
 		return nil, gorm.ErrRecordNotFound
 	}
 
-	// Expire successful screenshots after the cache TTL
-	if time.Since(screenshot.CreatedAt) > screenshotCacheTTL {
+	// Expire successful screenshots after the cache TTL, unless the caller is
+	// serving from cache and explicitly tolerates stale images.
+	if !allowStale && time.Since(screenshot.CreatedAt) > screenshotCacheTTL {
 		return nil, gorm.ErrRecordNotFound
 	}
 
