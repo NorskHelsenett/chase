@@ -1,5 +1,4 @@
 <script lang="ts">
-	import { onMount, onDestroy } from 'svelte';
 	import MonitorRow from './MonitorRow.svelte';
 	import type { Server } from '$lib/models';
 	import { goto } from '$app/navigation';
@@ -33,22 +32,19 @@
 		}
 	}
 
-	let resizeObserver: ResizeObserver;
-
-	onMount(() => {
-		if (scrollContainer) {
-			containerHeight = scrollContainer.clientHeight;
-			resizeObserver = new ResizeObserver((entries) => {
-				for (const entry of entries) {
-					containerHeight = entry.contentRect.height;
-				}
-			});
-			resizeObserver.observe(scrollContainer);
-		}
-	});
-
-	onDestroy(() => {
-		resizeObserver?.disconnect();
+	// Track the scroll container's height. Runs whenever scrollContainer is
+	// (re)bound — e.g. when toggling between the empty state and the table — so
+	// containerHeight is always accurate and the visible-row window is correct.
+	$effect(() => {
+		if (!scrollContainer) return;
+		containerHeight = scrollContainer.clientHeight;
+		const observer = new ResizeObserver((entries) => {
+			for (const entry of entries) {
+				containerHeight = entry.contentRect.height;
+			}
+		});
+		observer.observe(scrollContainer);
+		return () => observer.disconnect();
 	});
 
 	let sortField:
@@ -273,9 +269,32 @@
 		background: #202020;
 		border-radius: 0.5rem;
 		padding: 0 1rem 1rem;
+		height: 100%;
+		display: flex;
+		flex-direction: column;
+		box-sizing: border-box;
 	}
 
 	.virtual-scroll-container {
+		flex: 1;
+		min-height: 0;
+		overflow-y: auto;
+		overflow-x: hidden;
+		scrollbar-width: thin;
+		scrollbar-color: #333 transparent;
+	}
+
+	.virtual-scroll-container::-webkit-scrollbar {
+		width: 6px;
+	}
+
+	.virtual-scroll-container::-webkit-scrollbar-track {
+		background: transparent;
+	}
+
+	.virtual-scroll-container::-webkit-scrollbar-thumb {
+		background: #333;
+		border-radius: 3px;
 	}
 
 	.monitor-table thead tr {

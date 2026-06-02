@@ -1,6 +1,4 @@
 <script lang="ts">
-	import { run } from 'svelte/legacy';
-
 	import { page } from '$app/stores';
 	import { onMount } from 'svelte';
 	import MonitorStats from '$lib/components/dashboard/MonitorStats.svelte';
@@ -13,20 +11,14 @@
 	import { exportServersToCSV } from '$lib/utils/csv.js';
 	import { getEffectiveStatus } from '$lib/utils/status';
 
-	let filteredServers: Server[] = $state([]);
-
 	let searchQuery = $state('');
-	let hasMounted = $state(false);
-	let lastActiveFilter: string | null | undefined = $state(undefined);
-	let activeFilter: string | null = $state(null);
 
-	run(() => {
-		activeFilter = $page.url.searchParams.get('active');
-	});
+	// The active filter comes straight from the URL.
+	let activeFilter = $derived($page.url.searchParams.get('active'));
 
-	// Filter servers based on search query and status
-	run(() => {
-		// Reference pingData so this block re-runs when SSE updates arrive
+	// Filter servers based on search query and status.
+	// Reading $pingData keeps this in sync with live SSE updates.
+	let filteredServers: Server[] = $derived.by(() => {
 		void $pingData;
 		let result = $servers;
 
@@ -53,7 +45,7 @@
 			}
 		}
 
-		filteredServers = result;
+		return result;
 	});
 
 	// Compute stats from the filtered list using SSE-aware status
@@ -74,6 +66,8 @@
 		},
 		{ up: 0, down: 0, secretsExposed: 0, highRisks: 0 }
 	));
+
+	let hasMounted = $state(false);
 
 	async function fetchServers(forceRefresh = false) {
 		await serverStoreActions.setFilter(activeFilter ?? null, forceRefresh);
@@ -103,9 +97,13 @@
 		hasMounted = true;
 	});
 
-	run(() => {
-		if (hasMounted && activeFilter !== undefined && activeFilter !== lastActiveFilter) {
-			lastActiveFilter = activeFilter;
+	// Re-fetch whenever the active filter (from the URL) changes. activeFilter is
+	// the only tracked dependency, so this no longer reads-and-writes the same
+	// state — which is what triggered the legacy_recursive_reactive_block warning
+	// and stopped the dashboard from reacting to navigation.
+	$effect(() => {
+		void activeFilter;
+		if (hasMounted) {
 			fetchServers();
 		}
 	});
@@ -152,21 +150,9 @@
 		flex: 1;
 		min-height: 0;
 		border-radius: 0.5rem;
-		overflow: auto;
-		scrollbar-width: thin;
-		scrollbar-color: #333 transparent;
-	}
-
-	.dashboard-table::-webkit-scrollbar {
-		width: 6px;
-	}
-
-	.dashboard-table::-webkit-scrollbar-track {
-		background: transparent;
-	}
-
-	.dashboard-table::-webkit-scrollbar-thumb {
-		background: #333;
-		border-radius: 3px;
+		/* The MonitorTable's own .virtual-scroll-container handles scrolling.
+		   Scrolling here would defeat virtualization (the inner container would
+		   grow to full content height and every row would render). */
+		overflow: hidden;
 	}
 </style>
