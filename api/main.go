@@ -276,6 +276,22 @@ func registerJobs(s *scheduler.Scheduler) {
 		},
 	)
 
+	// Screenshots (missing) — capture for active servers that lack a usable one (manual only)
+	s.Register("screenshots-missing", "Capture screenshots for active servers missing one",
+		scheduler.Schedule{Manual: true},
+		func(ctx context.Context, progress func(string)) (string, error) {
+			return security.RunScreenshotMissing(ctx, progress)
+		},
+	)
+
+	// Screenshots (refresh) — re-capture for all active servers (manual only)
+	s.Register("screenshots-refresh", "Re-capture screenshots for all active servers",
+		scheduler.Schedule{Manual: true},
+		func(ctx context.Context, progress func(string)) (string, error) {
+			return security.RunScreenshotRefresh(ctx, progress)
+		},
+	)
+
 	// Inactive server recheck — ping deactivated servers to see if they're back
 	s.Register("inactive-server-recheck", "Ping deactivated servers to check if they're back online",
 		scheduler.Schedule{TimeOfDay: &scheduler.TimeOfDay{Hour: 5, Minute: 0}},
