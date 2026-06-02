@@ -54,29 +54,56 @@
 	let expandedJob: string | null = $state(null);
 	let jobLogs: JobLog[] = $state([]);
 	let logsLoading = $state(false);
-	let pollTimer: ReturnType<typeof setInterval>;
+	let now = $state(Date.now());
+
+	let eventSource: EventSource | null = null;
+	let statsTimer: ReturnType<typeof setInterval>;
+	let nowTimer: ReturnType<typeof setInterval>;
+	const prevStatus: Record<string, string> = {};
 
 	onMount(() => {
-		fetchAll();
-		pollTimer = setInterval(fetchJobs, 5000);
+		fetchStats();
+		connectStream();
+		// Tick a clock so running jobs show a live elapsed timer.
+		nowTimer = setInterval(() => (now = Date.now()), 1000);
+		// System stats change slowly — refresh occasionally.
+		statsTimer = setInterval(fetchStats, 15000);
 	});
 
 	onDestroy(() => {
-		clearInterval(pollTimer);
+		eventSource?.close();
+		clearInterval(statsTimer);
+		clearInterval(nowTimer);
 	});
 
-	async function fetchAll() {
-		await Promise.all([fetchJobs(), fetchStats()]);
-		loading = false;
+	function connectStream() {
+		eventSource = new EventSource('/api/jobs/stream');
+
+		eventSource.addEventListener('jobs', (e) => {
+			const next: JobInfo[] = JSON.parse(e.data);
+			handleJobsUpdate(next);
+			jobs = next;
+			loading = false;
+		});
+
+		eventSource.onerror = () => {
+			eventSource?.close();
+			eventSource = null;
+			setTimeout(connectStream, 5000);
+		};
 	}
 
-	async function fetchJobs() {
-		try {
-			const res = await fetch('/api/jobs', { credentials: 'include' });
-			if (res.ok) jobs = await res.json();
-		} catch {
-			/* silent */
+	// When a job transitions out of "running", refresh stats and any open logs.
+	function handleJobsUpdate(next: JobInfo[]) {
+		let aJobFinished = false;
+		for (const j of next) {
+			if (prevStatus[j.name] === 'running' && j.status !== 'running') {
+				aJobFinished = true;
+				if (expandedJob === j.name) loadLogs(j.name);
+			}
+			prevStatus[j.name] = j.status;
 		}
+		if (aJobFinished) fetchStats();
 	}
 
 	async function fetchStats() {
@@ -93,23 +120,17 @@
 			j.name === name ? { ...j, status: 'running' as const, progress: 'starting...' } : j
 		);
 		await fetch(`/api/jobs/${name}/trigger`, { method: 'POST', credentials: 'include' });
-		pollWhileRunning(name);
+		// Live progress arrives over the SSE stream.
 	}
 
-	function pollWhileRunning(name: string) {
-		const fast = setInterval(async () => {
-			await fetchJobs();
-			const job = jobs.find((j) => j.name === name);
-			if (!job || job.status !== 'running') {
-				clearInterval(fast);
-				if (expandedJob === name) {
-					expandedJob = null;
-					await loadLogs(name);
-				}
-				fetchStats();
-			}
-		}, 500);
-		setTimeout(() => clearInterval(fast), 5 * 60 * 1000);
+	// Elapsed time since a running job started, ticking off the `now` clock.
+	function liveElapsed(startIso: string): string {
+		if (!startIso || startIso === '0001-01-01T00:00:00Z') return '—';
+		const sec = Math.max(0, (now - new Date(startIso).getTime()) / 1000);
+		if (sec < 60) return `${Math.floor(sec)}s`;
+		const m = Math.floor(sec / 60);
+		const s = Math.round(sec % 60);
+		return `${m}m ${s}s`;
 	}
 
 	async function loadLogs(name: string) {
@@ -334,7 +355,13 @@
 								{/if}
 							{/if}
 						</td>
-						<td class="cell-duration">{formatDuration(job.last_duration_seconds)}</td>
+						<td class="cell-duration">
+							{#if job.status === 'running'}
+								<span class="elapsed">{liveElapsed(job.last_run)}</span>
+							{:else}
+								{formatDuration(job.last_duration_seconds)}
+							{/if}
+						</td>
 						<td class="cell-status">
 							{#if job.status === 'running'}
 								<span class="status-badge running">running</span>
@@ -649,6 +676,11 @@
 		color: #6b7280;
 		font-variant-numeric: tabular-nums;
 		white-space: nowrap;
+	}
+
+	.elapsed {
+		color: #3b82f6;
+		font-weight: 500;
 	}
 
 	.cell-status {

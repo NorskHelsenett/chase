@@ -1,8 +1,11 @@
 package scheduler
 
 import (
+	"encoding/json"
+	"fmt"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/gin-gonic/gin"
 )
@@ -12,12 +15,57 @@ func (s *Scheduler) RegisterRoutes(rg *gin.RouterGroup) {
 	jobs := rg.Group("/jobs")
 	{
 		jobs.GET("", s.handleListJobs)
+		jobs.GET("/stream", s.handleStreamJobs)
 		jobs.GET("/:name", s.handleGetJob)
 		jobs.POST("/:name/trigger", s.handleTrigger)
 		jobs.POST("/:name/cancel", s.handleCancel)
 		jobs.GET("/:name/logs", s.handleGetLogs)
 	}
 	rg.GET("/system-stats", s.handleSystemStats)
+}
+
+// handleStreamJobs streams the full jobs snapshot over SSE so the UI sees live
+// progress (and elapsed time) without polling. Snapshots are emitted on change
+// at ~1s granularity, with a periodic keepalive comment.
+func (s *Scheduler) handleStreamJobs(c *gin.Context) {
+	c.Header("Content-Type", "text/event-stream")
+	c.Header("Cache-Control", "no-cache")
+	c.Header("Connection", "keep-alive")
+	c.Header("X-Accel-Buffering", "no") // Disable nginx buffering
+
+	ctx := c.Request.Context()
+	ticker := time.NewTicker(1 * time.Second)
+	defer ticker.Stop()
+	keepalive := time.NewTicker(15 * time.Second)
+	defer keepalive.Stop()
+
+	var last string
+	send := func() {
+		data, err := json.Marshal(s.ListJobs())
+		if err != nil {
+			return
+		}
+		if string(data) == last {
+			return
+		}
+		last = string(data)
+		c.Writer.WriteString(fmt.Sprintf("event: jobs\ndata: %s\n\n", data))
+		c.Writer.Flush()
+	}
+
+	send() // initial snapshot
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			send()
+		case <-keepalive.C:
+			c.Writer.WriteString(": ping\n\n")
+			c.Writer.Flush()
+		}
+	}
 }
 
 func (s *Scheduler) handleListJobs(c *gin.Context) {
