@@ -288,7 +288,7 @@ func SecurityScanSSEHandler(c *gin.Context) {
 	// Start screenshot capture in parallel
 	go func() {
 		log.Printf("Starting parallel screenshot capture for %s", domain)
-		if err := captureAndSendScreenshot(nil, domain, false, 3); err != nil {
+		if err := captureAndSendScreenshot(nil, domain, false, 3, 2); err != nil {
 			log.Printf("Parallel screenshot capture failed for %s: %v", domain, err)
 		} else {
 			log.Printf("Parallel screenshot capture completed for %s", domain)
@@ -522,8 +522,8 @@ func ScreenshotHandler(c *gin.Context) {
 		return
 	}
 
-	// Try to capture new screenshot
-	err = captureAndSendScreenshot(c, domain, fullSize, waitInt)
+	// Try to capture new screenshot (interactive: a few retries to ride out blips)
+	err = captureAndSendScreenshot(c, domain, fullSize, waitInt, 3)
 	if err != nil {
 		// Log error server-side
 		log.Printf("Screenshot service error for %s: %v", domain, err)
@@ -621,7 +621,7 @@ func RunBackgroundScan(serverURL string) {
 // CaptureScreenshotForDomain captures and stores a screenshot for the given domain.
 // This is the entry point used by the jobs system and event triggers.
 func CaptureScreenshotForDomain(domain string) error {
-	return captureAndSendScreenshot(nil, domain, false, 0)
+	return captureAndSendScreenshot(nil, domain, false, 0, 2)
 }
 
 func runBackgroundScan(serverURL string) {
@@ -652,10 +652,30 @@ func runBackgroundScan(serverURL string) {
 	}()
 }
 
+// defaultMaxParallelScreenshots is the fallback parallel-capture limit when
+// SCREENSHOT_MAX_PARALLEL is unset. It should stay at or below the screenshot
+// service's CRAWLER_POOL_SIZE (10 in the bundled Helm chart): going higher just
+// means requests queue inside the service and time out as 503s. The old value
+// of 2 was sized for on-demand grid capture, which no longer happens — the grid
+// is cache-only — so it left the bulk capture jobs throttled to 2 at a time.
+const defaultMaxParallelScreenshots = 8
+
 var (
-	maxParallelScreenshots = 2 // Configurable parallel screenshot limit
+	maxParallelScreenshots = defaultMaxParallelScreenshots // parallel screenshot limit
 	screenshotSemaphore    = make(chan struct{}, maxParallelScreenshots)
 )
+
+// ConfiguredScreenshotParallelism returns the parallel-capture limit from the
+// SCREENSHOT_MAX_PARALLEL env var, falling back to defaultMaxParallelScreenshots.
+// Keep it at or below the screenshot service's CRAWLER_POOL_SIZE.
+func ConfiguredScreenshotParallelism() int {
+	if raw := os.Getenv("SCREENSHOT_MAX_PARALLEL"); raw != "" {
+		if n, err := strconv.Atoi(raw); err == nil && n > 0 {
+			return n
+		}
+	}
+	return defaultMaxParallelScreenshots
+}
 
 func SetMaxParallelScreenshots(limit int) {
 	if limit < 1 {
@@ -676,7 +696,13 @@ func SetMaxParallelScreenshots(limit int) {
 // captureAndSendScreenshot captures a screenshot and sends it to the client.
 // Returns nil if the response was sent (success or 4xx error), or an error for 5xx/network failures
 // to allow the caller to fall back to cached screenshots.
-func captureAndSendScreenshot(c *gin.Context, domain string, fullSize bool, wait int) error {
+//
+// maxRetries bounds how many times the screenshot service is contacted before
+// giving up (clamped to at least 1). Interactive callers use a few retries to
+// ride out transient blips; bulk callers pass 1 so a single slow site can't
+// hold a worker through the exponential backoff — the missing-screenshot job
+// simply picks it up again on the next run.
+func captureAndSendScreenshot(c *gin.Context, domain string, fullSize bool, wait int, maxRetries int) error {
 	// Acquire semaphore before starting screenshot operation
 	screenshotSemaphore <- struct{}{} // Block if max parallel operations reached
 	defer func() {
@@ -685,6 +711,9 @@ func captureAndSendScreenshot(c *gin.Context, domain string, fullSize bool, wait
 
 	if wait < 0 {
 		wait = 0
+	}
+	if maxRetries < 1 {
+		maxRetries = 1
 	}
 
 	var err error
@@ -705,7 +734,6 @@ func captureAndSendScreenshot(c *gin.Context, domain string, fullSize bool, wait
 	requestURL := fmt.Sprintf("%s/%s/.png", serviceURL, targetURL)
 
 	// Retry logic with exponential backoff
-	maxRetries := 3
 	var resp *http.Response
 	var lastErr error
 

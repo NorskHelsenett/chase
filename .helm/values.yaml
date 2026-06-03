@@ -18,6 +18,10 @@ chase:
   env:
     - name: SCREENSHOT_SERVICE_URL
       value: "http://screenshotr-service:8080"
+    # Parallel screenshot captures. Keep at or below screenshotr CRAWLER_POOL_SIZE
+    # (10 below) — higher just queues inside the service and returns 503s.
+    - name: SCREENSHOT_MAX_PARALLEL
+      value: "8"
   services:
     - name: http
       port: 8080

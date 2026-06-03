@@ -332,7 +332,9 @@ func processServer(ctx context.Context, server types.Server) BatchResult {
 		if !strings.HasPrefix(url, "http") {
 			url = "https://" + url
 		}
-		err := captureAndSendScreenshot(nil, url, false, 0)
+		// Bulk path: one attempt, fail fast. A slow site shouldn't hold a worker
+		// through the backoff — the next job run retries it.
+		err := captureAndSendScreenshot(nil, url, false, 0, 1)
 		select {
 		case screenshotChan <- err:
 		case <-screenshotCtx.Done():

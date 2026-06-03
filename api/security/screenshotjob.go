@@ -64,7 +64,11 @@ func runScreenshotCapture(ctx context.Context, progress func(string), servers []
 
 	progress(fmt.Sprintf("0/%d", total))
 
-	workers := getBatchWorkerCount()
+	// Size the worker pool to the configured screenshot parallelism so the bulk
+	// run actually saturates the screenshot service pool. The interactive
+	// semaphore inside captureAndSendScreenshot enforces the same ceiling, so
+	// matching it here keeps every worker busy without queueing 503s.
+	workers := ConfiguredScreenshotParallelism()
 	if workers > total {
 		workers = total
 	}
@@ -88,8 +92,10 @@ func runScreenshotCapture(ctx context.Context, progress func(string), servers []
 					return
 				}
 				// captureAndSendScreenshot stores the result; nil context means
-				// it captures and persists without writing an HTTP response.
-				err := captureAndSendScreenshot(nil, srv.URL, false, 0)
+				// it captures and persists without writing an HTTP response. One
+				// attempt only (fail fast) — a slow site is marked failed and the
+				// next run retries it rather than stalling a worker on backoff.
+				err := captureAndSendScreenshot(nil, srv.URL, false, 0, 1)
 
 				mu.Lock()
 				done++

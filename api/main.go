@@ -159,7 +159,7 @@ func main() {
 	servers.AutoMigrate(db)
 	db.AutoMigrate(&security.BatchJobStore{}, &security.BatchResultStore{})
 	security.InitDatabase()
-	security.SetMaxParallelScreenshots(2)
+	security.SetMaxParallelScreenshots(security.ConfiguredScreenshotParallelism())
 
 	if err := webpush.InitDatabase(db); err != nil {
 		log.Printf("Failed to initialize web push: %v", err)
