@@ -101,6 +101,18 @@ func NewScannerWithOptions(timeout time.Duration, opts ScannerOptions) *Scanner 
 	return scanner
 }
 
+// chaseUserAgent returns the User-Agent identifying Chase as the origin of an
+// outbound scan request, matching the format used by the server monitor in the
+// servers package. The target URL is included so site operators can see what is
+// being scanned and why.
+func chaseUserAgent(target string) string {
+	scannerURL := os.Getenv("CHASE_HOSTNAME")
+	if scannerURL == "" {
+		scannerURL = "https://github.com/NorskHelsenett/chase"
+	}
+	return "ChaseMonitor/1.0 (+" + scannerURL + ") Automated Security Scanner for " + target
+}
+
 func newTransport(insecure bool) *http.Transport {
 	return &http.Transport{
 		Proxy:               http.ProxyFromEnvironment,
@@ -257,6 +269,9 @@ func (s *Scanner) fetch(ctx context.Context, url string, opts requestOptions) (*
 					req.Header.Add(key, value)
 				}
 			}
+		}
+		if req.Header.Get("User-Agent") == "" {
+			req.Header.Set("User-Agent", chaseUserAgent(url))
 		}
 		return req, nil
 	}

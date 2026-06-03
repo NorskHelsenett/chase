@@ -17,6 +17,20 @@ logger = logging.getLogger(__name__)
 app = FastAPI(title="Screenshot Service")
 
 
+def chase_user_agent() -> str:
+    """User-Agent identifying Chase as the origin of outbound requests.
+
+    The Chrome token is preserved so target pages still render normally, with a
+    ChaseMonitor identifier appended so site operators can see who is requesting.
+    """
+    host = os.getenv("CHASE_HOSTNAME") or "https://github.com/NorskHelsenett/chase"
+    return (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+        "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 "
+        f"ChaseMonitor/1.0 (+{host})"
+    )
+
+
 class UtilityPool:
     def __init__(self, size: int) -> None:
         self.size = max(size, 1)
@@ -133,7 +147,7 @@ def fetch_status_code(url: str) -> Optional[int]:
             allow_redirects=True,
             timeout=status_timeout(),
             stream=True,
-            headers={"User-Agent": "Mozilla/5.0"},
+            headers={"User-Agent": chase_user_agent()},
         )
         response.close()
         return response.status_code

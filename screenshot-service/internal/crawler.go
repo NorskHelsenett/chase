@@ -114,7 +114,7 @@ func (c *Crawler) Crawl(ctx context.Context, targetURL string, waitTime time.Dur
 
 	// Set user agent to avoid being blocked
 	err = page.SetUserAgent(&proto.NetworkSetUserAgentOverride{
-		UserAgent:      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+		UserAgent:      UserAgent(),
 		AcceptLanguage: "en-US,en;q=0.9",
 	})
 	if err != nil {

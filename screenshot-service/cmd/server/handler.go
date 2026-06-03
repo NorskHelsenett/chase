@@ -485,7 +485,7 @@ func (h *Handler) preflightStatus(targetURL string) (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	req.Header.Set("User-Agent", "Mozilla/5.0")
+	req.Header.Set("User-Agent", internal.UserAgent())
 
 	resp, err := h.httpClient.Do(req)
 	if err != nil {

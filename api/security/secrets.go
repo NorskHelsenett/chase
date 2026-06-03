@@ -332,6 +332,7 @@ func (s *Scanner) fetchDirectContent(ctx context.Context, targetURL string, limi
 	if err != nil {
 		return nil, err
 	}
+	req.Header.Set("User-Agent", chaseUserAgent(targetURL))
 
 	resp, err := s.doRequest(s.client(true, false), req)
 	if err != nil {
