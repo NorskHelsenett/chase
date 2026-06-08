@@ -16,6 +16,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -517,6 +518,12 @@ func ScreenshotHandler(c *gin.Context) {
 	// once, so every miss used to kick off a live capture and the semaphore would
 	// thrash. Missing screenshots are now populated by the capture-jobs flow.
 	if preferCached {
+		// Self-heal the cache: a miss kicks off a non-blocking background
+		// capture (deduped per domain, bounded by the screenshot semaphore) so
+		// the next cached request for this domain succeeds. We still return 404
+		// immediately so the tile renders now instead of blocking on a live
+		// capture and thrashing the semaphore across a grid of misses.
+		enqueueBackgroundCapture(domain)
 		c.Header("Cache-Control", "no-store")
 		c.JSON(404, gin.H{"error": "Screenshot not cached yet"})
 		return
@@ -624,6 +631,48 @@ func CaptureScreenshotForDomain(domain string) error {
 	return captureAndSendScreenshot(nil, domain, false, 0, 2)
 }
 
+// maxBackgroundCaptures caps how many cache-miss captures may be in flight at
+// once. Past this, misses just 404 and the capture-jobs flow fills them in — so
+// a fast scroll over many uncached tiles can't spawn an unbounded number of
+// goroutines parked on the screenshot semaphore.
+const maxBackgroundCaptures = 32
+
+// enqueueBackgroundCapture starts a non-blocking screenshot capture for domain
+// unless one is already running for it (or the in-flight cap is reached). It
+// returns immediately; the capture runs in the background, bounded by the
+// screenshot semaphore, and populates the cache so the next cached request for
+// this domain succeeds. Deduplicated by domain so repeated cache-miss requests
+// (e.g. many grid tiles) don't pile up.
+func enqueueBackgroundCapture(domain string) {
+	key, err := utils.EnsureHTTPS(domain)
+	if err != nil {
+		return
+	}
+
+	bgCaptureMu.Lock()
+	if _, running := bgCaptureInFlight[key]; running {
+		bgCaptureMu.Unlock()
+		return
+	}
+	if len(bgCaptureInFlight) >= maxBackgroundCaptures {
+		bgCaptureMu.Unlock()
+		return
+	}
+	bgCaptureInFlight[key] = struct{}{}
+	bgCaptureMu.Unlock()
+
+	go func() {
+		defer func() {
+			bgCaptureMu.Lock()
+			delete(bgCaptureInFlight, key)
+			bgCaptureMu.Unlock()
+		}()
+		if err := CaptureScreenshotForDomain(key); err != nil {
+			log.Printf("Background screenshot capture for %s failed: %v", key, err)
+		}
+	}()
+}
+
 func runBackgroundScan(serverURL string) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
@@ -663,6 +712,11 @@ const defaultMaxParallelScreenshots = 8
 var (
 	maxParallelScreenshots = defaultMaxParallelScreenshots // parallel screenshot limit
 	screenshotSemaphore    = make(chan struct{}, maxParallelScreenshots)
+
+	// bgCaptureInFlight deduplicates cache-miss background captures by domain so
+	// a grid full of uncached tiles enqueues each server at most once at a time.
+	bgCaptureMu       sync.Mutex
+	bgCaptureInFlight = make(map[string]struct{})
 )
 
 // ConfiguredScreenshotParallelism returns the parallel-capture limit from the
