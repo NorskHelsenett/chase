@@ -90,6 +90,11 @@ spec:
         emptyDir:
           medium: Memory
           sizeLimit: {{ .storage | default "64Mi" }}
+        {{- else if .ephemeral }}
+        emptyDir:
+          {{- if .storage }}
+          sizeLimit: {{ .storage }}
+          {{- end }}
         {{- else if .config}}
         configMap:
           name: {{ .name }}

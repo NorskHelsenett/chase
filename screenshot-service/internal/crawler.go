@@ -31,6 +31,7 @@ type CrawlResult struct {
 // Crawler handles browser-based web crawling
 type Crawler struct {
 	browser        *rod.Browser
+	launcher       *launcher.Launcher
 	consentRemover *ConsentRemover
 }
 
@@ -89,6 +90,7 @@ func NewCrawler() (*Crawler, error) {
 
 	return &Crawler{
 		browser:        browser,
+		launcher:       l,
 		consentRemover: NewConsentRemover(),
 	}, nil
 }
@@ -251,12 +253,22 @@ func (c *Crawler) Crawl(ctx context.Context, targetURL string, waitTime time.Dur
 	return result, nil
 }
 
-// Close closes the browser
+// Close shuts down the browser and removes its temporary user-data directory.
+//
+// Closing the browser lets the Chrome process exit; the launcher's Cleanup then
+// waits for that exit and deletes the rod user-data-dir under /tmp. Without this
+// every recycled crawler leaks one profile directory, which eventually fills the
+// tmpfs and prevents Chrome from launching ("Less than 64MB of free space in
+// temporary directory for shared memory files").
 func (c *Crawler) Close() error {
+	var err error
 	if c.browser != nil {
-		return c.browser.Close()
+		err = c.browser.Close()
 	}
-	return nil
+	if c.launcher != nil {
+		c.launcher.Cleanup()
+	}
+	return err
 }
 
 func (c *Crawler) waitForRender(page *rod.Page, timeout time.Duration) error {

@@ -121,11 +121,15 @@ screenshotr:
     mountPath: /dev/shm
     readOnly: false
     storage: 256Mi
+  # Disk-backed, not in-memory: Chrome is launched with --disable-dev-shm-usage,
+  # so its shared-memory files plus go-rod's per-browser user-data dirs all land
+  # in /tmp. Keeping that on node disk (not RAM) means a burst of concurrent
+  # captures can't exhaust a tiny tmpfs or eat into the pod's memory limit.
   - name: tmp
-    inMemory: true
+    ephemeral: true
     mountPath: /tmp
     readOnly: false
-    storage: 256Mi
+    storage: 2Gi
 
 certstream:
   enabled: false

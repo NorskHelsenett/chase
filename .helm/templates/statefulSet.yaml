@@ -160,7 +160,7 @@ spec:
 
       volumes:
       {{- range $value.mounts }}
-      {{- if or .fromSecret .inMemory .config }}
+      {{- if or .fromSecret .inMemory .ephemeral .config }}
       - name: {{ .name }}
         {{- if .fromSecret }}
         secret:
@@ -169,6 +169,11 @@ spec:
         emptyDir:
           medium: Memory
           sizeLimit: {{ .storage | default "64Mi" }}
+        {{- else if .ephemeral }}
+        emptyDir:
+          {{- if .storage }}
+          sizeLimit: {{ .storage }}
+          {{- end }}
         {{- else if .config }}
         configMap:
           name: {{ .name }}
@@ -197,7 +202,7 @@ spec:
 
   volumeClaimTemplates:
   {{- range $value.mounts }}
-  {{- if not (or .fromSecret .inMemory .config) }}
+  {{- if not (or .fromSecret .inMemory .ephemeral .config) }}
   - apiVersion: v1
     kind: PersistentVolumeClaim
     metadata:
