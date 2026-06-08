@@ -8,15 +8,28 @@ on:
   push:
     branches:
       - "*"
-    paths-ignore:
-      - 'screenshot-service/**'
 
 jobs:
-  helm-and-docker:
+  build-and-publish:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
+
+      # Only rebuild the image whose sources actually changed. The chart is
+      # still republished on every main push (below) so both digests stay
+      # pinned regardless of which image moved.
+      - name: Detect changes
+        uses: dorny/paths-filter@v3
+        id: changes
+        with:
+          filters: |
+            app:
+              - 'api/**'
+              - 'web/**'
+              - 'Dockerfile'
+            screenshot:
+              - 'screenshot-service/**'
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
@@ -24,12 +37,9 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
         with:
-          # Enable docker layer caching
           driver-opts: |
             image=moby/buildkit:latest
-          buildkitd-flags: --debug
 
-      # # Cache Docker layers
       - name: Cache Docker layers
         uses: actions/cache@v4
         with:
@@ -38,9 +48,18 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-buildx-
 
-      - name: Docker Metadata action
+      - name: Login to container registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ vars.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.REGISTRY_ACCESS_TOKEN }}
+
+      # ---------- App image (api + web, root Dockerfile) ----------
+      - name: App image metadata
+        if: steps.changes.outputs.app == 'true'
         uses: docker/metadata-action@v4.3.0
-        id: meta
+        id: meta-app
         with:
           images: ${{ vars.REGISTRY }}/${{ github.repository }}
           tags: |
@@ -48,59 +67,108 @@ jobs:
               type=raw,value=latest,enable=${{ github.ref == format('refs/heads/{0}', 'main') }}
               type=raw,value=dev,enable=${{ github.ref != format('refs/heads/{0}', 'main') }}
 
-      # Login to GitHub Container Registry
-      - name: Login to GitHub Container Registry
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ vars.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.REGISTRY_ACCESS_TOKEN }}
-
-      # Build and push Docker image with caching
-      - name: Build and push Docker image
+      - name: Build and push app image
+        if: steps.changes.outputs.app == 'true'
         uses: docker/build-push-action@v6
-        id: build-docker-image
+        id: build-app
         with:
           context: .
+          file: Dockerfile
           platforms: linux/amd64
           push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
+          tags: ${{ steps.meta-app.outputs.tags }}
+          labels: ${{ steps.meta-app.outputs.labels }}
           cache-from: type=local,src=/tmp/.buildx-cache
           cache-to: type=local,dest=/tmp/.buildx-cache-new,mode=max
 
-
-      # # Move cache to prevent it from growing indefinitely
       - name: Move cache
+        if: steps.changes.outputs.app == 'true'
         run: |
           rm -rf /tmp/.buildx-cache
           mv /tmp/.buildx-cache-new /tmp/.buildx-cache
 
-      # Helm setup
+      # ---------- Screenshot service image ----------
+      - name: Screenshot image metadata
+        if: steps.changes.outputs.screenshot == 'true'
+        uses: docker/metadata-action@v4.3.0
+        id: meta-shot
+        with:
+          images: ${{ vars.REGISTRY }}/${{ github.repository }}/screenshotr
+          tags: |
+              type=ref,event=branch
+              type=raw,value=latest,enable=${{ github.ref == format('refs/heads/{0}', 'main') }}
+              type=raw,value=dev,enable=${{ github.ref != format('refs/heads/{0}', 'main') }}
+
+      - name: Build and push screenshot image
+        if: steps.changes.outputs.screenshot == 'true'
+        uses: docker/build-push-action@v6
+        id: build-shot
+        with:
+          context: screenshot-service
+          file: screenshot-service/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta-shot.outputs.tags }}
+          labels: ${{ steps.meta-shot.outputs.labels }}
+
+      # ---------- Publish Helm chart (main only), pinning BOTH digests ----------
       - name: Install Helm
+        if: github.ref == 'refs/heads/main'
         uses: azure/setup-helm@v3
 
-      # Push Helm chart to GitHub Container Registry
-      - name: Push Helm chart
+      - name: Pin image digests and publish chart
         if: github.ref == 'refs/heads/main'
+        env:
+          REGISTRY: ${{ vars.REGISTRY }}
+          APP_BUILT_DIGEST: ${{ steps.build-app.outputs.digest }}
+          SHOT_BUILT_DIGEST: ${{ steps.build-shot.outputs.digest }}
+          REGISTRY_TOKEN: ${{ secrets.REGISTRY_ACCESS_TOKEN }}
+          ACTOR: ${{ github.actor }}
         run: |
-          helm pull oci://${{ vars.REGISTRY }}/$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')/chase
-          file=$(ls chase-*.tgz)
-          CURRENT_VERSION=$(echo $file | grep -oP 'chase-\K[0-9]+\.[0-9]+\.[0-9]+')
-          NEW_VERSION=$(echo $CURRENT_VERSION | awk -F. '{print $1"."$2"."$3+1}')
-          echo $NEW_VERSION
-          sed -i "s/version: 0.0.1/version: $NEW_VERSION/" .helm/Chart.yaml
+          set -euo pipefail
+          REPO_LC=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
 
-          DIGEST=${{steps.build-docker-image.outputs.digest}}
-          DIGEST="latest@$DIGEST"
-          sed -i "s/tag: \"latest\"/tag: \"$DIGEST\"/" .helm/values.yaml
+          # The tag to pin for an image: the digest we just built if it was
+          # rebuilt this run, otherwise the digest the registry's :latest
+          # currently resolves to — so an image that didn't change keeps its
+          # existing pin instead of falling back to a floating tag. Only if the
+          # image was never published do we leave a plain :latest.
+          resolve_tag() {
+            local built="$1" ref="$2" digest
+            if [ -n "$built" ]; then
+              echo "latest@${built}"
+              return
+            fi
+            digest=$(docker buildx imagetools inspect "${ref}:latest" --format '{{.Manifest.Digest}}' 2>/dev/null || true)
+            if [ -n "$digest" ]; then echo "latest@${digest}"; else echo "latest"; fi
+          }
 
-          echo ${{ secrets.REGISTRY_ACCESS_TOKEN }} | helm registry login ${{ vars.REGISTRY }} -u ${{ github.actor }} --password-stdin
+          APP_TAG=$(resolve_tag "$APP_BUILT_DIGEST" "${REGISTRY}/${REPO_LC}")
+          SHOT_TAG=$(resolve_tag "$SHOT_BUILT_DIGEST" "${REGISTRY}/${REPO_LC}/screenshotr")
+          echo "Pinning chase=${APP_TAG}  screenshotr=${SHOT_TAG}"
+
+          # yq (mikefarah) is preinstalled on ubuntu-latest. Set each tag by
+          # path so the two pins never collide the way a blanket sed would.
+          yq -i ".chase.tag = \"${APP_TAG}\"" .helm/values.yaml
+          yq -i ".screenshotr.tag = \"${SHOT_TAG}\"" .helm/values.yaml
+
+          # Bump the chart patch version from whatever is currently published.
+          helm pull "oci://${REGISTRY}/${REPO_LC}/chase" || true
+          file=$(ls chase-*.tgz 2>/dev/null | head -1 || true)
+          if [ -n "$file" ]; then
+            CURRENT_VERSION=$(echo "$file" | grep -oP 'chase-\K[0-9]+\.[0-9]+\.[0-9]+')
+          else
+            CURRENT_VERSION=0.0.0
+          fi
+          NEW_VERSION=$(echo "$CURRENT_VERSION" | awk -F. '{print $1"."$2"."$3+1}')
+          echo "Chart version ${CURRENT_VERSION} -> ${NEW_VERSION}"
+          sed -i "s/^version: .*/version: ${NEW_VERSION}/" .helm/Chart.yaml
+
+          echo "$REGISTRY_TOKEN" | helm registry login "${REGISTRY}" -u "${ACTOR}" --password-stdin
           cd .helm
-          # charts/ is gitignored, so fetch subchart dependencies (e.g. cloudnative-pg)
-          # from Chart.lock before packaging.
+          # charts/ is gitignored, so fetch subchart dependencies (e.g.
+          # cloudnative-pg) from Chart.lock before packaging.
           helm repo add cloudnative-pg https://cloudnative-pg.github.io/charts
           helm dependency build .
           helm package .
-
-          helm push *.tgz oci://${{ vars.REGISTRY }}/$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
+          helm push chase-*.tgz "oci://${REGISTRY}/${REPO_LC}"

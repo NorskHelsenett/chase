@@ -83,7 +83,8 @@ screenshotr:
   pullPolicy: Always
   deployment: deployment
   replicaCount: 1
-  tag: ""
+  # Overwritten with "latest@sha256:..." by CI on main (see docker-image.yml).
+  tag: "latest"
   env:
     - name: PORT
       value: "8080"
