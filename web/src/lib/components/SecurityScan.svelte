@@ -205,7 +205,7 @@
 								{#if getHighestRisk(results.headers)}
 									<li>{getHighestRisk(results.headers)?.description || ''}</li>{/if}
 								<li>• Certificate valid until {results.certificate.validUntil}</li>
-								<li>• {results.adminPages.exposed.length} admin pages exposed</li>
+								<li>• {results.adminPages.exposed?.length ?? 0} admin pages exposed</li>
 								<li>
 									• {results.swagger.exposed
 										? 'API documentation publicly accessible'
@@ -260,7 +260,7 @@
 					</div>
 				</div>
 
-				{#if results.adminPages.exposed.length > 0}
+				{#if results.adminPages.exposed?.length > 0}
 					<div class="mb-4">
 						<h3 class="text-red-400 mb-2">Exposed Pages</h3>
 						<ul class="space-y-1 text-gray-300">
@@ -324,7 +324,7 @@
 					</div>
 				</div>
 
-				{#if results.swagger.endpoints.length > 0}
+				{#if results.swagger.endpoints?.length > 0}
 					<div class="mb-4">
 						<h3 class="text-red-400 mb-2">Exposed Endpoints</h3>
 						<ul class="space-y-1 text-gray-300">

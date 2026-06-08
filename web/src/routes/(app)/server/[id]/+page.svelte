@@ -178,7 +178,7 @@
 	}
 
 	function getLatestPing(server: Server) {
-		return server.ping_results[0] || null;
+		return server.ping_results?.[0] || null;
 	}
 
 	function isPingSuccessful(ping: { status_code: number }) {
@@ -221,32 +221,40 @@
 
 	function calculateMetrics(server: Server, reportData: typeof searchResults) {
 		const decimals = 3;
+		const pings = server.ping_results ?? [];
 		const latestPing = getLatestPing(server);
-		const last24hPings = server.ping_results.filter(
+		const last24hPings = pings.filter(
 			(ping) => new Date(ping.timestamp).getTime() > Date.now() - 24 * 60 * 60 * 1000
 		);
 
-		const avgResponse = Math.round(
-			last24hPings.reduce((acc, ping) => acc + ping.response_time_ms, 0) / last24hPings.length
-		);
+		const avgResponse = last24hPings.length
+			? Math.round(
+					last24hPings.reduce((acc, ping) => acc + ping.response_time_ms, 0) / last24hPings.length
+				)
+			: 0;
 
-		const uptimeDay = Number(
-			(
-				(last24hPings.filter((ping) => isPingSuccessful(ping)).length / last24hPings.length) *
-				100
-			).toFixed(decimals)
-		);
+		const uptimeDay = last24hPings.length
+			? Number(
+					(
+						(last24hPings.filter((ping) => isPingSuccessful(ping)).length / last24hPings.length) *
+						100
+					).toFixed(decimals)
+				)
+			: 0;
 
-		const last30DayPings = server.ping_results.filter(
+		const last30DayPings = pings.filter(
 			(ping) => new Date(ping.timestamp).getTime() > Date.now() - 30 * 24 * 60 * 60 * 1000
 		);
 
-		const uptimeMonth = Number(
-			(
-				(last30DayPings.filter((ping) => isPingSuccessful(ping)).length / last30DayPings.length) *
-				100
-			).toFixed(decimals)
-		);
+		const uptimeMonth = last30DayPings.length
+			? Number(
+					(
+						(last30DayPings.filter((ping) => isPingSuccessful(ping)).length /
+							last30DayPings.length) *
+						100
+					).toFixed(decimals)
+				)
+			: 0;
 
 		// Prefer live cert data from latest ping over cached report
 		const liveCertExpiry = latestPing?.detail?.cert_expiry_date;
@@ -434,7 +442,7 @@
 
 		<!-- Uptime Bar -->
 		<section class="uptime-section">
-			<StatusIndicator pingResults={server.ping_results} expectedStatus={server.expected_status} />
+			<StatusIndicator pingResults={server.ping_results ?? []} expectedStatus={server.expected_status} />
 		</section>
 
 		<!-- Security Details -->

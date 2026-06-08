@@ -136,7 +136,7 @@
 
 				<!-- Findings and Warnings -->
 				<div class="findings-column">
-					{#if results.certificate.findings.length > 0}
+					{#if results.certificate.findings?.length > 0}
 						<div class="findings-group">
 							<h3 class="subsection-header">
 								<Award size={16} />
@@ -153,7 +153,7 @@
 						</div>
 					{/if}
 
-					{#if results.certificate.warnings.length > 0}
+					{#if results.certificate.warnings?.length > 0}
 						<div class="findings-group">
 							<h3 class="subsection-header warning">
 								<AlertTriangle size={16} />
@@ -170,7 +170,7 @@
 						</div>
 					{/if}
 
-					{#if results.certificate.tlsVersions.length > 0}
+					{#if results.certificate.tlsVersions?.length > 0}
 						<div class="findings-group">
 							<h3 class="subsection-header">
 								<Shield size={16} />
