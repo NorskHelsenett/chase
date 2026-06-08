@@ -2,7 +2,6 @@
 	import { run } from 'svelte/legacy';
 
 	import { onMount } from 'svelte';
-	import { get } from 'svelte/store';
 	import { page } from '$app/stores';
 	import type { Server } from '$lib/models';
 	import ScreenshotGrid from '$lib/components/grid/ScreenshotGrid.svelte';
@@ -10,7 +9,6 @@
 	import { Search, Grid, Filter } from 'lucide-svelte';
 	import { servers, isLoading, serverStoreActions } from '$lib/stores/serverStore';
 	import { statusFilter } from '$lib/stores/filterStore';
-	import { screenshotStatus } from '$lib/stores/screenshotStore';
 	import { pingData } from '$lib/stores/pingStore';
 	import { getEffectiveStatus } from '$lib/utils/status';
 	let filteredServers: Server[] = $state([]);
@@ -23,10 +21,6 @@
 	let sentinelEl: HTMLElement | undefined = $state();
 	let lastSearchTerm = $state('');
 	let lastStatusFilter = $state('');
-	// Frozen copy of screenshot load statuses used by the Online filter. Captured once
-	// at page load (see onMount) and never updated during the session, so the grid only
-	// reflows on (re)load — never while scrolling as new screenshots report their status.
-	let onlineStatusSnapshot: Record<string, string> = $state({});
 
 	run(() => {
 		activeFilter = $page.url.searchParams.get('active');
@@ -57,17 +51,9 @@
 
 			if ($statusFilter !== 'all') {
 				if ($statusFilter === 'online') {
-					// Online = host is up AND it has a real screenshot (loaded, not all-white).
-					// Filter against the load-time snapshot (see onMount), not live
-					// $screenshotStatus — so the grid only reflows on (re)load, never while
-					// scrolling. Blanks learned this session are hidden on the next load.
-					const statusMap = onlineStatusSnapshot;
-					result = result.filter(
-						(server: Server) =>
-							getEffectiveStatus(server) === 'up' &&
-							statusMap[server.url] !== 'failed' &&
-							statusMap[server.url] !== 'blank'
-					);
+					// Online = host is up. A missing/blank screenshot doesn't make a
+					// reachable server offline, so don't gate on screenshot status here.
+					result = result.filter((server: Server) => getEffectiveStatus(server) === 'up');
 				} else if ($statusFilter === 'issues') {
 					result = result.filter(
 						(server: Server) => getEffectiveStatus(server) === 'down'
@@ -98,10 +84,6 @@
 	}
 
 onMount(async () => {
-	// Snapshot screenshot statuses once, at page load only. The Online filter reads this
-	// frozen copy, so the grid never reflows while scrolling. Statuses learned during the
-	// session are persisted (screenshotStore) and take effect on the next page load.
-	onlineStatusSnapshot = get(screenshotStatus);
 	hasMounted = true;
 });
 
