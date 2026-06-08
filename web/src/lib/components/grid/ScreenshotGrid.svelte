@@ -71,10 +71,10 @@
 
 <div class="bg-[#202020] rounded-xl p-5 shadow-lg border border-green-900/30">
 	<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
-		{#each sites as site, index}
+		{#each sites as site, index (site.ID)}
 			{#if site.active}
 				<div
-					in:fade={{ duration: 300, delay: index * 70 }}
+					in:fade={{ duration: 300, delay: Math.min(index, 8) * 50 }}
 					class="relative group rounded-xl transition-all duration-300 overflow-hidden cursor-pointer bg-gradient-to-br from-[#1a1a1a] to-[#222] shadow-md hover:border-green-500/50 hover:shadow-xl hover:shadow-green-900/5 hover:ring-2 hover:ring-green-500"
 					onclick={(e) => handleClick(e, site, index)}
 					onkeydown={(e) => handleKeyDown(e, site, index)}

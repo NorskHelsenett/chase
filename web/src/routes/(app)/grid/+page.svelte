@@ -2,6 +2,7 @@
 	import { run } from 'svelte/legacy';
 
 	import { onMount } from 'svelte';
+	import { get } from 'svelte/store';
 	import { page } from '$app/stores';
 	import type { Server } from '$lib/models';
 	import ScreenshotGrid from '$lib/components/grid/ScreenshotGrid.svelte';
@@ -22,6 +23,10 @@
 	let sentinelEl: HTMLElement | undefined = $state();
 	let lastSearchTerm = $state('');
 	let lastStatusFilter = $state('');
+	// Frozen copy of screenshot load statuses used by the Online filter. Captured once
+	// at page load (see onMount) and never updated during the session, so the grid only
+	// reflows on (re)load — never while scrolling as new screenshots report their status.
+	let onlineStatusSnapshot: Record<string, string> = $state({});
 
 	run(() => {
 		activeFilter = $page.url.searchParams.get('active');
@@ -53,9 +58,10 @@
 			if ($statusFilter !== 'all') {
 				if ($statusFilter === 'online') {
 					// Online = host is up AND it has a real screenshot (loaded, not all-white).
-					// Status is reported client-side as cards enter the viewport, so servers
-					// not yet checked stay visible until they're known to be failed/blank.
-					const statusMap = $screenshotStatus;
+					// Filter against the load-time snapshot (see onMount), not live
+					// $screenshotStatus — so the grid only reflows on (re)load, never while
+					// scrolling. Blanks learned this session are hidden on the next load.
+					const statusMap = onlineStatusSnapshot;
 					result = result.filter(
 						(server: Server) =>
 							getEffectiveStatus(server) === 'up' &&
@@ -92,6 +98,10 @@
 	}
 
 onMount(async () => {
+	// Snapshot screenshot statuses once, at page load only. The Online filter reads this
+	// frozen copy, so the grid never reflows while scrolling. Statuses learned during the
+	// session are persisted (screenshotStore) and take effect on the next page load.
+	onlineStatusSnapshot = get(screenshotStatus);
 	hasMounted = true;
 });
 
