@@ -205,7 +205,11 @@ certstream:
             recovery:
               enabled: true
               ct_index_file: "/data/ct_index.json"
+    # Node-ephemeral, not a PVC: /data only holds certstream's CT-log resume
+    # index (ct_index.json). Losing it on restart just resumes from current —
+    # not worth a PVC that can deadlock on pruning or strand the pod.
     - name: certstream-data
+      ephemeral: true
       mountPath: /data
       readOnly: false
       storage: 1Gi

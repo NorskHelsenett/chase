@@ -1,6 +1,6 @@
 {{- range $key, $value := .Values }}
   {{- range $value.mounts }}
-    {{- if not (or .fromSecret .inMemory .config .statefulSet) }}
+    {{- if not (or .fromSecret .inMemory .ephemeral .config .statefulSet) }}
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
