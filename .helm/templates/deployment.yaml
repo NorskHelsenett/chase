@@ -1,5 +1,9 @@
 {{- range $key, $value := .Values }}
-{{- $enabled := default true $value.enabled }}
+{{- /* Default to enabled, but respect an explicit `enabled: false`.
+       `default true $value.enabled` can't: false is the zero value, so it
+       always falls back to true and the component can never be disabled. */ -}}
+{{- $enabled := true }}
+{{- if kindIs "map" $value }}{{- if hasKey $value "enabled" }}{{- $enabled = $value.enabled }}{{- end }}{{- end }}
 {{- if and $enabled (eq $value.deployment "deployment") }}
 apiVersion: apps/v1
 kind: Deployment
