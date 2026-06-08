@@ -5,14 +5,42 @@
 	let imageErrors = $state({});
 	let imageLoaded = $state({});
 
+	// A cache-only request (?cached=true) 404s on a miss and kicks off a background
+	// capture server-side — but that capture is capped, so a fast scroll over many
+	// uncached tiles can 404 before its capture runs. Retry the miss a few times with
+	// backoff so the tile fills in once the capture lands, instead of getting stuck on
+	// "Failed to load". Genuine failures (server-cached error 404s) exhaust the retries
+	// quickly and then show the error state.
+	const maxRetries = 6;
+	const retryCounts = {};
+	const retryTimers = {};
+
+	function clearRetry(url) {
+		if (retryTimers[url]) {
+			clearTimeout(retryTimers[url]);
+			delete retryTimers[url];
+		}
+	}
+
 	function checkImage(url) {
 		if (imageLoaded[url] || imageErrors[url]) return;
 		const img = new Image();
 		img.onload = () => {
+			clearRetry(url);
 			imageLoaded[url] = true;
 			reportScreenshotStatus(site.url, isBlankImage(img) ? 'blank' : 'loaded');
 		};
 		img.onerror = () => {
+			const attempts = (retryCounts[url] || 0) + 1;
+			retryCounts[url] = attempts;
+			if (attempts <= maxRetries) {
+				const delay = Math.min(3000 + attempts * 1500, 10000);
+				retryTimers[url] = setTimeout(() => {
+					delete retryTimers[url];
+					checkImage(url);
+				}, delay);
+				return;
+			}
 			imageErrors[url] = true;
 			reportScreenshotStatus(site.url, 'failed');
 		};
@@ -78,6 +106,7 @@
 				if (observer) {
 					observer.disconnect();
 				}
+				clearRetry(currentUrl);
 			}
 		};
 	}
@@ -93,6 +122,8 @@
 		fullUrl = getScreenshotUrl(site.url);
 		displayUrl = getThumbUrl ? getThumbUrl(site.url) : fullUrl;
 		if (displayUrl !== prevDisplayUrl) {
+			clearRetry(prevDisplayUrl);
+			delete retryCounts[prevDisplayUrl];
 			delete imageLoaded[prevDisplayUrl];
 			delete imageErrors[prevDisplayUrl];
 			prevDisplayUrl = displayUrl;
