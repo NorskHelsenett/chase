@@ -179,6 +179,9 @@ func AddServer(c *gin.Context) {
 		return
 	}
 
+	// Tell connected clients about the new server so grids/lists update live
+	BroadcastServerAdded(server)
+
 	// Send push notification for new server
 	go NotifyServerAdded(server.ID, server.URL)
 

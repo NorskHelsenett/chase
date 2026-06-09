@@ -168,5 +168,12 @@ func BatchImportServers(c *gin.Context) {
 		go checkServer(id, nil)
 	}
 
+	// Tell connected clients to refetch so the imported servers show up live.
+	// One signal for the whole batch — a per-server flood would overrun the
+	// client buffers and get dropped.
+	if response.Imported > 0 {
+		BroadcastServersChanged()
+	}
+
 	c.JSON(200, response)
 }

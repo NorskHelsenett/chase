@@ -74,6 +74,26 @@ export function connectPingSSE() {
 		serverStoreActions.applyPingMetadata(ping.server_id, ping);
 	});
 
+	// A new server was created somewhere — add it to the store so it shows up live.
+	eventSource.addEventListener('server_added', (e) => {
+		try {
+			serverStoreActions.upsertServer(JSON.parse(e.data));
+		} catch {
+			// ignore malformed payloads
+		}
+	});
+
+	// Bulk change (e.g. batch import) — refetch once, debounced so a burst of
+	// signals collapses into a single reload.
+	let changedDebounce = null;
+	eventSource.addEventListener('servers_changed', () => {
+		if (changedDebounce) clearTimeout(changedDebounce);
+		changedDebounce = setTimeout(() => {
+			changedDebounce = null;
+			serverStoreActions.refresh();
+		}, 500);
+	});
+
 	eventSource.onerror = () => {
 		disconnectPingSSE();
 		setTimeout(connectPingSSE, 5000);

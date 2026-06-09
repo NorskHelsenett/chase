@@ -179,6 +179,48 @@ export const serverStoreActions = {
 		});
 	},
 
+	// Insert or update a single server in the store (e.g. from an SSE
+	// `server_added` event), so new servers appear live without a reload.
+	upsertServer(server) {
+		if (!server || server.ID == null) return;
+		serverStore.update((state) => {
+			const mapped = {
+				...server,
+				security: {
+					headerRisk: server.header_score || '',
+					certRisk: server.cert_score || '',
+					adminRisk: server.admin_risk?.toLowerCase() || '',
+					apiRisk: server.api_risk?.toLowerCase() || '',
+					scanTimestamp: server.security_scan_time || ''
+				}
+			};
+
+			const idx = state.servers.findIndex((s) => s.ID === server.ID);
+			let servers;
+			if (idx >= 0) {
+				servers = state.servers.slice();
+				servers[idx] = { ...servers[idx], ...mapped };
+			} else {
+				servers = [...state.servers, mapped];
+			}
+
+			servers.sort((a, b) => {
+				const nameA = a.name || a.url || '';
+				const nameB = b.name || b.url || '';
+				return nameA.localeCompare(nameB);
+			});
+
+			const updatedAt = new Date();
+			memoryCache.set(state.currentFilter, { data: servers, lastUpdated: updatedAt });
+			return { ...state, servers, lastUpdated: updatedAt };
+		});
+	},
+
+	// Refetch the current filter (e.g. from an SSE `servers_changed` bulk signal).
+	async refresh() {
+		return this.loadServers(getCurrentFilterValue(), true);
+	},
+
 	async setFilter(filter = null, force = false) {
 		const currentKey = get(serverStore).currentFilter;
 		const filterKey = getFilterKey(filter);

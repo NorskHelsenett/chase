@@ -67,6 +67,7 @@ func AddServerFromWebhook(c *gin.Context) {
 		return
 	}
 
+	BroadcastServerAdded(server)
 	go NotifyServerAdded(server.ID, server.URL)
 	go checkServer(server.ID, nil)
 	go security.RunBackgroundScan(server.URL)

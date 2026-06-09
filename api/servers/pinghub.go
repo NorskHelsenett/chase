@@ -80,6 +80,12 @@ func BroadcastPing(serverID uint, expectedStatus int, result PingResult) {
 	}
 	msg := []byte(fmt.Sprintf("event: ping\ndata: %s\n\n", data))
 
+	broadcast(msg)
+}
+
+// broadcast fans a pre-formatted SSE message out to every connected client,
+// dropping it for any client whose buffer is full rather than blocking.
+func broadcast(msg []byte) {
 	hub.mu.RLock()
 	defer hub.mu.RUnlock()
 	for ch := range hub.clients {
@@ -89,6 +95,23 @@ func BroadcastPing(serverID uint, expectedStatus int, result PingResult) {
 			// client too slow, drop message
 		}
 	}
+}
+
+// BroadcastServerAdded notifies all SSE clients that a new server now exists so
+// grids and lists can add it live, without a manual refresh or page reload.
+func BroadcastServerAdded(server Server) {
+	data, err := json.Marshal(server)
+	if err != nil {
+		return
+	}
+	broadcast([]byte(fmt.Sprintf("event: server_added\ndata: %s\n\n", data)))
+}
+
+// BroadcastServersChanged is a lightweight signal that the server set changed in
+// bulk (e.g. a batch import) and clients should refetch. Used instead of a flood
+// of per-server events, which a slow client's buffer would drop.
+func BroadcastServersChanged() {
+	broadcast([]byte("event: servers_changed\ndata: {}\n\n"))
 }
 
 // serverInitData is the initial payload sent per server on SSE connect
@@ -127,88 +150,111 @@ func PingStreamSSE(c *gin.Context) {
 	cutoff := time.Now().AddDate(0, 0, -14) // Last 14 days
 	weekAgo := time.Now().AddDate(0, 0, -7)
 
-	for _, srv := range servers {
-		type dayRow struct {
-			Day        string
-			Total      int
-			Successful int
-		}
+	// Fetch everything the init payload needs in a few set-based queries rather
+	// than ~3 per server, which melts the DB once there are thousands of servers.
 
-		// Raw pings (last ~7 days)
-		var rawRows []dayRow
-		if err := db.Model(&PingResult{}).
-			Select("DATE(timestamp) as day, COUNT(*) as total, SUM(CASE WHEN status_code = ? AND error = '' THEN 1 ELSE 0 END) as successful", srv.ExpectedStatusCode).
-			Where("server_id = ? AND timestamp >= ?", srv.ID, cutoff).
-			Group("DATE(timestamp)").
-			Order("day ASC").
-			Scan(&rawRows).Error; err != nil {
-			rawRows = nil
+	// Latest ping per active server.
+	type latestRow struct {
+		ServerID     uint
+		StatusCode   int
+		ResponseTime float64
+		Error        string
+		Timestamp    time.Time
+	}
+	latestByServer := make(map[uint]latestRow)
+	{
+		var rows []latestRow
+		db.Raw(`SELECT DISTINCT ON (pr.server_id)
+		            pr.server_id, pr.status_code, pr.response_time, pr.error, pr.timestamp
+		        FROM ping_results pr
+		        JOIN servers s ON s.id = pr.server_id AND s.active = true
+		        ORDER BY pr.server_id, pr.timestamp DESC`).Scan(&rows)
+		for _, r := range rows {
+			latestByServer[r.ServerID] = r
 		}
+	}
 
-		// Hourly summaries (7-14 days ago, already aggregated)
-		var hourlyRows []dayRow
-		if err := db.Model(&PingHourlySummary{}).
-			Select("DATE(hour) as day, SUM(total) as total, SUM(successful) as successful").
-			Where("server_id = ? AND hour >= ? AND hour < ?", srv.ID, cutoff, weekAgo).
-			Group("DATE(hour)").
-			Order("day ASC").
-			Scan(&hourlyRows).Error; err != nil {
-			hourlyRows = nil
+	// Daily uptime, last 14 days, for every active server at once. Hourly
+	// summaries cover the older week; raw pings cover the rest. They're summed
+	// per (server, day) — matching the original additive per-server merge.
+	type dayRow struct {
+		ServerID   uint
+		Day        string
+		Total      int
+		Successful int
+	}
+	daysByServer := make(map[uint]map[string]DaySummary)
+	addDay := func(serverID uint, day string, total, successful int) {
+		m := daysByServer[serverID]
+		if m == nil {
+			m = make(map[string]DaySummary)
+			daysByServer[serverID] = m
 		}
+		existing := m[day]
+		total += existing.Total
+		successful += existing.Successful
+		uptime := 0.0
+		if total > 0 {
+			uptime = float64(successful) / float64(total) * 100
+		}
+		m[day] = DaySummary{Date: day, Total: total, Successful: successful, Uptime: uptime}
+	}
 
-		// Merge: hourly rows first, then raw rows (raw wins on overlap)
-		dayMap := make(map[string]dayRow)
-		for _, r := range hourlyRows {
-			dayMap[r.Day] = r
+	{
+		var rows []dayRow
+		db.Raw(`SELECT server_id, to_char(hour, 'YYYY-MM-DD') as day,
+		            SUM(total) as total, SUM(successful) as successful
+		        FROM ping_hourly_summaries
+		        WHERE hour >= ? AND hour < ?
+		            AND server_id IN (SELECT id FROM servers WHERE active = true)
+		        GROUP BY server_id, to_char(hour, 'YYYY-MM-DD')`, cutoff, weekAgo).Scan(&rows)
+		for _, r := range rows {
+			addDay(r.ServerID, r.Day, r.Total, r.Successful)
 		}
-		for _, r := range rawRows {
-			if existing, ok := dayMap[r.Day]; ok {
-				r.Total += existing.Total
-				r.Successful += existing.Successful
-			}
-			dayMap[r.Day] = r
+	}
+	{
+		var rows []dayRow
+		db.Raw(`SELECT pr.server_id, to_char(pr.timestamp, 'YYYY-MM-DD') as day,
+		            COUNT(*) as total,
+		            SUM(CASE WHEN pr.status_code = s.expected_status_code AND pr.error = '' THEN 1 ELSE 0 END) as successful
+		        FROM ping_results pr
+		        JOIN servers s ON s.id = pr.server_id AND s.active = true
+		        WHERE pr.timestamp >= ?
+		        GROUP BY pr.server_id, to_char(pr.timestamp, 'YYYY-MM-DD')`, cutoff).Scan(&rows)
+		for _, r := range rows {
+			addDay(r.ServerID, r.Day, r.Total, r.Successful)
 		}
+	}
 
-		// Sort by date
+	// Emit one init event per server, flushing in batches so the client renders
+	// progressively instead of waiting for the whole fleet to be marshaled.
+	const flushEvery = 50
+	for i := range servers {
+		srv := servers[i]
+
+		dayMap := daysByServer[srv.ID]
 		sortedKeys := make([]string, 0, len(dayMap))
 		for k := range dayMap {
 			sortedKeys = append(sortedKeys, k)
 		}
 		sort.Strings(sortedKeys)
-
 		days := make([]DaySummary, len(sortedKeys))
-		for i, k := range sortedKeys {
-			r := dayMap[k]
-			uptime := 0.0
-			if r.Total > 0 {
-				uptime = float64(r.Successful) / float64(r.Total) * 100
-			}
-			days[i] = DaySummary{
-				Date:       r.Day,
-				Total:      r.Total,
-				Successful: r.Successful,
-				Uptime:     uptime,
-			}
+		for j, k := range sortedKeys {
+			days[j] = dayMap[k]
 		}
 
-		// Get latest ping for current status
-		var latest PingResult
 		var latestEvent *PingEvent
-		if err := db.Model(&PingResult{}).
-			Select("server_id, status_code, response_time, error, timestamp").
-			Where("server_id = ?", srv.ID).
-			Order("timestamp DESC").
-			First(&latest).Error; err == nil {
-			status := latest.StatusCode
-			if latest.Error != "" {
+		if lr, ok := latestByServer[srv.ID]; ok {
+			status := lr.StatusCode
+			if lr.Error != "" {
 				status = 0
 			}
 			latestEvent = &PingEvent{
-				ServerID:     latest.ServerID,
+				ServerID:     lr.ServerID,
 				StatusCode:   status,
-				ResponseTime: latest.ResponseTime,
-				Error:        latest.Error,
-				Timestamp:    latest.Timestamp,
+				ResponseTime: lr.ResponseTime,
+				Error:        lr.Error,
+				Timestamp:    lr.Timestamp,
 			}
 		}
 
@@ -227,7 +273,12 @@ func PingStreamSSE(c *gin.Context) {
 		if err != nil {
 			continue
 		}
-		fmt.Fprintf(c.Writer, "event: init\ndata: %s\n\n", data)
+		if _, err := fmt.Fprintf(c.Writer, "event: init\ndata: %s\n\n", data); err != nil {
+			return
+		}
+		if (i+1)%flushEvery == 0 {
+			flusher.Flush()
+		}
 	}
 	flusher.Flush()
 
