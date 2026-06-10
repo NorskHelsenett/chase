@@ -30,8 +30,8 @@
 	const edgeId = (e: GraphEdge) => `${e.from}|${e.to}`;
 
 	// Tune these if you want tighter/looser clusters
-	const LEAF_EDGE_LEN = 70; // domain hub -> server
-	const HUB_EDGE_LEN = 140; // domain hub -> sub-domain hub
+	const LEAF_EDGE_LEN = 110; // domain hub -> server
+	const HUB_EDGE_LEN = 220; // domain hub -> sub-domain hub
 
 	const GOLDEN_ANGLE = 2.399963229728653;
 
@@ -213,7 +213,7 @@
 
 		// Biggest clusters near the center, small ones further out
 		const entries = [...clusters.entries()].sort((a, b) => b[1].length - a[1].length);
-		const radii = entries.map(([, members]) => 80 + 40 * Math.sqrt(members.length));
+		const radii = entries.map(([, members]) => 110 + 55 * Math.sqrt(members.length));
 		const avgRadius = radii.reduce((sum, r) => sum + r, 0) / (radii.length || 1);
 		const spacing = Math.max(300, 2.4 * avgRadius);
 
@@ -483,12 +483,12 @@
 				enabled: true,
 				solver: 'barnesHut',
 				barnesHut: {
-					gravitationalConstant: -4000, // repulsion keeps neighboring clusters apart
+					gravitationalConstant: -8000, // strong repulsion spreads sibling leaves apart
 					centralGravity: 0.01, // nearly none, so clusters stay scattered instead of collapsing to one blob
-					springLength: 90,
-					springConstant: 0.05,
+					springLength: 110,
+					springConstant: 0.04, // soft springs so repulsion can stretch them
 					damping: 0.5,
-					avoidOverlap: 0.4
+					avoidOverlap: 0.6
 				},
 				stabilization: { enabled: true, iterations: 400, updateInterval: 25, fit: true },
 				adaptiveTimestep: true
@@ -520,10 +520,12 @@
 						enabled: true,
 						solver: 'barnesHut',
 						barnesHut: {
-							gravitationalConstant: -2000,
+							// Keep repulsion close to the stabilization phase so the
+							// first interactive wobble doesn't re-compress the layout
+							gravitationalConstant: -6000,
 							centralGravity: 0.005,
-							springLength: 90,
-							springConstant: 0.04,
+							springLength: 110,
+							springConstant: 0.03,
 							damping: 0.85,
 							avoidOverlap: 0
 						},
@@ -683,7 +685,9 @@
 	:global(.vis-network canvas) {
 		background: transparent !important;
 	}
-	:global(.vis-tooltip) {
+	/* Scoped under .graph-wrapper to out-rank vis-network's injected
+	   div.vis-tooltip defaults (white background), which load after us */
+	.graph-wrapper :global(div.vis-tooltip) {
 		position: absolute;
 		visibility: hidden;
 		padding: 0;
