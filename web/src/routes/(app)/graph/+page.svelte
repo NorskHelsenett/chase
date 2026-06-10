@@ -25,6 +25,8 @@ let activeFilter: string | null = $state(null);
 		label: string;
 		group: string;
 		title?: string;
+		isDown?: boolean;
+		cluster?: string;
 	}
 	interface GraphEdge {
 		from: string;
@@ -79,9 +81,9 @@ function buildGraphData(serverList: Server[]) {
 			} catch {}
 		});
 
-		function addNode(id, label, group, title, isDown = false) {
+		function addNode(id, label, group, title, isDown = false, cluster = '') {
 			if (!addedNodeIds.has(id)) {
-				nodes.push({ id, label, group, title, isDown });
+				nodes.push({ id, label, group, title, isDown, cluster: cluster || label });
 				addedNodeIds.add(id);
 			}
 		}
@@ -90,7 +92,14 @@ function buildGraphData(serverList: Server[]) {
 		for (const [level, count] of levelCounts) {
 			if (count > 1) {
 				const nodeId = `domain:${level}`;
-				addNode(nodeId, level, 'domain', `Domain/group: ${level}\nCount: ${count}`);
+				addNode(
+					nodeId,
+					level,
+					'domain',
+					`Domain/group: ${level}\nCount: ${count}`,
+					false,
+					getRootDomain(level)
+				);
 				groupHostnames.add(level);
 			}
 		}
@@ -124,7 +133,7 @@ function buildGraphData(serverList: Server[]) {
 				const nodeId = `instance:${server.ID || idx}:${server.url}`;
 				const tooltip = `${server.url}\nStatus: ${statusText}${server.comment ? `\nNote: ${server.comment}` : ''}`;
 
-				addNode(nodeId, server.url, isDown ? 'error' : 'site', tooltip, isDown);
+				addNode(nodeId, server.url, isDown ? 'error' : 'site', tooltip, isDown, rootDomain);
 
 				// Find the closest parent domain/group node
 				let parent = null;
@@ -143,7 +152,7 @@ function buildGraphData(serverList: Server[]) {
 				}
 			} catch (error) {
 				const errId = `error:${server.ID || idx}:${server.url}`;
-				addNode(errId, server.url, 'error', `${server.url}\nInvalid URL format`);
+				addNode(errId, server.url, 'error', `${server.url}\nInvalid URL format`, true, server.url);
 			}
 		});
 
