@@ -27,6 +27,7 @@ let activeFilter: string | null = $state(null);
 		title?: string;
 		isDown?: boolean;
 		cluster?: string;
+		meta?: Record<string, unknown>;
 	}
 	interface GraphEdge {
 		from: string;
@@ -81,25 +82,24 @@ function buildGraphData(serverList: Server[]) {
 			} catch {}
 		});
 
-		function addNode(id, label, group, title, isDown = false, cluster = '') {
-			if (!addedNodeIds.has(id)) {
-				nodes.push({ id, label, group, title, isDown, cluster: cluster || label });
-				addedNodeIds.add(id);
+		function addNode(node: GraphNode) {
+			if (!addedNodeIds.has(node.id)) {
+				nodes.push({ ...node, cluster: node.cluster || node.label });
+				addedNodeIds.add(node.id);
 			}
 		}
 
 		// 2. Add domain/group nodes first and track hostnames
 		for (const [level, count] of levelCounts) {
 			if (count > 1) {
-				const nodeId = `domain:${level}`;
-				addNode(
-					nodeId,
-					level,
-					'domain',
-					`Domain/group: ${level}\nCount: ${count}`,
-					false,
-					getRootDomain(level)
-				);
+				addNode({
+					id: `domain:${level}`,
+					label: level,
+					group: 'domain',
+					title: `Domain/group: ${level}\nCount: ${count}`,
+					cluster: getRootDomain(level),
+					meta: { kind: 'domain', domain: level, count }
+				});
 				groupHostnames.add(level);
 			}
 		}
@@ -132,8 +132,25 @@ function buildGraphData(serverList: Server[]) {
 				const statusText = effectiveStatus === 'up' ? 'Up' : 'Down';
 				const nodeId = `instance:${server.ID || idx}:${server.url}`;
 				const tooltip = `${server.url}\nStatus: ${statusText}${server.comment ? `\nNote: ${server.comment}` : ''}`;
+				const latest = server.ping_results?.[0];
 
-				addNode(nodeId, server.url, isDown ? 'error' : 'site', tooltip, isDown, rootDomain);
+				addNode({
+					id: nodeId,
+					label: server.url,
+					group: isDown ? 'error' : 'site',
+					title: tooltip,
+					isDown,
+					cluster: rootDomain,
+					meta: {
+						kind: 'site',
+						url: server.url,
+						status: effectiveStatus,
+						statusCode: latest?.status_code,
+						responseTimeMs: latest?.response_time_ms,
+						error: latest?.error,
+						note: server.comment
+					}
+				});
 
 				// Find the closest parent domain/group node
 				let parent = null;
@@ -151,8 +168,15 @@ function buildGraphData(serverList: Server[]) {
 					edges.push({ from: parent, to: nodeId });
 				}
 			} catch (error) {
-				const errId = `error:${server.ID || idx}:${server.url}`;
-				addNode(errId, server.url, 'error', `${server.url}\nInvalid URL format`, true, server.url);
+				addNode({
+					id: `error:${server.ID || idx}:${server.url}`,
+					label: server.url,
+					group: 'error',
+					title: `${server.url}\nInvalid URL format`,
+					isDown: true,
+					cluster: server.url,
+					meta: { kind: 'invalid', url: server.url }
+				});
 			}
 		});
 

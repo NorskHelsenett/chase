@@ -85,6 +85,8 @@
 			seen.add(n.id);
 			const { isDown, ...rest } = n as any;
 			if (isDown === true) (rest as any).group = 'error';
+			const tip = buildTooltip(rest);
+			if (tip) rest.title = tip;
 			uniqueNodes.push(rest);
 			groupOf.set(rest.id, rest.group);
 		}
@@ -109,6 +111,93 @@
 	}
 
 	const clusterKey = (n: any) => n?.cluster || String(n?.id ?? '');
+
+	// vis restarts the simulation on every DataSet.update (clicks, filters,
+	// highlights). The interactive physics below is low-energy and self-stops
+	// via minVelocity, but this watchdog guarantees it can never run away.
+	let calmTimer: ReturnType<typeof setTimeout> | undefined;
+	function calmDown(ms = 3000) {
+		clearTimeout(calmTimer);
+		calmTimer = setTimeout(() => {
+			try {
+				network?.stopSimulation?.();
+			} catch {}
+		}, ms);
+	}
+
+	// --- tooltip card (screenshot + status box) ---
+	const tooltipImages = new Map<string | number, HTMLImageElement>();
+
+	function buildTooltip(n: any): HTMLElement | undefined {
+		const meta = n.meta;
+		if (!meta) return undefined;
+
+		const tip = document.createElement('div');
+		tip.className = 'graph-tip';
+
+		const info = document.createElement('div');
+		info.className = 'graph-tip-info';
+
+		const title = document.createElement('div');
+		title.className = 'graph-tip-title';
+		title.textContent = meta.kind === 'domain' ? meta.domain : meta.url;
+		info.appendChild(title);
+
+		const row = document.createElement('div');
+		row.className = 'graph-tip-row';
+
+		if (meta.kind === 'domain') {
+			row.textContent = `${meta.count} monitored site${meta.count === 1 ? '' : 's'}`;
+			info.appendChild(row);
+		} else if (meta.kind === 'invalid') {
+			row.textContent = 'Invalid URL format';
+			info.appendChild(row);
+		} else {
+			const up = meta.status === 'up';
+			const dot = document.createElement('span');
+			dot.className = `graph-tip-dot ${up ? 'up' : 'down'}`;
+			row.appendChild(dot);
+			const bits = [up ? 'Up' : 'Down'];
+			if (typeof meta.responseTimeMs === 'number') bits.push(`${Math.round(meta.responseTimeMs)} ms`);
+			if (meta.statusCode) bits.push(`HTTP ${meta.statusCode}`);
+			row.appendChild(document.createTextNode(bits.join(' · ')));
+			info.appendChild(row);
+
+			if (!up && meta.error) {
+				const err = document.createElement('div');
+				err.className = 'graph-tip-note';
+				err.textContent = meta.error;
+				info.appendChild(err);
+			}
+
+			// Screenshot loads lazily: src is set on first hover (hoverNode),
+			// so building the graph doesn't fire a request per node
+			tip.classList.add('has-shot');
+			const img = document.createElement('img');
+			img.className = 'graph-tip-shot';
+			img.alt = '';
+			const cleanUrl = String(meta.url)
+				.replace(/^(https?:\/\/)/, '')
+				.replace(/\/$/, '');
+			img.dataset.src = `/api/screenshot/${cleanUrl}?cached=true&thumb=true`;
+			img.onerror = () => {
+				img.remove();
+				tip.classList.remove('has-shot');
+			};
+			tip.appendChild(img);
+			tooltipImages.set(n.id, img);
+		}
+
+		if (meta.note) {
+			const note = document.createElement('div');
+			note.className = 'graph-tip-note';
+			note.textContent = `Note: ${meta.note}`;
+			info.appendChild(note);
+		}
+
+		tip.appendChild(info);
+		return tip;
+	}
 
 	// Place each cluster (root domain) on a golden-angle spiral so they start
 	// scattered instead of piled on the origin; physics then only needs to
@@ -155,8 +244,8 @@
 		const existingPositions = existingIds.length ? network.getPositions(existingIds) : {};
 		const nextIds = new Set(uniqueNodes.map((n) => String(n.id)));
 
-		// Cluster centroids of surviving nodes, so newly added nodes can be
-		// dropped near their own cluster (physics is off after stabilization)
+		// Cluster centroids of surviving nodes, so newly added nodes drop near
+		// their own cluster and the low-energy physics only has to tidy locally
 		const centroids = new Map<string, { x: number; y: number; count: number }>();
 		let maxDist = 0;
 		for (const id of existingIds) {
@@ -198,7 +287,8 @@
 		if (toRemoveEdges.length) edgeDataSet.remove(toRemoveEdges);
 		if (processedEdges.length) edgeDataSet.update(processedEdges);
 
-		// Keep the layout stable; do not re-enable physics here
+		// The dataset updates restart the low-energy simulation; make sure it rests
+		calmDown();
 		network.redraw();
 	}
 
@@ -414,16 +504,36 @@
 				loadPct = Math.min(100, Math.round((p.iterations / p.total) * 100));
 			});
 
-		// Stabilize once, then freeze. Physics stays off afterwards: vis restarts
-		// the simulation on every DataSet.update (clicks, filters, highlights),
-		// which is what made the layout drift forever.
+		// Stabilize once, then hand over to low-energy interactive physics:
+		// springy drags and a brief wobble after interactions, but it always
+		// comes to rest — high minVelocity stops it on its own and calmDown()
+		// is the backstop (the old forceAtlas2 phase had neither and ran forever).
 		let finalized = false;
 		function finalize() {
 			if (finalized) return;
 			finalized = true;
 			try { network.stopSimulation?.(); } catch {}
-			try { network.setOptions({ physics: false }); } catch {}
 			try { network.storePositions(); } catch {}
+			try {
+				network.setOptions({
+					physics: {
+						enabled: true,
+						solver: 'barnesHut',
+						barnesHut: {
+							gravitationalConstant: -2000,
+							centralGravity: 0.005,
+							springLength: 90,
+							springConstant: 0.04,
+							damping: 0.85,
+							avoidOverlap: 0
+						},
+						stabilization: false,
+						maxVelocity: 12,
+						minVelocity: 1.2
+					}
+				});
+			} catch {}
+			calmDown();
 			requestAnimationFrame(() => {
 				loading = false;
 				try {
@@ -442,6 +552,7 @@
 		// --- Interactions ---
 		// Click: background clears; node click highlights whole subtree and opens site URLs
 		network.on('click', (params: any) => {
+			calmDown();
 			if (!params.nodes?.length) {
 				resetHighlights();
 				network.unselectAll();
@@ -464,6 +575,15 @@
 		// Deselect event from vis also clears
 		network.on('deselectNode', () => {
 			resetHighlights();
+			calmDown();
+		});
+
+		// Lazily load the tooltip screenshot the first time a node is hovered
+		network.on('hoverNode', (params: any) => {
+			const img = tooltipImages.get(params.node);
+			if (img?.dataset.src && !img.getAttribute('src')) {
+				img.src = img.dataset.src;
+			}
 		});
 
 		// Drag parent and its direct children as a unit (descendants can be large; keep it direct for perf)
@@ -498,6 +618,7 @@
 
 		network.on('dragEnd', () => {
 			dragState = { anchorId: null, startPos: {}, childIds: [] };
+			calmDown();
 		});
 
 		// Subscribe to reactive updates (filtering, etc.) — skip the immediate
@@ -514,6 +635,7 @@
 
 	onDestroy(() => {
 		clearTimeout(safetyTimer);
+		clearTimeout(calmTimer);
 		try {
 			unsubscribe?.();
 		} catch {}
@@ -564,19 +686,72 @@
 	:global(.vis-tooltip) {
 		position: absolute;
 		visibility: hidden;
-		padding: 12px;
-		white-space: nowrap;
+		padding: 0;
+		white-space: normal;
 		font-family: 'Helvetica', sans-serif;
 		font-size: 14px;
 		color: #e6e6e6;
 		background-color: rgba(32, 32, 32, 0.95);
-		border-radius: 8px;
+		border-radius: 10px;
 		border: 1px solid rgba(77, 76, 76, 0.5);
 		box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
 		z-index: 10000;
 		pointer-events: none;
-		max-width: 300px;
+		max-width: 320px;
+		overflow: hidden;
 		transition: opacity 0.3s ease;
+	}
+	:global(.graph-tip) {
+		min-width: 170px;
+		max-width: 280px;
+	}
+	:global(.graph-tip.has-shot) {
+		width: 280px;
+	}
+	:global(.graph-tip-shot) {
+		display: block;
+		width: 100%;
+		height: 158px;
+		object-fit: cover;
+		object-position: top;
+		background: #161616;
+		border-bottom: 1px solid rgba(77, 76, 76, 0.5);
+	}
+	:global(.graph-tip-info) {
+		display: flex;
+		flex-direction: column;
+		gap: 4px;
+		padding: 10px 12px;
+	}
+	:global(.graph-tip-title) {
+		font-weight: bold;
+		color: #ff9d4f;
+		word-break: break-all;
+	}
+	:global(.graph-tip-row) {
+		display: flex;
+		align-items: center;
+		gap: 6px;
+		font-size: 13px;
+		color: #cfcfcf;
+	}
+	:global(.graph-tip-dot) {
+		flex: none;
+		width: 8px;
+		height: 8px;
+		border-radius: 9999px;
+	}
+	:global(.graph-tip-dot.up) {
+		background: #22c55d;
+	}
+	:global(.graph-tip-dot.down) {
+		background: #ff4c4c;
+	}
+	:global(.graph-tip-note) {
+		font-size: 12px;
+		font-style: italic;
+		color: #9ca3af;
+		word-break: break-word;
 	}
 	:global(.tooltip) {
 		padding: 2px;
