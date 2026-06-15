@@ -531,11 +531,18 @@
 						},
 						stabilization: false,
 						maxVelocity: 12,
-						minVelocity: 1.2
+						// Lower than the interactive default so the opening settle keeps
+						// animating until nodes are nearly at rest (fully positioned)
+						// instead of freezing while they're still drifting.
+						minVelocity: 0.3
 					}
 				});
 			} catch {}
-			calmDown();
+			// Let the opening settle run until it actually comes to rest. minVelocity
+			// stops it once nodes are placed; this backstop only guarantees termination
+			// and is scaled to node count so big graphs aren't cut off mid-animation
+			// (the flat 3s default froze large layouts before they finished).
+			calmDown(Math.min(45000, Math.max(6000, nodeDataSet.length * 18)));
 			requestAnimationFrame(() => {
 				loading = false;
 				try {
