@@ -548,8 +548,12 @@
 
 		network.once('stabilizationIterationsDone', finalize);
 
-		// Safety net: force finish if stabilization takes too long on huge graphs
-		safetyTimer = setTimeout(finalize, 10000);
+		// Safety net: force finish if stabilization takes too long. Scale the budget
+		// to node count so large graphs get enough time to finish positioning instead
+		// of cutting over to interactive physics half-laid-out (flat 10s wasn't enough
+		// for the 400-iteration stabilization on big graphs).
+		const stabilizationBudgetMs = Math.min(60000, Math.max(10000, nodeDataSet.length * 12));
+		safetyTimer = setTimeout(finalize, stabilizationBudgetMs);
 
 		// --- Interactions ---
 		// Click: background clears; node click highlights whole subtree and opens site URLs
