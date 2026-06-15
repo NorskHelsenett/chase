@@ -32,8 +32,11 @@ jobs:
             screenshot:
               - 'screenshot-service/**'
 
-      - name: Set up QEMU
-        uses: https://github.com/docker/setup-qemu-action@v3
+      # QEMU disabled: only needed to emulate non-native arch (arm64). All
+      # images now build for the runner's native linux/amd64, so the extra
+      # emulation setup is unnecessary. Restore this step if arm64 is needed.
+      # - name: Set up QEMU
+      #   uses: https://github.com/docker/setup-qemu-action@v3
 
       - name: Set up Docker Buildx
         uses: https://github.com/docker/setup-buildx-action@v3
@@ -107,7 +110,7 @@ jobs:
         with:
           context: screenshot-service
           file: screenshot-service/Dockerfile
-          platforms: linux/amd64,linux/arm64
+          platforms: linux/amd64
           push: true
           tags: ${{ steps.meta-shot.outputs.tags }}
           labels: ${{ steps.meta-shot.outputs.labels }}
