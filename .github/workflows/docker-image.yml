@@ -133,12 +133,15 @@ jobs:
           labels: ${{ steps.meta-shot.outputs.labels }}
 
       # ---------- Publish Helm chart (main only), pinning BOTH digests ----------
+      # PAUSED: chart publishing is temporarily disabled while validating the
+      # image build/push. To re-enable, restore both conditions below to:
+      #   if: github.ref == 'refs/heads/main'
       - name: Install Helm
-        if: github.ref == 'refs/heads/main'
+        if: false
         uses: https://github.com/azure/setup-helm@v3
 
       - name: Pin image digests and publish chart
-        if: github.ref == 'refs/heads/main'
+        if: false
         env:
           REGISTRY: ${{ env.REGISTRY_HOST }}
           APP_BUILT_DIGEST: ${{ steps.build-app.outputs.digest }}
