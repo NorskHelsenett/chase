@@ -370,6 +370,31 @@
 			});
 		}
 
+		// Low-energy interactive physics (wobbly drag) — applied once layout settles
+		function enterInteractivePhysics() {
+			try { network.stopSimulation?.(); } catch {}
+			try { network.storePositions(); } catch {}
+			try {
+				network.setOptions({
+					physics: {
+						enabled: true,
+						solver: 'barnesHut',
+						barnesHut: {
+							gravitationalConstant: -2000,
+							centralGravity: 0.1,
+							springLength: 80,
+							springConstant: 0.04,
+							damping: 0.9,
+							avoidOverlap: 0.3
+						},
+						stabilization: false,
+						maxVelocity: 15,
+						minVelocity: 0.75
+					}
+				});
+			} catch {}
+		}
+
 		// Phase 1 done: refine with ForceAtlas2
 		network.once('stabilizationIterationsDone', () => {
 			try { network.stopSimulation?.(); } catch {}
@@ -414,40 +439,21 @@
 
 				network.once('stabilizationIterationsDone', () => {
 					// Switch to low-energy interactive physics (wobbly drag)
-					try { network.stopSimulation?.(); } catch {}
-					try { network.storePositions(); } catch {}
-					try {
-						network.setOptions({
-							physics: {
-								enabled: true,
-								solver: 'barnesHut',
-								barnesHut: {
-									gravitationalConstant: -2000,
-									centralGravity: 0.1,
-									springLength: 80,
-									springConstant: 0.04,
-									damping: 0.9,
-									avoidOverlap: 0.3
-								},
-								stabilization: false,
-								maxVelocity: 15,
-								minVelocity: 0.75
-							}
-						});
-					} catch {}
+					enterInteractivePhysics();
 				});
 			});
 		});
 
-		// Safety timeout: if still loading after 8 seconds, force finish
+		// Safety timeout: if stabilization is still running, force finish — but scale
+		// the budget to node count so large graphs aren't frozen mid-layout. Hand off
+		// to interactive physics (not physics:false) so nodes keep settling afterward.
+		const stabilizationBudgetMs = Math.min(60000, Math.max(8000, nodeDataSet.length * 12));
 		setTimeout(() => {
 			if (loading) {
-				try { network.stopSimulation?.(); } catch {}
-				try { network.storePositions(); } catch {}
-				try { network.setOptions({ physics: false }); } catch {}
+				enterInteractivePhysics();
 				finalize();
 			}
-		}, 8000);
+		}, stabilizationBudgetMs);
 
 		// --- Interactions ---
 		// Click: background clears; node click highlights whole subtree and opens site URLs
