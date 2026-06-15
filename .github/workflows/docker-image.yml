@@ -17,6 +17,23 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      # Target the registry of whatever git provider this runs under instead
+      # of a hard-coded vars.REGISTRY (which is unset on non-GitHub runners and
+      # silently falls back to docker.io). github.com -> ghcr.io; anything else
+      # (Gitea/Forgejo) -> that server's own host, which doubles as its registry.
+      - name: Derive registry host
+        run: |
+          set -e
+          host="${GITHUB_SERVER_URL#https://}"
+          host="${host#http://}"
+          if [ "$host" = "github.com" ]; then
+            echo "REGISTRY_HOST=ghcr.io" >> "$GITHUB_ENV"
+          else
+            echo "REGISTRY_HOST=$host" >> "$GITHUB_ENV"
+          fi
+          repo_lower=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
+          echo "REPOSITORY_LOWER=$repo_lower" >> "$GITHUB_ENV"
+
       # Only rebuild the image whose sources actually changed. The chart is
       # still republished on every main push (below) so both digests stay
       # pinned regardless of which image moved.
@@ -32,8 +49,11 @@ jobs:
             screenshot:
               - 'screenshot-service/**'
 
-      - name: Set up QEMU
-        uses: https://github.com/docker/setup-qemu-action@v3
+      # QEMU disabled: only needed to emulate non-native arch (arm64). All
+      # images now build for the runner's native linux/amd64, so the extra
+      # emulation setup is unnecessary. Restore this step if arm64 is needed.
+      # - name: Set up QEMU
+      #   uses: https://github.com/docker/setup-qemu-action@v3
 
       - name: Set up Docker Buildx
         uses: https://github.com/docker/setup-buildx-action@v3
@@ -52,9 +72,9 @@ jobs:
       - name: Login to container registry
         uses: https://github.com/docker/login-action@v3
         with:
-          registry: ${{ vars.REGISTRY }}
+          registry: ${{ env.REGISTRY_HOST }}
           username: ${{ github.actor }}
-          password: ${{ secrets.REGISTRY_ACCESS_TOKEN }}
+          password: ${{ secrets.PACKAGES_TOKEN || secrets.GITHUB_TOKEN }}
 
       # ---------- App image (api + web, root Dockerfile) ----------
       - name: App image metadata
@@ -62,7 +82,7 @@ jobs:
         uses: https://github.com/docker/metadata-action@v4.3.0
         id: meta-app
         with:
-          images: ${{ vars.REGISTRY }}/${{ github.repository }}
+          images: ${{ env.REGISTRY_HOST }}/${{ env.REPOSITORY_LOWER }}
           tags: |
               type=ref,event=branch
               type=raw,value=latest,enable=${{ github.ref == format('refs/heads/{0}', 'main') }}
@@ -94,7 +114,7 @@ jobs:
         uses: https://github.com/docker/metadata-action@v4.3.0
         id: meta-shot
         with:
-          images: ${{ vars.REGISTRY }}/${{ github.repository }}/screenshotr
+          images: ${{ env.REGISTRY_HOST }}/${{ env.REPOSITORY_LOWER }}/screenshotr
           tags: |
               type=ref,event=branch
               type=raw,value=latest,enable=${{ github.ref == format('refs/heads/{0}', 'main') }}
@@ -107,23 +127,26 @@ jobs:
         with:
           context: screenshot-service
           file: screenshot-service/Dockerfile
-          platforms: linux/amd64,linux/arm64
+          platforms: linux/amd64
           push: true
           tags: ${{ steps.meta-shot.outputs.tags }}
           labels: ${{ steps.meta-shot.outputs.labels }}
 
       # ---------- Publish Helm chart (main only), pinning BOTH digests ----------
+      # PAUSED: chart publishing is temporarily disabled while validating the
+      # image build/push. To re-enable, restore both conditions below to:
+      #   if: github.ref == 'refs/heads/main'
       - name: Install Helm
-        if: github.ref == 'refs/heads/main'
+        if: false
         uses: https://github.com/azure/setup-helm@v3
 
       - name: Pin image digests and publish chart
-        if: github.ref == 'refs/heads/main'
+        if: false
         env:
-          REGISTRY: ${{ vars.REGISTRY }}
+          REGISTRY: ${{ env.REGISTRY_HOST }}
           APP_BUILT_DIGEST: ${{ steps.build-app.outputs.digest }}
           SHOT_BUILT_DIGEST: ${{ steps.build-shot.outputs.digest }}
-          REGISTRY_TOKEN: ${{ secrets.REGISTRY_ACCESS_TOKEN }}
+          REGISTRY_TOKEN: ${{ secrets.PACKAGES_TOKEN || secrets.GITHUB_TOKEN }}
           ACTOR: ${{ github.actor }}
         run: |
           set -euo pipefail
