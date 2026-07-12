@@ -59,9 +59,11 @@ jobs:
           repo_lower=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
           echo "REPOSITORY_LOWER=$repo_lower" >> "$GITHUB_ENV"
 
-      # Only rebuild the image whose sources actually changed. The chart is
-      # still republished on every main push (below) so both digests stay
-      # pinned regardless of which image moved.
+      # On main, only rebuild the image whose sources actually changed (the
+      # chart is still republished on every main push below, so both digests
+      # stay pinned regardless of which image moved). On any other branch this
+      # filter is ignored and both images are built and pushed to the :dev tag
+      # for testing — the chart is never published off main.
       - name: Detect changes
         uses: dorny/paths-filter@v3
         id: changes
@@ -103,7 +105,7 @@ jobs:
 
       # ---------- App image (api + web, root Dockerfile) ----------
       - name: App image metadata
-        if: steps.changes.outputs.app == 'true'
+        if: steps.changes.outputs.app == 'true' || github.ref != 'refs/heads/main'
         uses: docker/metadata-action@v4.3.0
         id: meta-app
         with:
@@ -114,7 +116,7 @@ jobs:
               type=raw,value=dev,enable=${{ github.ref != format('refs/heads/{0}', 'main') }}
 
       - name: Build and push app image
-        if: steps.changes.outputs.app == 'true'
+        if: steps.changes.outputs.app == 'true' || github.ref != 'refs/heads/main'
         uses: docker/build-push-action@v6
         id: build-app
         with:
@@ -128,14 +130,14 @@ jobs:
           cache-to: type=local,dest=/tmp/.buildx-cache-new,mode=max
 
       - name: Move cache
-        if: steps.changes.outputs.app == 'true'
+        if: steps.changes.outputs.app == 'true' || github.ref != 'refs/heads/main'
         run: |
           rm -rf /tmp/.buildx-cache
           mv /tmp/.buildx-cache-new /tmp/.buildx-cache
 
       # ---------- Screenshot service image ----------
       - name: Screenshot image metadata
-        if: steps.changes.outputs.screenshot == 'true'
+        if: steps.changes.outputs.screenshot == 'true' || github.ref != 'refs/heads/main'
         uses: docker/metadata-action@v4.3.0
         id: meta-shot
         with:
@@ -146,7 +148,7 @@ jobs:
               type=raw,value=dev,enable=${{ github.ref != format('refs/heads/{0}', 'main') }}
 
       - name: Build and push screenshot image
-        if: steps.changes.outputs.screenshot == 'true'
+        if: steps.changes.outputs.screenshot == 'true' || github.ref != 'refs/heads/main'
         uses: docker/build-push-action@v6
         id: build-shot
         with:
