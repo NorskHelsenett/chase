@@ -27,9 +27,9 @@ spec:
           type: RuntimeDefault
         supplementalGroups:
           - 100
-        fsGroup: 1001
+        fsGroup: {{ $value.runAsUser | default 1001 }}
         runAsNonRoot: true
-        runAsUser: 1001
+        runAsUser: {{ $value.runAsUser | default 1001 }}
       containers:
       - name: {{ $key }}
         image: {{ $value.repository }}:{{ $value.tag | default "latest" }}
@@ -51,6 +51,42 @@ spec:
           containerPort: {{ .port }}
         {{- end }}
         env:
+        {{- if and (eq $key "chase") $.Values.chase.auth.generateSecretKey }}
+        - name: CHASE_SECRET_KEY
+          valueFrom:
+            secretKeyRef:
+              name: chase-api-secret
+              key: secretKey
+        {{- end }}
+        {{- if and (eq $key "chase") $.Values.postgres.enabled }}
+        - name: PGHOST
+          valueFrom:
+            secretKeyRef:
+              name: {{ $.Values.postgres.name }}-app
+              key: host
+        - name: PGPORT
+          valueFrom:
+            secretKeyRef:
+              name: {{ $.Values.postgres.name }}-app
+              key: port
+        - name: PGDATABASE
+          valueFrom:
+            secretKeyRef:
+              name: {{ $.Values.postgres.name }}-app
+              key: dbname
+        - name: PGUSER
+          valueFrom:
+            secretKeyRef:
+              name: {{ $.Values.postgres.name }}-app
+              key: username
+        - name: PGPASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ $.Values.postgres.name }}-app
+              key: password
+        - name: PGSSLMODE
+          value: "require"
+        {{- end }}
         {{- range $value.env }}
         - name: {{ .name }}
           value: "{{ .value }}"
@@ -81,8 +117,8 @@ spec:
           privileged: false
           allowPrivilegeEscalation: false
           runAsNonRoot: true
-          runAsUser: 1001
-          runAsGroup: 1001
+          runAsUser: {{ $value.runAsUser | default 1001 }}
+          runAsGroup: {{ $value.runAsUser | default 1001 }}
           readOnlyRootFilesystem: true
       volumes:
       {{- range $value.mounts }}
