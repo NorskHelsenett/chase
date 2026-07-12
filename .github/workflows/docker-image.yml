@@ -11,6 +11,28 @@ on:
   workflow_dispatch:
 
 jobs:
+  # Validate the Helm chart on every branch. The build-and-publish job below
+  # only rebuilds images whose sources changed and only packages the chart on
+  # main, so without this a chart-only change would sail through CI untested.
+  lint-chart:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Helm
+        uses: https://github.com/azure/setup-helm@v3
+
+      - name: Lint and template chart
+        run: |
+          set -euo pipefail
+          # charts/ is gitignored, so fetch subchart deps (cloudnative-pg)
+          # before linting/templating.
+          helm repo add cloudnative-pg https://cloudnative-pg.github.io/charts
+          helm dependency build .helm
+          helm lint .helm
+          helm template chase .helm > /dev/null
+
   build-and-publish:
     runs-on: ubuntu-latest
     steps:
