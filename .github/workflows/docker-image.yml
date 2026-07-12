@@ -4,6 +4,13 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+# GITHUB_TOKEN needs packages:write to push images and the chart to GHCR;
+# the default token grant doesn't include it, which is why pushes 403'd with
+# "permission_denied: write_package". contents:read covers checkout.
+permissions:
+  contents: read
+  packages: write
+
 on:
   push:
     branches:
