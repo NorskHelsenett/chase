@@ -20,8 +20,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      # Install via the official script rather than an action: full-URL action
+      # refs (needed by Forgejo) are rejected by GitHub's resolver, and short
+      # refs don't resolve on Forgejo. A script works identically on both.
       - name: Install Helm
-        uses: https://github.com/azure/setup-helm@v3
+        run: curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
 
       - name: Lint and template chart
         run: |
