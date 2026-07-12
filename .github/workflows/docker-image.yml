@@ -4,13 +4,6 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
-# GITHUB_TOKEN needs packages:write to push images and the chart to GHCR;
-# the default token grant doesn't include it, which is why pushes 403'd with
-# "permission_denied: write_package". contents:read covers checkout.
-permissions:
-  contents: read
-  packages: write
-
 on:
   push:
     branches:
@@ -85,7 +78,7 @@ jobs:
         with:
           registry: ${{ env.REGISTRY_HOST }}
           username: ${{ github.actor }}
-          password: ${{ secrets.PACKAGES_TOKEN || secrets.GITHUB_TOKEN }}
+          password: ${{ secrets.REGISTRY_ACCESS_TOKEN || secrets.GITHUB_TOKEN }}
 
       # Both images build on every push — no dorny/paths-filter change
       # detection, since that action isn't mirrored on Forgejo's registry and
@@ -153,7 +146,7 @@ jobs:
           REGISTRY: ${{ env.REGISTRY_HOST }}
           APP_BUILT_DIGEST: ${{ steps.build-app.outputs.digest }}
           SHOT_BUILT_DIGEST: ${{ steps.build-shot.outputs.digest }}
-          REGISTRY_TOKEN: ${{ secrets.PACKAGES_TOKEN || secrets.GITHUB_TOKEN }}
+          REGISTRY_TOKEN: ${{ secrets.REGISTRY_ACCESS_TOKEN || secrets.GITHUB_TOKEN }}
           ACTOR: ${{ github.actor }}
         run: |
           set -euo pipefail
