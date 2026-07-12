@@ -73,12 +73,16 @@ jobs:
           driver-opts: |
             image=moby/buildkit:latest
 
+      # Pick the credential per host: on github.com push to ghcr.io with the
+      # REGISTRY_ACCESS_TOKEN PAT (the automatic token isn't authorized on the
+      # org package); anywhere else (Forgejo/code.nhn.no) the built-in
+      # GITHUB_TOKEN authenticates against that server's own registry.
       - name: Login to container registry
         uses: docker/login-action@v3
         with:
           registry: ${{ env.REGISTRY_HOST }}
           username: ${{ github.actor }}
-          password: ${{ secrets.REGISTRY_ACCESS_TOKEN || secrets.GITHUB_TOKEN }}
+          password: ${{ github.server_url == 'https://github.com' && secrets.REGISTRY_ACCESS_TOKEN || secrets.GITHUB_TOKEN }}
 
       # Both images build on every push — no dorny/paths-filter change
       # detection, since that action isn't mirrored on Forgejo's registry and
@@ -146,7 +150,7 @@ jobs:
           REGISTRY: ${{ env.REGISTRY_HOST }}
           APP_BUILT_DIGEST: ${{ steps.build-app.outputs.digest }}
           SHOT_BUILT_DIGEST: ${{ steps.build-shot.outputs.digest }}
-          REGISTRY_TOKEN: ${{ secrets.REGISTRY_ACCESS_TOKEN || secrets.GITHUB_TOKEN }}
+          REGISTRY_TOKEN: ${{ github.server_url == 'https://github.com' && secrets.REGISTRY_ACCESS_TOKEN || secrets.GITHUB_TOKEN }}
           ACTOR: ${{ github.actor }}
         run: |
           set -euo pipefail
