@@ -7,7 +7,9 @@ concurrency:
 on:
   push:
     branches:
-      - "*"
+      # "**" (not "*") so branches containing a slash (e.g. feat/foo) also
+      # trigger — "*" matches only slash-free names like main.
+      - "**"
   workflow_dispatch:
 
 jobs:
