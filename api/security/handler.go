@@ -118,7 +118,7 @@ func BackfillThumbnails() string {
 			"thumbnail_w":    thumbnailWidth,
 		})
 		done++
-		// Let GC reclaim memory and yield the SQLite write lock to other goroutines
+		// Let GC reclaim memory and yield to other goroutines between captures
 		s.Data = nil
 		thumb = nil
 		time.Sleep(100 * time.Millisecond)
@@ -1215,7 +1215,7 @@ const screenshotFailureRetry = 24 * time.Hour
 const screenshotCacheTTL = 14 * 24 * time.Hour // 14 days
 
 // getRecentScreenshot loads a cached screenshot. When thumbOnly is true,
-// it avoids loading the full-size blob from SQLite — much faster for grid views.
+// it avoids loading the full-size blob from the database — much faster for grid views.
 // When allowStale is true, screenshots past the cache TTL are still returned —
 // used when serving from cache (cached=true), where a stale image beats a 404
 // and refreshing is left to the capture-jobs flow. Failure markers always

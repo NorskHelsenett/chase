@@ -35,7 +35,7 @@ func AutoMigrate(db *gorm.DB) error {
 }
 
 // AggregateAndPrunePings runs the three-tier ping retention cleanup.
-// Call from a single background goroutine to avoid SQLite lock contention.
+// Call from a single background goroutine so retention passes don't overlap.
 func AggregateAndPrunePings() {
 	aggregateAndPrunePings(database.GetDB())
 }
