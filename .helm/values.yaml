@@ -15,6 +15,25 @@ chase:
       readOnly: false
       storage: 50Mi
   host: chase.example.com
+  # Expose via the Gateway API instead of an Ingress. Presence of this block
+  # renders an HTTPRoute (templates/httproute.yaml). parentRefs is required and
+  # points at an existing Gateway. hostnames defaults to `host` above; rules
+  # default to routing "/" (PathPrefix) to the first service's port.
+  # httpRoute:
+  #   parentRefs:
+  #     - name: my-gateway
+  #       namespace: gateway-system
+  #       sectionName: https
+  #   # hostnames:
+  #   #   - chase.example.com
+  #   # rules:
+  #   #   - matches:
+  #   #       - path:
+  #   #           type: PathPrefix
+  #   #           value: /
+  #   #     backendRefs:
+  #   #       - name: chase-service
+  #   #         port: 8080
   env:
     - name: SCREENSHOT_SERVICE_URL
       value: "http://screenshotr-service:8080"
