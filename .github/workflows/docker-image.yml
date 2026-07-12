@@ -189,13 +189,19 @@ jobs:
             if [ -n "$digest" ]; then echo "latest@${digest}"; else echo "latest"; fi
           }
 
-          APP_TAG=$(resolve_tag "$APP_BUILT_DIGEST" "${REGISTRY}/${REPO_LC}")
-          SHOT_TAG=$(resolve_tag "$SHOT_BUILT_DIGEST" "${REGISTRY}/${REPO_LC}/screenshotr")
-          echo "Pinning chase=${APP_TAG}  screenshotr=${SHOT_TAG}"
+          APP_REPO="${REGISTRY}/${REPO_LC}"
+          SHOT_REPO="${REGISTRY}/${REPO_LC}/screenshotr"
+          APP_TAG=$(resolve_tag "$APP_BUILT_DIGEST" "${APP_REPO}")
+          SHOT_TAG=$(resolve_tag "$SHOT_BUILT_DIGEST" "${SHOT_REPO}")
+          echo "Pinning chase=${APP_REPO}:${APP_TAG}  screenshotr=${SHOT_REPO}:${SHOT_TAG}"
 
-          # yq (mikefarah) is preinstalled on ubuntu-latest. Set each tag by
-          # path so the two pins never collide the way a blanket sed would.
+          # yq (mikefarah) is preinstalled on ubuntu-latest. Pin repository as
+          # well as tag so a build from a mirror (e.g. Forgejo/code.nhn.no)
+          # references its own registry instead of the hard-coded ghcr.io in
+          # values.yaml. Set each path individually so the pins never collide.
+          yq -i ".chase.repository = \"${APP_REPO}\"" .helm/values.yaml
           yq -i ".chase.tag = \"${APP_TAG}\"" .helm/values.yaml
+          yq -i ".screenshotr.repository = \"${SHOT_REPO}\"" .helm/values.yaml
           yq -i ".screenshotr.tag = \"${SHOT_TAG}\"" .helm/values.yaml
 
           # Bump the chart patch version from whatever is currently published.
