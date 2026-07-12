@@ -13,9 +13,9 @@ on:
   workflow_dispatch:
 
 jobs:
-  # Validate the Helm chart on every branch. The build-and-publish job below
-  # only rebuilds images whose sources changed and only packages the chart on
-  # main, so without this a chart-only change would sail through CI untested.
+  # Validate the Helm chart on every branch. build-and-publish only packages
+  # the chart on main, so without this a chart-only change would sail through
+  # CI untested.
   lint-chart:
     runs-on: ubuntu-latest
     steps:
@@ -61,23 +61,6 @@ jobs:
           repo_lower=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
           echo "REPOSITORY_LOWER=$repo_lower" >> "$GITHUB_ENV"
 
-      # On main, only rebuild the image whose sources actually changed (the
-      # chart is still republished on every main push below, so both digests
-      # stay pinned regardless of which image moved). On any other branch this
-      # filter is ignored and both images are built and pushed to the :dev tag
-      # for testing — the chart is never published off main.
-      - name: Detect changes
-        uses: dorny/paths-filter@v3
-        id: changes
-        with:
-          filters: |
-            app:
-              - 'api/**'
-              - 'web/**'
-              - 'Dockerfile'
-            screenshot:
-              - 'screenshot-service/**'
-
       # QEMU disabled: only needed to emulate non-native arch (arm64). All
       # images now build for the runner's native linux/amd64, so the extra
       # emulation setup is unnecessary. Restore this step if arm64 is needed.
@@ -90,14 +73,6 @@ jobs:
           driver-opts: |
             image=moby/buildkit:latest
 
-      - name: Cache Docker layers
-        uses: actions/cache@v4
-        with:
-          path: /tmp/.buildx-cache
-          key: ${{ runner.os }}-buildx-${{ github.sha }}
-          restore-keys: |
-            ${{ runner.os }}-buildx-
-
       - name: Login to container registry
         uses: docker/login-action@v3
         with:
@@ -105,9 +80,15 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.PACKAGES_TOKEN || secrets.GITHUB_TOKEN }}
 
+      # Both images build on every push — no dorny/paths-filter change
+      # detection, since that action isn't mirrored on Forgejo's registry and
+      # 404s there. On main they publish :latest and the chart is pinned and
+      # pushed below; on any other branch they publish :dev and the chart is
+      # not published. Build cache is registry-backed rather than actions/cache
+      # (whose backing service isn't available on the Forgejo runner); both
+      # approaches work identically on GitHub and Forgejo.
       # ---------- App image (api + web, root Dockerfile) ----------
       - name: App image metadata
-        if: steps.changes.outputs.app == 'true' || github.ref != 'refs/heads/main'
         uses: docker/metadata-action@v4.3.0
         id: meta-app
         with:
@@ -118,7 +99,6 @@ jobs:
               type=raw,value=dev,enable=${{ github.ref != format('refs/heads/{0}', 'main') }}
 
       - name: Build and push app image
-        if: steps.changes.outputs.app == 'true' || github.ref != 'refs/heads/main'
         uses: docker/build-push-action@v6
         id: build-app
         with:
@@ -128,18 +108,11 @@ jobs:
           push: true
           tags: ${{ steps.meta-app.outputs.tags }}
           labels: ${{ steps.meta-app.outputs.labels }}
-          cache-from: type=local,src=/tmp/.buildx-cache
-          cache-to: type=local,dest=/tmp/.buildx-cache-new,mode=max
-
-      - name: Move cache
-        if: steps.changes.outputs.app == 'true' || github.ref != 'refs/heads/main'
-        run: |
-          rm -rf /tmp/.buildx-cache
-          mv /tmp/.buildx-cache-new /tmp/.buildx-cache
+          cache-from: type=registry,ref=${{ env.REGISTRY_HOST }}/${{ env.REPOSITORY_LOWER }}:buildcache
+          cache-to: type=registry,ref=${{ env.REGISTRY_HOST }}/${{ env.REPOSITORY_LOWER }}:buildcache,mode=max
 
       # ---------- Screenshot service image ----------
       - name: Screenshot image metadata
-        if: steps.changes.outputs.screenshot == 'true' || github.ref != 'refs/heads/main'
         uses: docker/metadata-action@v4.3.0
         id: meta-shot
         with:
@@ -150,7 +123,6 @@ jobs:
               type=raw,value=dev,enable=${{ github.ref != format('refs/heads/{0}', 'main') }}
 
       - name: Build and push screenshot image
-        if: steps.changes.outputs.screenshot == 'true' || github.ref != 'refs/heads/main'
         uses: docker/build-push-action@v6
         id: build-shot
         with:
@@ -160,6 +132,8 @@ jobs:
           push: true
           tags: ${{ steps.meta-shot.outputs.tags }}
           labels: ${{ steps.meta-shot.outputs.labels }}
+          cache-from: type=registry,ref=${{ env.REGISTRY_HOST }}/${{ env.REPOSITORY_LOWER }}/screenshotr:buildcache
+          cache-to: type=registry,ref=${{ env.REGISTRY_HOST }}/${{ env.REPOSITORY_LOWER }}/screenshotr:buildcache,mode=max
 
       # ---------- Publish Helm chart (main only), pinning BOTH digests ----------
       - name: Install Helm
@@ -178,25 +152,12 @@ jobs:
           set -euo pipefail
           REPO_LC=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
 
-          # The tag to pin for an image: the digest we just built if it was
-          # rebuilt this run, otherwise the digest the registry's :latest
-          # currently resolves to — so an image that didn't change keeps its
-          # existing pin instead of falling back to a floating tag. Only if the
-          # image was never published do we leave a plain :latest.
-          resolve_tag() {
-            local built="$1" ref="$2" digest
-            if [ -n "$built" ]; then
-              echo "latest@${built}"
-              return
-            fi
-            digest=$(docker buildx imagetools inspect "${ref}:latest" --format '{{.Manifest.Digest}}' 2>/dev/null || true)
-            if [ -n "$digest" ]; then echo "latest@${digest}"; else echo "latest"; fi
-          }
-
+          # Both images are built every run, so pin each at the digest just
+          # built (as latest@sha256:...).
           APP_REPO="${REGISTRY}/${REPO_LC}"
           SHOT_REPO="${REGISTRY}/${REPO_LC}/screenshotr"
-          APP_TAG=$(resolve_tag "$APP_BUILT_DIGEST" "${APP_REPO}")
-          SHOT_TAG=$(resolve_tag "$SHOT_BUILT_DIGEST" "${SHOT_REPO}")
+          APP_TAG="latest@${APP_BUILT_DIGEST}"
+          SHOT_TAG="latest@${SHOT_BUILT_DIGEST}"
           echo "Pinning chase=${APP_REPO}:${APP_TAG}  screenshotr=${SHOT_REPO}:${SHOT_TAG}"
 
           # yq (mikefarah) is preinstalled on ubuntu-latest. Pin repository as
