@@ -175,12 +175,6 @@ func main() {
 		log.Fatalf("Unable to initalize session storage: %v", err)
 	}
 
-	// One-shot atomic import from a legacy SQLite chase.db, gated by
-	// MIGRATE_FROM_SQLITE. No-op when unset, missing, or already applied.
-	if err := migrateFromSQLite(db); err != nil {
-		log.Fatalf("SQLite import failed: %v", err)
-	}
-
 	// Initialize scheduler and register all jobs (before routes so handlers can reference it)
 	sched = scheduler.New(db)
 	registerJobs(sched)

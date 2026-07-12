@@ -176,16 +176,24 @@ jobs:
           yq -i ".screenshotr.repository = \"${SHOT_REPO}\"" .helm/values.yaml
           yq -i ".screenshotr.tag = \"${SHOT_TAG}\"" .helm/values.yaml
 
-          # Bump the chart patch version from whatever is currently published.
+          # Chart.yaml's major.minor is authoritative — bump it there to start a
+          # new series (e.g. 0.1.0). The patch auto-increments per publish: if the
+          # latest published chart is already in that major.minor series we bump
+          # its patch, otherwise we start the new series at the Chart.yaml version.
+          CHART_VERSION=$(grep -oP '^version:\s*\K[0-9]+\.[0-9]+\.[0-9]+' .helm/Chart.yaml)
+          CHART_MM=${CHART_VERSION%.*}
           helm pull "oci://${REGISTRY}/${REPO_LC}/chase" || true
           file=$(ls chase-*.tgz 2>/dev/null | head -1 || true)
+          PUBLISHED=""
           if [ -n "$file" ]; then
-            CURRENT_VERSION=$(echo "$file" | grep -oP 'chase-\K[0-9]+\.[0-9]+\.[0-9]+')
-          else
-            CURRENT_VERSION=0.0.0
+            PUBLISHED=$(echo "$file" | grep -oP 'chase-\K[0-9]+\.[0-9]+\.[0-9]+')
           fi
-          NEW_VERSION=$(echo "$CURRENT_VERSION" | awk -F. '{print $1"."$2"."$3+1}')
-          echo "Chart version ${CURRENT_VERSION} -> ${NEW_VERSION}"
+          if [ -n "$PUBLISHED" ] && [ "${PUBLISHED%.*}" = "$CHART_MM" ]; then
+            NEW_VERSION="${CHART_MM}.$(( ${PUBLISHED##*.} + 1 ))"
+          else
+            NEW_VERSION="$CHART_VERSION"
+          fi
+          echo "Chart version: published=${PUBLISHED:-none} chart=${CHART_VERSION} -> ${NEW_VERSION}"
           sed -i "s/^version: .*/version: ${NEW_VERSION}/" .helm/Chart.yaml
 
           echo "$REGISTRY_TOKEN" | helm registry login "${REGISTRY}" -u "${ACTOR}" --password-stdin

@@ -2,7 +2,7 @@ package scheduler
 
 import "time"
 
-// JobRunRecord is persisted in SQLite for run history.
+// JobRunRecord is persisted in Postgres for run history.
 type JobRunRecord struct {
 	ID        uint      `gorm:"primaryKey" json:"id"`
 	JobName   string    `gorm:"index;type:varchar(100)" json:"job_name"`
