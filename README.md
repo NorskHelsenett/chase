@@ -35,6 +35,8 @@ OIDC_REDIRECT_URL=http://localhost:5173/api/callback
 EOF
 ```
 
+The authorization code flow uses PKCE (S256), so `OIDC_CLIENT_SECRET` can be left empty if your identity provider allows public clients.
+
 ## Run docker
 ```bash
 docker volume create chase_data
