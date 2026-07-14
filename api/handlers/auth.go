@@ -2,6 +2,9 @@ package handlers
 
 import (
 	"context"
+	"crypto/rand"
+	"crypto/subtle"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"net/http"
@@ -18,14 +21,67 @@ import (
 	"golang.org/x/oauth2"
 )
 
+const (
+	stateCookie    = "oauth_state"
+	verifierCookie = "oauth_verifier"
+	// The login/callback round-trip should complete well within this window.
+	authFlowMaxAge = 600
+)
+
+func generateState() (string, error) {
+	b := make([]byte, 32)
+	if _, err := rand.Read(b); err != nil {
+		return "", err
+	}
+	return base64.RawURLEncoding.EncodeToString(b), nil
+}
+
 func HandleLogin(c *gin.Context) {
-	url := auth.Config.AuthCodeURL("state", oauth2.AccessTypeOffline)
+	state, err := generateState()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate state"})
+		return
+	}
+	verifier := oauth2.GenerateVerifier()
+
+	secure := c.Request.TLS != nil
+	c.SetSameSite(http.SameSiteLaxMode)
+	c.SetCookie(stateCookie, state, authFlowMaxAge, "/", "", secure, true)
+	c.SetCookie(verifierCookie, verifier, authFlowMaxAge, "/", "", secure, true)
+
+	url := auth.Config.AuthCodeURL(state, oauth2.AccessTypeOffline, oauth2.S256ChallengeOption(verifier))
 	c.Redirect(http.StatusFound, url)
 }
 
 func HandleCallback(c *gin.Context) {
+	secure := c.Request.TLS != nil
+	clearAuthFlowCookies := func() {
+		c.SetSameSite(http.SameSiteLaxMode)
+		c.SetCookie(stateCookie, "", -1, "/", "", secure, true)
+		c.SetCookie(verifierCookie, "", -1, "/", "", secure, true)
+	}
+
+	expectedState, err := c.Cookie(stateCookie)
+	if err != nil || expectedState == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Missing or expired login state, please try logging in again"})
+		return
+	}
+	if subtle.ConstantTimeCompare([]byte(c.Query("state")), []byte(expectedState)) != 1 {
+		clearAuthFlowCookies()
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid state parameter"})
+		return
+	}
+
+	verifier, err := c.Cookie(verifierCookie)
+	if err != nil || verifier == "" {
+		clearAuthFlowCookies()
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Missing or expired login state, please try logging in again"})
+		return
+	}
+	clearAuthFlowCookies()
+
 	code := c.Query("code")
-	token, err := auth.Config.Exchange(context.Background(), code)
+	token, err := auth.Config.Exchange(context.Background(), code, oauth2.VerifierOption(verifier))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to exchange token"})
 		return
