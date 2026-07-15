@@ -25,6 +25,7 @@
 	let allowInsecure = $state(false);
 	let isActive = $state(true); // Default active status
 	let updateExisting = $state(false); // Default to not update existing servers
+	let doNotMarkAsNew = $state(false); // Backdate FirstSeen so old/migrated hosts skip the "New" filter
 	let sites = $state('');
 	const placeholderText = `https://example.com
 https://example.org
@@ -59,13 +60,78 @@ https://another-site.com`;
 		return result;
 	}
 
+	// Parse a single CSV line, honoring quoted fields and escaped quotes ("").
+	function parseCsvLine(line: string): string[] {
+		const result: string[] = [];
+		let cur = '';
+		let inQuotes = false;
+		for (let i = 0; i < line.length; i++) {
+			const ch = line[i];
+			if (inQuotes) {
+				if (ch === '"') {
+					if (line[i + 1] === '"') {
+						cur += '"';
+						i++;
+					} else {
+						inQuotes = false;
+					}
+				} else {
+					cur += ch;
+				}
+			} else if (ch === '"') {
+				inQuotes = true;
+			} else if (ch === ',') {
+				result.push(cur);
+				cur = '';
+			} else {
+				cur += ch;
+			}
+		}
+		result.push(cur);
+		return result;
+	}
+
+	// Detect and parse pasted CSV (e.g. a re-imported export). Returns the URL
+	// list plus a url -> firstSeen map, or null when the input isn't CSV (so the
+	// plain URL-list flow is used instead). Requires a header row with a "URL"
+	// column, which the export always writes.
+	function parseCsvImport(input: string): { sites: string[]; firstSeen: Record<string, string> } | null {
+		const lines = input.split(/\r?\n/).filter((l) => l.trim());
+		if (lines.length === 0) return null;
+
+		const header = parseCsvLine(lines[0]).map((h) => h.trim().toLowerCase());
+		const urlIdx = header.indexOf('url');
+		if (urlIdx === -1 || header.length < 2) return null; // not a recognizable CSV header
+
+		const firstSeenIdx = header.indexOf('first seen');
+		const sites: string[] = [];
+		const firstSeen: Record<string, string> = {};
+
+		for (let i = 1; i < lines.length; i++) {
+			const cols = parseCsvLine(lines[i]);
+			const url = (cols[urlIdx] ?? '').trim();
+			if (!url) continue;
+			sites.push(url);
+			if (firstSeenIdx !== -1) {
+				const fs = (cols[firstSeenIdx] ?? '').trim();
+				if (fs && fs !== 'N/A') firstSeen[url] = fs;
+			}
+		}
+
+		if (sites.length === 0) return null;
+		return { sites, firstSeen };
+	}
+
 	// Submit form data
 	async function handleSubmit() {
 		isLoading = true;
 
 		try {
-			// Process sites using our helper function that handles multiple separators
-			const sitesList = processSiteInput(sites);
+			// If the input is a pasted CSV (e.g. a re-imported export), pull the URLs
+			// and their First Seen values from it; otherwise treat it as a plain list.
+			const csv = parseCsvImport(sites);
+			const sitesList = csv ? csv.sites : processSiteInput(sites);
+			const firstSeenMap = csv ? csv.firstSeen : {};
 
 			if (sitesList.length === 0) {
 				alert('Please enter at least one site to import');
@@ -82,7 +148,9 @@ https://another-site.com`;
 					allow_insecure: allowInsecure,
 					active: isActive
 				},
-				update_existing: updateExisting // Add the update option to the request
+				update_existing: updateExisting, // Add the update option to the request
+				do_not_mark_as_new: doNotMarkAsNew, // Backdate FirstSeen for old/migrated hosts
+				first_seen: firstSeenMap // Preserve original first-seen dates from a CSV round-trip
 			};
 
 			// Send to API
@@ -173,6 +241,7 @@ https://another-site.com`;
 		allowInsecure = false; // Reset to default
 		isActive = true; // Reset to default
 		updateExisting = false; // Reset to default
+		doNotMarkAsNew = false; // Reset to default
 		showFailedModal = false;
 		failedImports = [];
 		// Don't close the modal if called externally
@@ -263,7 +332,7 @@ https://another-site.com`;
 					></textarea>
 					<p class="text-xs text-gray-400 mt-2">
 						Enter URLs separated by newlines, commas, or semicolons. You can mix separators as
-						needed.
+						needed. You can also paste an exported CSV — its First Seen dates will be preserved.
 					</p>
 				</div>
 
@@ -344,6 +413,20 @@ https://another-site.com`;
 						{#if updateExisting}
 							<p class="text-xs text-amber-400 mt-1 pl-7">
 								Existing servers will have their settings updated to match these global settings
+							</p>
+						{/if}
+					</div>
+					<div class="mt-4 ml-4">
+						<CustomCheckbox
+							checked={doNotMarkAsNew}
+							onchange={(value) => (doNotMarkAsNew = value)}
+							label="Do not mark as new"
+						/>
+						{#if doNotMarkAsNew}
+							<p class="text-xs text-gray-400 mt-1 pl-7">
+								Imported hosts will be backdated so they don't appear under the "New" filter. Use
+								this for old hosts or database migrations. A First Seen date from a pasted CSV always
+								takes precedence.
 							</p>
 						{/if}
 					</div>

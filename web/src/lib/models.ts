@@ -8,6 +8,7 @@ export interface BaseModel {
 export interface Server extends BaseModel {
 	url: string;
 	active: boolean;
+	first_seen?: string;
 	follow_redirect: boolean;
 	failure_count: number;
 	next_check: Date;

@@ -231,7 +231,7 @@ function updateGraph() {
 				const thirtyDaysAgo = new Date();
 				thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 				serverList = serverList.filter(
-					(server: Server) => new Date(server.CreatedAt) >= thirtyDaysAgo
+					(server: Server) => new Date(server.first_seen ?? server.CreatedAt) >= thirtyDaysAgo
 				);
 			}
 		}

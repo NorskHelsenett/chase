@@ -17,7 +17,14 @@ import (
 type BatchImportRequest struct {
 	Sites          []string `json:"sites" binding:"required"` // URLs to import (already processed for separators on client side)
 	UpdateExisting bool     `json:"update_existing"`          // Whether to update existing servers or skip them
-	Settings       struct {
+	// DoNotMarkAsNew backdates FirstSeen for imported hosts (that have no explicit
+	// first_seen) so they don't clutter the "New" filter — useful when importing
+	// old hosts or migrating a database.
+	DoNotMarkAsNew bool `json:"do_not_mark_as_new"`
+	// FirstSeen maps a site string (exactly as sent in Sites) to an RFC3339
+	// timestamp, letting a CSV round-trip preserve the original first-seen date.
+	FirstSeen map[string]string `json:"first_seen,omitempty"`
+	Settings  struct {
 		UpdateInterval int  `json:"update_interval"`
 		FollowRedirect bool `json:"follow_redirect"`
 		AllowInsecure  bool `json:"allow_insecure"`
@@ -61,6 +68,22 @@ func BatchImportServers(c *gin.Context) {
 	// Collect IDs to schedule after commit
 	var serversToCheck []uint
 
+	// firstSeenFor resolves the FirstSeen override for a site: an explicit CSV
+	// value wins; otherwise "do not mark as new" backdates it past the 30-day
+	// window. Returns nil to let the default (now) apply.
+	firstSeenFor := func(site string) *time.Time {
+		if raw, ok := request.FirstSeen[site]; ok && raw != "" {
+			if t, err := time.Parse(time.RFC3339, raw); err == nil {
+				return &t
+			}
+		}
+		if request.DoNotMarkAsNew {
+			t := time.Now().AddDate(0, 0, -31)
+			return &t
+		}
+		return nil
+	}
+
 	for _, site := range request.Sites {
 		formattedURL, err := utils.EnsureHTTPS(site)
 		if err != nil {
@@ -77,6 +100,8 @@ func BatchImportServers(c *gin.Context) {
 		}
 
 		cleanURL := strings.TrimPrefix(strings.TrimPrefix(formattedURL, "https://"), "http://")
+
+		firstSeen := firstSeenFor(site)
 
 		// Try to fetch existing server (safe, returns only one row)
 		var existing Server
@@ -107,6 +132,12 @@ func BatchImportServers(c *gin.Context) {
 					"next_check":      time.Now().Add(time.Duration(request.Settings.UpdateInterval) * time.Minute),
 				}
 
+				// Only touch first_seen when an override is supplied, so we never
+				// overwrite an existing server's real first-seen date with "now".
+				if firstSeen != nil {
+					updates["first_seen"] = *firstSeen
+				}
+
 				if err := tx.Model(&existing).Updates(updates).Error; err != nil {
 					response.Failed++
 					response.Errors = append(response.Errors, "Failed to update server: "+cleanURL)
@@ -131,7 +162,8 @@ func BatchImportServers(c *gin.Context) {
 			continue
 		}
 
-		// Create new server
+		// Create new server. Leaving FirstSeen as the zero value lets BeforeCreate
+		// default it to now; an override (CSV value or "do not mark as new") sets it.
 		server := Server{
 			URL:                cleanURL,
 			Active:             request.Settings.Active,
@@ -140,6 +172,9 @@ func BatchImportServers(c *gin.Context) {
 			ExpectedStatusCode: 200,
 			UpdateInterval:     request.Settings.UpdateInterval,
 			NextCheck:          time.Now().Add(time.Duration(request.Settings.UpdateInterval) * time.Minute),
+		}
+		if firstSeen != nil {
+			server.FirstSeen = *firstSeen
 		}
 
 		if err := tx.Create(&server).Error; err != nil {
