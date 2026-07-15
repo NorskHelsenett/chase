@@ -1,7 +1,12 @@
 <script lang="ts">
 	import { onDestroy, onMount } from 'svelte';
-	import { get } from 'svelte/store';
 	import type { Writable } from 'svelte/store';
+	import {
+		computeGalaxyModel,
+		computePositions,
+		clusterCenter,
+		type GalaxyModel
+	} from '$lib/utils/galaxyLayout';
 
 	type GraphNode = {
 		id: string | number;
@@ -11,7 +16,6 @@
 		[k: string]: any;
 	};
 	type GraphEdge = { from: string | number; to: string | number; [k: string]: any };
-
 
 	let container: HTMLDivElement = $state();
 	let network: any;
@@ -24,33 +28,30 @@
 	}
 
 	let { graphData, loading = $bindable(true) }: Props = $props();
-	let loadPct = $state(0);
 
 	// --- helpers ---
 	const edgeId = (e: GraphEdge) => `${e.from}|${e.to}`;
 
-	// Tune these if you want tighter/looser clusters
-	const LEAF_EDGE_LEN = 110; // domain hub -> server
-	const HUB_EDGE_LEN = 220; // domain hub -> sub-domain hub
-
-	const GOLDEN_ANGLE = 2.399963229728653;
+	// Above this node count, leaf labels are hidden (they're unreadable noise
+	// anyway and text is by far the most expensive thing to draw per frame).
+	// Domain hubs keep their labels; leaves show theirs on hover and highlight.
+	const LABEL_LIMIT = 300;
+	const HIGHLIGHT_LABEL_LIMIT = 150;
+	let labelsVisible = true;
 
 	// Keep track of current highlighting so we can reset colors on the next click
 	let lastHighlightedNodes: Array<string | number> = [];
 	let lastHighlightedEdges: Array<string> = [];
 
-	// Drag state so children move together with the dragged parent
+	// Drag state so descendants move together with the dragged parent
 	let dragState: {
 		anchorId: string | number | null;
-		startPos: Record<string | number, { x: number; y: number }>;
+		pointerStart: { x: number; y: number } | null;
+		startPos: Record<string, { x: number; y: number }>;
 		childIds: Array<string | number>;
-	} = {
-		anchorId: null,
-		startPos: {},
-		childIds: []
-	};
+	} = { anchorId: null, pointerStart: null, startPos: {}, childIds: [] };
 
-	// --- styling defaults (used only for UNgrouped nodes) ---
+	// --- styling ---
 	const DEFAULT_NODE_COLOR = {
 		border: '#e65c00',
 		background: 'rgba(38,38,38,0.7)',
@@ -63,23 +64,50 @@
 		bold: { color: '#ff9d4f', size: 14, face: 'Helvetica' },
 		color: '#e6e6e6'
 	};
+	// Explicit per-group colors: also used to truly reset a node after a
+	// highlight (DataSet.update can't delete a field, so "remove the color and
+	// let the group win" silently kept the old highlight color).
+	const GROUP_COLORS: Record<string, any> = {
+		domain: {
+			background: 'rgba(230,92,0,0.8)',
+			border: '#ff7b1f',
+			highlight: { border: '#ff8c38', background: 'rgba(230,92,0,0.9)' }
+		},
+		subdomain: {
+			background: 'rgba(255,158,79,0.7)',
+			border: '#e65c00',
+			highlight: { border: '#ff8c38', background: 'rgba(255,158,79,0.85)' }
+		},
+		site: {
+			background: 'rgba(34,197,93,0.6)',
+			border: '#22C55D',
+			highlight: { border: '#4ade80', background: 'rgba(34,197,93,0.8)' }
+		},
+		error: {
+			background: 'rgba(255,76,76,0.7)',
+			border: '#ff4c4c',
+			highlight: { border: '#ff6b6b', background: 'rgba(255,76,76,0.85)' }
+		}
+	};
+	const BASE_EDGE_COLOR = { color: 'rgba(100,100,100,0.7)', hover: '#60A5FA', highlight: '#3B82F6' };
+
+	const baseLabel = (n: any) =>
+		labelsVisible || n.group === 'domain' ? (n.fullLabel ?? n.label ?? '') : '';
 
 	function resetNodeToBase(n: any) {
-		// Keep group styling by removing custom color if grouped; use defaults otherwise
-		const ret: any = { ...n, borderWidth: 2, font: n.font ?? DEFAULT_NODE_FONT };
-		if (n.group) {
-			delete ret.color; // let groups.{...}.color take over
-		} else {
-			ret.color = DEFAULT_NODE_COLOR;
-		}
-		return ret;
+		return {
+			...n,
+			borderWidth: 2,
+			font: n.font ?? DEFAULT_NODE_FONT,
+			label: baseLabel(n),
+			color: GROUP_COLORS[n.group] ?? DEFAULT_NODE_COLOR
+		};
 	}
 
 	function prepareData(nodes: GraphNode[], edges: GraphEdge[]) {
 		// Unique nodes, map isDown -> error
 		const seen = new Set<string | number>();
 		const uniqueNodes: any[] = [];
-		const groupOf: Map<string | number, string | undefined> = new Map();
 		for (const n of nodes) {
 			if (seen.has(n.id)) continue;
 			seen.add(n.id);
@@ -87,42 +115,192 @@
 			if (isDown === true) (rest as any).group = 'error';
 			const tip = buildTooltip(rest);
 			if (tip) rest.title = tip;
+			rest.fullLabel = rest.label;
 			uniqueNodes.push(rest);
-			groupOf.set(rest.id, rest.group);
 		}
+		labelsVisible = uniqueNodes.length <= LABEL_LIMIT;
+		for (const n of uniqueNodes) n.label = baseLabel(n);
 
-		// Edge ids are from|to so unchanged edges survive updates; hub-to-hub
-		// edges are longer than hub-to-leaf so subtrees fan out inside a cluster.
+		// Edge ids are from|to so unchanged edges survive updates
 		const seenEdges = new Set<string>();
 		const processedEdges: any[] = [];
 		for (const e of edges) {
 			const id = edgeId(e);
 			if (seenEdges.has(id)) continue;
 			seenEdges.add(id);
-			const bothHubs = groupOf.get(e.from) === 'domain' && groupOf.get(e.to) === 'domain';
-			processedEdges.push({
-				...e,
-				id,
-				length: bothHubs ? HUB_EDGE_LEN : LEAF_EDGE_LEN
-			});
+			processedEdges.push({ ...e, id });
 		}
 
 		return { uniqueNodes, processedEdges };
 	}
 
-	const clusterKey = (n: any) => n?.cluster || String(n?.id ?? '');
+	// --- orbit animation ---
+	// Positions are evaluated analytically from the galaxy model each frame and
+	// pushed with network.moveNode(); there is no physics simulation at all, so
+	// nothing can stall or run away regardless of graph size.
+	let model: GalaxyModel | null = null;
+	const positions = new Map<string, { x: number; y: number }>();
+	let simTime = 0;
+	let lastTs = 0;
+	let rafId = 0;
+	let running = false;
+	let orbitEnabled = true;
+	let reducedMotion = false;
+	let hoverPaused = false;
+	let dragPaused = false;
+	let slowFrames = 0;
+	let morph: { from: Map<string, { x: number; y: number }>; start: number; dur: number } | null =
+		null;
 
-	// vis restarts the simulation on every DataSet.update (clicks, filters,
-	// highlights). The interactive physics below is low-energy and self-stops
-	// via minVelocity, but this watchdog guarantees it can never run away.
-	let calmTimer: ReturnType<typeof setTimeout> | undefined;
-	function calmDown(ms = 3000) {
-		clearTimeout(calmTimer);
-		calmTimer = setTimeout(() => {
-			try {
-				network?.stopSimulation?.();
-			} catch {}
-		}, ms);
+	function ensureLoop() {
+		if (running || !network || !model) return;
+		running = true;
+		lastTs = performance.now();
+		rafId = requestAnimationFrame(frame);
+	}
+
+	function stopLoop() {
+		running = false;
+		cancelAnimationFrame(rafId);
+	}
+
+	function frame(ts: number) {
+		if (!running || !network || !model) {
+			running = false;
+			return;
+		}
+		const dt = Math.min(0.05, Math.max(0, (ts - lastTs) / 1000));
+		lastTs = ts;
+		if (orbitEnabled && !hoverPaused && !dragPaused) simTime += dt;
+
+		computePositions(model, simTime, positions);
+
+		let k = 1;
+		if (morph) {
+			k = Math.min(1, (ts - morph.start) / morph.dur);
+			k = 1 - Math.pow(1 - k, 3); // easeOutCubic
+		}
+		for (const [id, p] of positions) {
+			let x = p.x;
+			let y = p.y;
+			if (morph && k < 1) {
+				const f = morph.from.get(id);
+				if (f) {
+					x = f.x + (x - f.x) * k;
+					y = f.y + (y - f.y) * k;
+				}
+			}
+			network.moveNode(id, x, y);
+		}
+		if (morph && k >= 1) morph = null;
+		network.redraw();
+
+		// Perf watchdog: if we can't hold ~22fps for a sustained stretch, stop
+		// the ambient orbit — the layout is already complete and static.
+		if (dt >= 0.045) {
+			if (++slowFrames > 60) orbitEnabled = false;
+		} else if (slowFrames > 0) {
+			slowFrames--;
+		}
+
+		if (!morph && (!orbitEnabled || hoverPaused || dragPaused)) {
+			running = false;
+			return;
+		}
+		rafId = requestAnimationFrame(frame);
+	}
+
+	function fitToModel() {
+		if (!model || !container || !network) return;
+		const size = 2 * (model.extent + 120);
+		const scale = Math.min(container.clientWidth || 800, container.clientHeight || 600) / size;
+		network.moveTo({
+			position: { x: 0, y: 0 },
+			scale: Math.min(1, Math.max(0.03, scale)),
+			animation: false
+		});
+	}
+
+	// Build the model for new data and morph from wherever nodes currently are.
+	// First load morphs everything outward from the origin ("galaxy forming");
+	// filter changes morph surviving nodes to their new spots and spawn added
+	// nodes from their cluster's center.
+	function applyGraph(nodes: GraphNode[], edges: GraphEdge[]) {
+		if (!network || !nodeDataSet || !edgeDataSet) return;
+		resetHighlights();
+
+		const { uniqueNodes, processedEdges } = prepareData(nodes, edges);
+		const isInitial = nodeDataSet.length === 0;
+		model = computeGalaxyModel(uniqueNodes, processedEdges);
+		computePositions(model, simTime, positions);
+
+		const from = new Map<string, { x: number; y: number }>();
+		if (!isInitial) {
+			const existing = network.getPositions();
+			for (const id of Object.keys(existing)) from.set(id, existing[id]);
+		}
+		for (const n of uniqueNodes) {
+			const id = String(n.id);
+			if (from.has(id)) continue;
+			const entry = model.byId.get(id);
+			from.set(id, isInitial || !entry ? { x: 0, y: 0 } : clusterCenter(entry.cluster, simTime));
+		}
+
+		// Sync datasets; new/updated nodes get their morph-start position so
+		// nothing flashes at a random spot before the first animation frame.
+		const nextIds = new Set(uniqueNodes.map((n) => String(n.id)));
+		const removeNodes = nodeDataSet.getIds().filter((id: any) => !nextIds.has(String(id)));
+		if (removeNodes.length) {
+			nodeDataSet.remove(removeNodes);
+			for (const id of removeNodes) tooltipImages.delete(id);
+		}
+		if (uniqueNodes.length) {
+			nodeDataSet.update(
+				uniqueNodes.map((n) => {
+					const f = from.get(String(n.id))!;
+					return { ...n, x: f.x, y: f.y };
+				})
+			);
+		}
+
+		const nextEdgeIds = new Set(processedEdges.map((e) => String(e.id)));
+		const removeEdges = edgeDataSet.getIds().filter((id: any) => !nextEdgeIds.has(String(id)));
+		if (removeEdges.length) edgeDataSet.remove(removeEdges);
+		if (processedEdges.length) edgeDataSet.update(processedEdges);
+
+		morph = reducedMotion
+			? null
+			: { from, start: performance.now(), dur: isInitial ? 1600 : 700 };
+
+		if (uniqueNodes.length) loading = false;
+		if (isInitial && uniqueNodes.length) fitToModel();
+		if (uniqueNodes.length) ensureLoop();
+		else network.redraw();
+	}
+
+	// After a drag, fold the node's new position back into the orbital model so
+	// the animation continues from where the user dropped it instead of
+	// snapping back.
+	function commitDragToModel() {
+		const anchorId = dragState.anchorId;
+		if (anchorId == null || !model || !network) return;
+		const entry = model.byId.get(String(anchorId));
+		if (!entry) return;
+		const dropped = network.getPositions([anchorId])[anchorId];
+		const computed = positions.get(String(anchorId));
+		if (!dropped || !computed) return;
+		const { cluster, node } = entry;
+		if (node.parent === null) {
+			cluster.ox += dropped.x - computed.x;
+			cluster.oy += dropped.y - computed.y;
+		} else {
+			const parentPos = positions.get(node.parent);
+			if (!parentPos) return;
+			const dx = dropped.x - parentPos.x;
+			const dy = dropped.y - parentPos.y;
+			node.r = Math.hypot(dx, dy);
+			node.a = Math.atan2(dy, dx) - node.w * simTime;
+		}
 	}
 
 	// --- tooltip card (screenshot + status box) ---
@@ -199,115 +377,27 @@
 		return tip;
 	}
 
-	// Place each cluster (root domain) on a golden-angle spiral so they start
-	// scattered instead of piled on the origin; physics then only needs to
-	// tidy nodes locally within each cluster.
-	function seedClusterPositions(uniqueNodes: any[]) {
-		const clusters = new Map<string, any[]>();
-		for (const n of uniqueNodes) {
-			const key = clusterKey(n);
-			const members = clusters.get(key) || [];
-			members.push(n);
-			clusters.set(key, members);
-		}
-
-		// Biggest clusters near the center, small ones further out
-		const entries = [...clusters.entries()].sort((a, b) => b[1].length - a[1].length);
-		const radii = entries.map(([, members]) => 110 + 55 * Math.sqrt(members.length));
-		const avgRadius = radii.reduce((sum, r) => sum + r, 0) / (radii.length || 1);
-		const spacing = Math.max(300, 2.4 * avgRadius);
-
-		entries.forEach(([, members], i) => {
-			const angle = i * GOLDEN_ANGLE;
-			const dist = spacing * Math.sqrt(i);
-			const cx = Math.cos(angle) * dist;
-			const cy = Math.sin(angle) * dist;
-			// Hubs first so the domain diamond starts at the cluster center
-			members.sort((a, b) => (a.group === 'domain' ? -1 : 1) - (b.group === 'domain' ? -1 : 1));
-			members.forEach((n, j) => {
-				if (n.x !== undefined && n.y !== undefined) return;
-				const a = j * GOLDEN_ANGLE;
-				const d = radii[i] * Math.sqrt(j / members.length);
-				n.x = cx + Math.cos(a) * d;
-				n.y = cy + Math.sin(a) * d;
-			});
+	// Inject each node's live position into a DataSet update so the update
+	// itself doesn't teleport the node to a stale stored x/y.
+	function withCurrentPositions(items: any[]) {
+		if (!items.length || !network) return items;
+		const pos = network.getPositions(items.map((n: any) => n.id));
+		return items.map((n: any) => {
+			const p = pos[n.id];
+			return p ? { ...n, x: p.x, y: p.y } : n;
 		});
 	}
 
-	function updateData(nodes: GraphNode[], edges: GraphEdge[]) {
-		if (!network || !nodeDataSet || !edgeDataSet) return;
-
-		const { uniqueNodes, processedEdges } = prepareData(nodes, edges);
-
-		// Preserve positions for nodes that remain
-		const existingIds = nodeDataSet.getIds();
-		const existingPositions = existingIds.length ? network.getPositions(existingIds) : {};
-		const nextIds = new Set(uniqueNodes.map((n) => String(n.id)));
-
-		// Cluster centroids of surviving nodes, so newly added nodes drop near
-		// their own cluster and the low-energy physics only has to tidy locally
-		const centroids = new Map<string, { x: number; y: number; count: number }>();
-		let maxDist = 0;
-		for (const id of existingIds) {
-			const pos = (existingPositions as any)[id];
-			if (!pos) continue;
-			maxDist = Math.max(maxDist, Math.hypot(pos.x, pos.y));
-			const key = clusterKey(nodeDataSet.get(id));
-			const c = centroids.get(key) || { x: 0, y: 0, count: 0 };
-			c.x += pos.x;
-			c.y += pos.y;
-			c.count++;
-			centroids.set(key, c);
-		}
-
-		// Remove nodes that disappeared (filter/update fix)
-		const toRemoveNodes = existingIds.filter((id: any) => !nextIds.has(String(id)));
-		if (toRemoveNodes.length) nodeDataSet.remove(toRemoveNodes);
-
-		// Add or update nodes, injecting previous x/y when available
-		const upserts = uniqueNodes.map((n, i) => {
-			const pos = (existingPositions as any)[n.id];
-			if (pos) return { ...n, x: pos.x, y: pos.y };
-			const c = centroids.get(clusterKey(n));
-			const a = i * GOLDEN_ANGLE;
-			if (c?.count) {
-				// Near the cluster's centroid, slightly offset to avoid stacking
-				return { ...n, x: c.x / c.count + Math.cos(a) * 60, y: c.y / c.count + Math.sin(a) * 60 };
-			}
-			// Brand-new cluster: place on a ring outside the current layout
-			const ring = maxDist + 300;
-			return { ...n, x: Math.cos(a) * ring, y: Math.sin(a) * ring };
-		});
-		if (upserts.length) nodeDataSet.update(upserts);
-
-		// Edges: remove missing, then upsert
-		const existingEdgeIds = edgeDataSet.getIds();
-		const nextEdgeIdSet = new Set(processedEdges.map((e) => String(e.id)));
-		const toRemoveEdges = existingEdgeIds.filter((id: any) => !nextEdgeIdSet.has(String(id)));
-		if (toRemoveEdges.length) edgeDataSet.remove(toRemoveEdges);
-		if (processedEdges.length) edgeDataSet.update(processedEdges);
-
-		// The dataset updates restart the low-energy simulation; make sure it rests
-		calmDown();
-		network.redraw();
-	}
-
-	// --- highlight helpers (now does ALL descendants) ---
+	// --- highlight helpers (whole subtree) ---
 	function resetHighlights() {
 		if (!nodeDataSet || !edgeDataSet) return;
-
-		// Store positions to prevent movement
-		network.storePositions();
 
 		if (lastHighlightedNodes.length) {
 			const resetNodes = lastHighlightedNodes
 				.map((id) => nodeDataSet.get(id))
 				.filter(Boolean)
-				.map((n: any) => {
-					const pos = network.getPositions([n.id])[n.id];
-					return { ...resetNodeToBase(n), x: pos?.x, y: pos?.y };
-				});
-			if (resetNodes.length) nodeDataSet.update(resetNodes);
+				.map(resetNodeToBase);
+			if (resetNodes.length) nodeDataSet.update(withCurrentPositions(resetNodes));
 			lastHighlightedNodes = [];
 		}
 
@@ -315,11 +405,7 @@
 			const resetEdges = lastHighlightedEdges
 				.map((id) => edgeDataSet.get(id))
 				.filter(Boolean)
-				.map((e: any) => ({
-					...e,
-					color: { color: 'rgba(100,100,100,0.7)', highlight: '#3B82F6', hover: '#60A5FA' },
-					width: 1.5
-				}));
+				.map((e: any) => ({ ...e, color: BASE_EDGE_COLOR, width: 1.5 }));
 			if (resetEdges.length) edgeDataSet.update(resetEdges);
 			lastHighlightedEdges = [];
 		}
@@ -328,7 +414,7 @@
 	function getDescendantsAndEdges(rootId: string | number) {
 		// BFS over directed edges: follow e.from -> e.to
 		const allEdges: any[] = edgeDataSet.get();
-		const outMap = new Map<string | number, Array<any>>();
+		const outMap = new Map<string, Array<any>>();
 		for (const e of allEdges) {
 			const key = String(e.from);
 			const arr = outMap.get(key) || [];
@@ -342,8 +428,8 @@
 
 		visited.add(rootId);
 
-		while (q.length) {
-			const cur = q.shift()!;
+		for (let qi = 0; qi < q.length; qi++) {
+			const cur = q[qi];
 			const outgoing = outMap.get(String(cur)) || [];
 			for (const e of outgoing) {
 				edgesTouched.push(e);
@@ -370,10 +456,6 @@
 		const { nodeIds, edges, edgeIds } = getDescendantsAndEdges(parentId);
 		const blue = '#3B82F6';
 
-		// Store positions to prevent movement
-		network.storePositions();
-
-		// Edges first
 		const updatedEdges = edges.map((e) => ({
 			...e,
 			color: { color: blue, highlight: blue, hover: blue },
@@ -381,82 +463,72 @@
 		}));
 		if (updatedEdges.length) edgeDataSet.update(updatedEdges);
 
-		// Nodes (descendants only)
+		// Small subtrees get their labels back while highlighted, even when
+		// leaf labels are globally hidden for performance
+		const showLabels = labelsVisible || nodeIds.length <= HIGHLIGHT_LABEL_LIMIT;
 		const updatedNodes = nodeIds
 			.map((id) => nodeDataSet.get(id))
 			.filter(Boolean)
-			.map((n: any) => {
-				const pos = network.getPositions([n.id])[n.id];
-				return {
-					...n,
-					x: pos?.x,
-					y: pos?.y,
-					color: {
-						...(n.color ?? {}),
-						border: blue,
-						background: 'rgba(59,130,246,0.15)',
-						highlight: { border: blue, background: 'rgba(59,130,246,0.22)' }
-					}
-				};
-			});
-		if (updatedNodes.length) nodeDataSet.update(updatedNodes);
+			.map((n: any) => ({
+				...n,
+				label: showLabels ? (n.fullLabel ?? n.label) : n.label,
+				color: {
+					...(n.color ?? {}),
+					border: blue,
+					background: 'rgba(59,130,246,0.15)',
+					highlight: { border: blue, background: 'rgba(59,130,246,0.22)' }
+				}
+			}));
+		if (updatedNodes.length) nodeDataSet.update(withCurrentPositions(updatedNodes));
 
 		lastHighlightedNodes = nodeIds;
 		lastHighlightedEdges = edgeIds;
 	}
 
-	let safetyTimer: ReturnType<typeof setTimeout> | undefined;
+	let loadingFailsafe: ReturnType<typeof setTimeout> | undefined;
 
 	onMount(async () => {
 		const vis: any = await import('vis-network/standalone');
 
-		const initial = get(graphData);
-		const { uniqueNodes, processedEdges } = prepareData(initial.nodes, initial.edges);
-		seedClusterPositions(uniqueNodes);
+		reducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches ?? false;
+		if (reducedMotion) orbitEnabled = false;
 
-		nodeDataSet = new vis.DataSet(uniqueNodes);
-		edgeDataSet = new vis.DataSet(processedEdges);
+		nodeDataSet = new vis.DataSet([]);
+		edgeDataSet = new vis.DataSet([]);
 
 		const options = {
-			layout: { improvedLayout: false, randomSeed: 42 },
+			// Layout and animation are fully deterministic (galaxyLayout.ts), so
+			// vis physics stays off: no stabilization phase, no runaway simulation.
+			layout: { improvedLayout: false },
+			physics: false,
 			nodes: {
 				shape: 'dot',
 				size: 14,
-				font: {
-					size: 14,
-					face: 'Helvetica',
-					multi: true,
-					bold: { color: '#ff9d4f', size: 14, face: 'Helvetica' },
-					color: '#e6e6e6'
-				},
+				font: DEFAULT_NODE_FONT,
 				borderWidth: 2,
-				color: {
-					border: '#e65c00',
-					background: 'rgba(38,38,38,0.7)',
-					highlight: { border: '#ff8c38', background: '#404040' }
-				}
+				color: DEFAULT_NODE_COLOR
 			},
 			groups: {
 				domain: {
-					color: { background: 'rgba(230,92,0,0.8)', border: '#ff7b1f' },
+					color: GROUP_COLORS.domain,
 					shape: 'diamond',
 					size: 36,
 					font: { size: 16, color: '#fff' }
 				},
 				subdomain: {
-					color: { background: 'rgba(255,158,79,0.7)', border: '#e65c00' },
+					color: GROUP_COLORS.subdomain,
 					shape: 'dot',
 					size: 18,
 					font: { size: 14, color: '#fff' }
 				},
 				site: {
-					color: { background: 'rgba(34,197,93,0.6)', border: '#22C55D' },
+					color: GROUP_COLORS.site,
 					shape: 'dot',
 					size: 16,
 					font: { size: 14, color: '#fff' }
 				},
 				error: {
-					color: { background: 'rgba(255,76,76,0.7)', border: '#ff4c4c' },
+					color: GROUP_COLORS.error,
 					shape: 'triangle',
 					size: 16,
 					font: { size: 14, color: '#fff' }
@@ -466,7 +538,7 @@
 				width: 1.5,
 				smooth: false,
 				shadow: { enabled: false },
-				color: { color: 'rgba(100,100,100,0.7)', hover: '#60A5FA', highlight: '#3B82F6' },
+				color: BASE_EDGE_COLOR,
 				hoverWidth: 2,
 				selectionWidth: 2.5
 			},
@@ -478,94 +550,14 @@
 				dragNodes: true,
 				dragView: true,
 				selectable: true
-			},
-			physics: {
-				enabled: true,
-				solver: 'barnesHut',
-				barnesHut: {
-					gravitationalConstant: -8000, // strong repulsion spreads sibling leaves apart
-					centralGravity: 0.01, // nearly none, so clusters stay scattered instead of collapsing to one blob
-					springLength: 110,
-					springConstant: 0.04, // soft springs so repulsion can stretch them
-					damping: 0.5,
-					avoidOverlap: 0.6
-				},
-				stabilization: { enabled: true, iterations: 400, updateInterval: 25, fit: true },
-				adaptiveTimestep: true
 			}
 		} as any;
 
 		network = new vis.Network(container, { nodes: nodeDataSet, edges: edgeDataSet }, options);
 
-		// Show rough progress while hidden stabilization runs
-		network.on &&
-			network.on('stabilizationProgress', (p: any) => {
-				if (!p?.total) return;
-				loadPct = Math.min(100, Math.round((p.iterations / p.total) * 100));
-			});
-
-		// Stabilize once, then hand over to low-energy interactive physics:
-		// springy drags and a brief wobble after interactions, but it always
-		// comes to rest — high minVelocity stops it on its own and calmDown()
-		// is the backstop (the old forceAtlas2 phase had neither and ran forever).
-		let finalized = false;
-		function finalize() {
-			if (finalized) return;
-			finalized = true;
-			try { network.stopSimulation?.(); } catch {}
-			try { network.storePositions(); } catch {}
-			try {
-				network.setOptions({
-					physics: {
-						enabled: true,
-						solver: 'barnesHut',
-						barnesHut: {
-							// Keep repulsion close to the stabilization phase so the
-							// first interactive wobble doesn't re-compress the layout
-							gravitationalConstant: -6000,
-							centralGravity: 0.005,
-							springLength: 110,
-							springConstant: 0.03,
-							damping: 0.85,
-							avoidOverlap: 0
-						},
-						stabilization: false,
-						maxVelocity: 12,
-						// Lower than the interactive default so the opening settle keeps
-						// animating until nodes are nearly at rest (fully positioned)
-						// instead of freezing while they're still drifting.
-						minVelocity: 0.3
-					}
-				});
-			} catch {}
-			// Let the opening settle run until it actually comes to rest. minVelocity
-			// stops it once nodes are placed; this backstop only guarantees termination
-			// and is scaled to node count so big graphs aren't cut off mid-animation
-			// (the flat 3s default froze large layouts before they finished).
-			calmDown(Math.min(45000, Math.max(6000, nodeDataSet.length * 18)));
-			requestAnimationFrame(() => {
-				loading = false;
-				try {
-					resetHighlights();
-					network.unselectAll?.();
-					network.fit?.({ animation: false });
-				} catch {}
-			});
-		}
-
-		network.once('stabilizationIterationsDone', finalize);
-
-		// Safety net: force finish if stabilization takes too long. Scale the budget
-		// to node count so large graphs get enough time to finish positioning instead
-		// of cutting over to interactive physics half-laid-out (flat 10s wasn't enough
-		// for the 400-iteration stabilization on big graphs).
-		const stabilizationBudgetMs = Math.min(60000, Math.max(10000, nodeDataSet.length * 12));
-		safetyTimer = setTimeout(finalize, stabilizationBudgetMs);
-
 		// --- Interactions ---
 		// Click: background clears; node click highlights whole subtree and opens site URLs
 		network.on('click', (params: any) => {
-			calmDown();
 			if (!params.nodes?.length) {
 				resetHighlights();
 				network.unselectAll();
@@ -578,77 +570,78 @@
 			highlightSubtree(nodeId);
 
 			// Click-to-open for site nodes
-			if (n?.group === 'site' && n?.label) {
-				const url = String(n.label);
-				const fullUrl = url.startsWith('http') ? url : `https://${url}`;
-				window.open(fullUrl, '_blank');
+			if (n?.group === 'site') {
+				const url = String(n.meta?.url ?? n.fullLabel ?? '');
+				if (url) window.open(url.startsWith('http') ? url : `https://${url}`, '_blank');
 			}
 		});
 
-		// Deselect event from vis also clears
 		network.on('deselectNode', () => {
 			resetHighlights();
-			calmDown();
 		});
 
-		// Lazily load the tooltip screenshot the first time a node is hovered
+		// Hover: pause the orbit so the node doesn't drift out from under the
+		// tooltip, and lazily load the screenshot on first hover
 		network.on('hoverNode', (params: any) => {
+			hoverPaused = true;
 			const img = tooltipImages.get(params.node);
 			if (img?.dataset.src && !img.getAttribute('src')) {
 				img.src = img.dataset.src;
 			}
 		});
+		network.on('blurNode', () => {
+			hoverPaused = false;
+			ensureLoop();
+		});
 
-		// Drag parent and its direct children as a unit (descendants can be large; keep it direct for perf)
+		// Drag a node and its whole subtree as a unit; orbit pauses meanwhile
 		network.on('dragStart', (params: any) => {
 			if (!params.nodes?.length) return;
+			dragPaused = true;
 			const anchorId = params.nodes[0];
-			const allEdges: any[] = edgeDataSet.get();
-			const children = allEdges.filter((e) => String(e.from) === String(anchorId)).map((e) => e.to);
-			const ids = [anchorId, ...children];
-			const pos = network.getPositions(ids);
+			const descendants = getDescendantsAndEdges(anchorId).nodeIds;
+			const pos = network.getPositions([anchorId, ...descendants]);
 			// Delta is measured pointer-to-pointer, not pointer-to-node-center,
 			// so children don't jump by the grab offset
 			dragState = {
 				anchorId,
-				startPos: { ...(pos as any), __pointer: params.pointer.canvas },
-				childIds: children
+				pointerStart: params.pointer.canvas,
+				startPos: pos,
+				childIds: descendants
 			};
 		});
 
 		network.on('dragging', (params: any) => {
-			if (!dragState.anchorId) return;
-			const start = (dragState.startPos as any).__pointer;
+			if (dragState.anchorId == null || !dragState.pointerStart) return;
 			const cur = params.pointer.canvas;
-			const dx = cur.x - start.x;
-			const dy = cur.y - start.y;
-			// Move children by the same delta
+			const dx = cur.x - dragState.pointerStart.x;
+			const dy = cur.y - dragState.pointerStart.y;
 			for (const cid of dragState.childIds) {
-				const cStart = dragState.startPos[cid];
+				const cStart = dragState.startPos[String(cid)];
 				if (cStart) network.moveNode(cid, cStart.x + dx, cStart.y + dy);
 			}
 		});
 
 		network.on('dragEnd', () => {
-			dragState = { anchorId: null, startPos: {}, childIds: [] };
-			calmDown();
+			if (dragState.anchorId != null) commitDragToModel();
+			dragState = { anchorId: null, pointerStart: null, startPos: {}, childIds: [] };
+			dragPaused = false;
+			ensureLoop();
 		});
 
-		// Subscribe to reactive updates (filtering, etc.) — skip the immediate
-		// first emission, it's the same data the network was constructed with
-		let firstEmission = true;
+		// React to data (initial load, filter changes): fires immediately with
+		// the store's current value, then on every update
 		unsubscribe = graphData.subscribe(({ nodes, edges }) => {
-			if (firstEmission) {
-				firstEmission = false;
-				return;
-			}
-			updateData(nodes, edges);
+			applyGraph(nodes || [], edges || []);
 		});
+
+		// Never spin forever if the dataset stays empty
+		loadingFailsafe = setTimeout(() => (loading = false), 8000);
 	});
 
 	onDestroy(() => {
-		clearTimeout(safetyTimer);
-		clearTimeout(calmTimer);
+		stopLoop();
+		clearTimeout(loadingFailsafe);
 		try {
 			unsubscribe?.();
 		} catch {}
@@ -658,6 +651,8 @@
 			network?.off('dragging');
 			network?.off('dragEnd');
 			network?.off('deselectNode');
+			network?.off('hoverNode');
+			network?.off('blurNode');
 		} catch {}
 		try {
 			network?.destroy();
@@ -666,6 +661,9 @@
 			nodeDataSet?.clear();
 			edgeDataSet?.clear();
 		} catch {}
+		tooltipImages.clear();
+		positions.clear();
+		model = null;
 	});
 </script>
 
@@ -675,9 +673,7 @@
 	{#if loading}
 		<div class="graph-loading" role="status" aria-live="polite" aria-label="Loading graph">
 			<div class="spinner" aria-hidden="true"></div>
-			<div class="label">
-				Loading graph{#if loadPct}&nbsp;— {loadPct}%{/if}
-			</div>
+			<div class="label">Loading graph…</div>
 		</div>
 	{/if}
 </div>

@@ -18,7 +18,6 @@ let lastActiveFilter: string | null | undefined = $state(undefined);
 let activeFilter: string | null = $state(null);
 
 	const graphData = writable<{ nodes: GraphNode[]; edges: GraphEdge[] }>({ nodes: [], edges: [] });
-	const isLoading = writable(true);
 
 	interface GraphNode {
 		id: string;
@@ -192,13 +191,8 @@ function buildGraphData(serverList: Server[]) {
 	});
 
 async function loadGraphData(force = false) {
-	isLoading.set(true);
-	try {
-		await serverStoreActions.setFilter(activeFilter ?? null, force);
-		updateGraph();
-	} finally {
-		isLoading.set(false);
-	}
+	await serverStoreActions.setFilter(activeFilter ?? null, force);
+	updateGraph();
 }
 
 	run(() => {
@@ -277,11 +271,8 @@ function updateGraph() {
 			</div>
 		</div>
 	</div>
-	{#if $isLoading}
-		<div class="flex justify-center items-center p-6">
-			<div class="animate-pulse text-gray-500">Loading graph data...</div>
-		</div>
-	{:else}
-		<Graph {graphData} />
-	{/if}
+	<!-- Graph stays mounted across filter changes so updates morph in place
+	     instead of rebuilding the whole network; it shows its own overlay
+	     while the first dataset loads -->
+	<Graph {graphData} />
 </div>
