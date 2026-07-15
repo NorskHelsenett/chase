@@ -69,8 +69,9 @@ func BatchImportServers(c *gin.Context) {
 	var serversToCheck []uint
 
 	// firstSeenFor resolves the FirstSeen override for a site: an explicit CSV
-	// value wins; otherwise "do not mark as new" backdates it past the 30-day
-	// window. Returns nil to let the default (now) apply.
+	// value wins; otherwise "do not mark as new" backdates it to the Unix epoch
+	// so the host is never considered "new". Returns nil to let the default
+	// (now) apply.
 	firstSeenFor := func(site string) *time.Time {
 		if raw, ok := request.FirstSeen[site]; ok && raw != "" {
 			if t, err := time.Parse(time.RFC3339, raw); err == nil {
@@ -78,7 +79,7 @@ func BatchImportServers(c *gin.Context) {
 			}
 		}
 		if request.DoNotMarkAsNew {
-			t := time.Now().AddDate(0, 0, -31)
+			t := time.Unix(0, 0)
 			return &t
 		}
 		return nil
