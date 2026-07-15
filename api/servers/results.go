@@ -30,6 +30,7 @@ type serverSummary struct {
 	Comment             string    `json:"comment"`
 	UpdateInterval      int       `json:"update_interval"`
 	CreatedAt           time.Time `json:"CreatedAt"`
+	FirstSeen           time.Time `json:"first_seen"`
 	Status              string    `json:"status"`
 	LastStatusCode      int       `json:"last_status_code,omitempty"`
 	LastPingTime        time.Time `json:"last_ping_time,omitempty"`
@@ -193,6 +194,7 @@ func GetServersWithSecurityStatus(c *gin.Context) {
 			Comment:            servers[i].Comment,
 			UpdateInterval:     servers[i].UpdateInterval,
 			CreatedAt:          servers[i].CreatedAt,
+			FirstSeen:          servers[i].FirstSeen,
 			Status:             "unknown",
 			Favicon:            servers[i].Favicon,
 			SiteTitle:          servers[i].SiteTitle,

@@ -41,7 +41,9 @@
 			} else if ($statusFilter === 'new') {
 				const thirtyDaysAgo = new Date();
 				thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-				result = result.filter((server) => new Date(server.CreatedAt) >= thirtyDaysAgo);
+				result = result.filter(
+					(server) => new Date(server.first_seen ?? server.CreatedAt) >= thirtyDaysAgo
+				);
 			}
 		}
 

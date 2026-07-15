@@ -31,6 +31,14 @@ func AutoMigrate(db *gorm.DB) error {
 		}
 	}
 
+	// Backfill first_seen for rows that predate the column (or were never set),
+	// so the "New" filter keeps working for existing servers after upgrade.
+	if err := db.Exec(
+		`UPDATE servers SET first_seen = created_at WHERE first_seen IS NULL OR first_seen = '0001-01-01 00:00:00+00'`,
+	).Error; err != nil {
+		return err
+	}
+
 	return nil
 }
 
