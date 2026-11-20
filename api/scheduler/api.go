@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/norskhelsenett/chase/auth"
 )
 
 // RegisterRoutes adds scheduler API endpoints to the router group.
@@ -17,8 +18,9 @@ func (s *Scheduler) RegisterRoutes(rg *gin.RouterGroup) {
 		jobs.GET("", s.handleListJobs)
 		jobs.GET("/stream", s.handleStreamJobs)
 		jobs.GET("/:name", s.handleGetJob)
-		jobs.POST("/:name/trigger", s.handleTrigger)
-		jobs.POST("/:name/cancel", s.handleCancel)
+		// Triggering/cancelling jobs affects everyone; admin only.
+		jobs.POST("/:name/trigger", auth.RequireAdmin(), s.handleTrigger)
+		jobs.POST("/:name/cancel", auth.RequireAdmin(), s.handleCancel)
 		jobs.GET("/:name/logs", s.handleGetLogs)
 	}
 	rg.GET("/system-stats", s.handleSystemStats)

@@ -23,6 +23,10 @@ version: 0.1.0
 # It is recommended to use it with quotes.
 appVersion: "0.0.1"
 
+annotations:
+  # Artifact Hub convention (Chart.yaml v2 has no top-level license field).
+  artifacthub.io/license: Apache-2.0
+
 dependencies:
   - name: cloudnative-pg
     version: "0.22.1"

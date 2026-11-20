@@ -1,0 +1,9 @@
+CHASE - Certificate Hunting & Security Enumeration
+Copyright 2024-2026 Norsk helsenett SF
+
+This product is licensed under the Apache License, Version 2.0 (see LICENSE).
+
+This product includes third-party open source software, each under its own
+licence (MIT, BSD-3-Clause, Apache-2.0 and others). The Go dependencies are
+listed in api/go.mod and the frontend dependencies in web/package.json; their
+licence texts are distributed with the respective upstream packages.

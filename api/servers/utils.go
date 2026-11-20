@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/norskhelsenett/chase/netguard"
 	"golang.org/x/net/html"
 )
 
@@ -85,9 +86,10 @@ func pingServer(server Server) PingResult {
 		// Create custom HTTP client with timeout
 		transport := &http.Transport{
 			TLSClientConfig: tlsConfig,
-			DialContext: (&net.Dialer{
-				Timeout: 5 * time.Second,
-			}).DialContext,
+			// SSRF guard: monitored servers may be on private ranges, but never
+			// loopback, link-local/cloud-metadata or reserved addresses. Checked
+			// at dial time so redirects and body-derived URLs (manifest) are covered.
+			DialContext: netguard.Monitor.Dialer(5 * time.Second).DialContext,
 		}
 
 		client := &http.Client{
@@ -98,6 +100,9 @@ func pingServer(server Server) PingResult {
 					return http.ErrUseLastResponse
 				}
 				if len(via) >= 10 {
+					return http.ErrUseLastResponse
+				}
+				if req.URL.Scheme != "http" && req.URL.Scheme != "https" {
 					return http.ErrUseLastResponse
 				}
 				return nil

@@ -20,6 +20,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/norskhelsenett/chase/netguard"
 )
 
 const (
@@ -34,6 +36,9 @@ type Scanner struct {
 	timeout           time.Duration
 	strictTransport   *http.Transport
 	insecureTransport *http.Transport
+	// serviceTransport talks to Chase's own in-cluster services (screenshot
+	// service). It is NOT SSRF-guarded because those live on private IPs.
+	serviceTransport *http.Transport
 
 	tlsMu     sync.Mutex
 	tlsIssues []string
@@ -92,6 +97,7 @@ func NewScannerWithOptions(timeout time.Duration, opts ScannerOptions) *Scanner 
 		timeout:           timeout,
 		strictTransport:   newTransport(false),
 		insecureTransport: newTransport(true),
+		serviceTransport:  newServiceTransport(),
 		options:           opts,
 	}
 
@@ -113,9 +119,13 @@ func chaseUserAgent(target string) string {
 	return "ChaseMonitor/1.0 (+" + scannerURL + ") Automated Security Scanner for " + target
 }
 
+// newTransport builds the transport used for requests to scan targets. Every
+// dial is checked against netguard.Strict, so redirects and DNS rebinding
+// cannot reach loopback, cloud metadata or blocked private ranges.
 func newTransport(insecure bool) *http.Transport {
 	return &http.Transport{
 		Proxy:               http.ProxyFromEnvironment,
+		DialContext:         netguard.Strict.Dialer(10 * time.Second).DialContext,
 		MaxIdleConns:        50,
 		IdleConnTimeout:     90 * time.Second,
 		TLSHandshakeTimeout: 10 * time.Second,
@@ -123,6 +133,15 @@ func newTransport(insecure bool) *http.Transport {
 		TLSClientConfig: &tls.Config{
 			InsecureSkipVerify: insecure,
 		},
+	}
+}
+
+func newServiceTransport() *http.Transport {
+	return &http.Transport{
+		Proxy:               http.ProxyFromEnvironment,
+		MaxIdleConns:        20,
+		IdleConnTimeout:     90 * time.Second,
+		TLSHandshakeTimeout: 10 * time.Second,
 	}
 }
 
@@ -204,16 +223,12 @@ func (s *Scanner) recalculateVersion() {
 
 func (s *Scanner) client(followRedirects bool, insecure bool) *http.Client {
 	client := &http.Client{
-		Transport: s.strictTransport,
-		Timeout:   s.timeout,
+		Transport:     s.strictTransport,
+		Timeout:       s.timeout,
+		CheckRedirect: netguard.Strict.CheckRedirect(followRedirects, 10),
 	}
 	if insecure {
 		client.Transport = s.insecureTransport
-	}
-	if !followRedirects {
-		client.CheckRedirect = func(req *http.Request, via []*http.Request) error {
-			return http.ErrUseLastResponse
-		}
 	}
 	return client
 }

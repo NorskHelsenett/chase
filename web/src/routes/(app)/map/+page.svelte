@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { escapeHtml } from '$lib/utils/html.js';
 	import { run } from 'svelte/legacy';
 
 	import { onMount, onDestroy, tick } from 'svelte';
@@ -115,12 +116,12 @@
 					const domains = g.servers
 						.map(
 							(s) =>
-								`<a href="/server/${s.server_id}" style="color:#93c5fd;text-decoration:none">${s.url}</a> <span style="color:${s.status === 'up' ? '#4ade80' : '#f87171'}">${s.status}</span>`
+								`<a href="/server/${encodeURIComponent(s.server_id)}" style="color:#93c5fd;text-decoration:none">${escapeHtml(s.url)}</a> <span style="color:${s.status === 'up' ? '#4ade80' : '#f87171'}">${escapeHtml(s.status)}</span>`
 						)
 						.join('<br/>');
 					return `<div style="margin-bottom:0.5rem">
-					<div style="font-family:monospace;color:#e5e7eb;font-size:0.8125rem">${g.ip}</div>
-					<div style="font-size:0.6875rem;color:#9ca3af">${g.geo?.org || ''} ${g.geo?.as || ''}</div>
+					<div style="font-family:monospace;color:#e5e7eb;font-size:0.8125rem">${escapeHtml(g.ip)}</div>
+					<div style="font-size:0.6875rem;color:#9ca3af">${escapeHtml(g.geo?.org)} ${escapeHtml(g.geo?.as)}</div>
 					<div style="margin-top:0.25rem">${domains}</div>
 				</div>`;
 				})
@@ -129,7 +130,7 @@
 			circle.bindPopup(
 				`
 				<div style="background:#1a1a1a;color:#d1d5db;padding:0.5rem;border-radius:0.375rem;min-width:200px">
-					<div style="font-weight:600;margin-bottom:0.5rem;color:#e5e7eb">${loc.city}, ${loc.country}</div>
+					<div style="font-weight:600;margin-bottom:0.5rem;color:#e5e7eb">${escapeHtml(loc.city)}, ${escapeHtml(loc.country)}</div>
 					<div style="font-size:0.75rem;color:#6b7280;margin-bottom:0.5rem">${totalServers} server${totalServers > 1 ? 's' : ''} on ${loc.ips.length} IP${loc.ips.length > 1 ? 's' : ''}</div>
 					${ipList}
 				</div>

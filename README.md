@@ -111,3 +111,7 @@ Below are the environment variables used by CHASE. Set these in your `api/.env` 
 | ENV_FILE                  | api/.env      | Path to environment file to load.                                |
 
 > Fill in the values as needed for your deployment. If a variable is not set, defaults will be used where applicable.
+
+## License
+
+Copyright 2024-2026 Norsk helsenett SF. Licensed under the [Apache License, Version 2.0](LICENSE); see [NOTICE](NOTICE) for attribution. The container image ships both files under `/licenses/`.

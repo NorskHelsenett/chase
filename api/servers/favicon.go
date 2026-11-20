@@ -7,7 +7,6 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io"
-	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -16,6 +15,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/norskhelsenett/chase/database"
+	"github.com/norskhelsenett/chase/netguard"
 	"gorm.io/gorm"
 )
 
@@ -190,9 +190,8 @@ func fetchFavicon(server Server, targetURL string) (*http.Response, error) {
 			TLSClientConfig: &tls.Config{
 				InsecureSkipVerify: server.AllowInsecure,
 			},
-			DialContext: (&net.Dialer{
-				Timeout: 5 * time.Second,
-			}).DialContext,
+			// SSRF guard: favicon URLs can be user-set or page-derived.
+			DialContext: netguard.Monitor.Dialer(5 * time.Second).DialContext,
 		},
 		Timeout: faviconFetchTimeout,
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {

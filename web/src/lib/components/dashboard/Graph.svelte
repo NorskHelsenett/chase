@@ -581,7 +581,7 @@
 			if (n?.group === 'site' && n?.label) {
 				const url = String(n.label);
 				const fullUrl = url.startsWith('http') ? url : `https://${url}`;
-				window.open(fullUrl, '_blank');
+				window.open(fullUrl, '_blank', 'noopener,noreferrer');
 			}
 		});
 

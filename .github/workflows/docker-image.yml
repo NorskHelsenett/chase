@@ -12,21 +12,35 @@ on:
       - "**"
   workflow_dispatch:
 
+# Least privilege for the built-in token: read the repo, write packages
+# (the registry fallback credential below). Nothing here pushes to git.
+permissions:
+  contents: read
+  packages: write
+
+# Actions are pinned to full commit SHAs (tag in the trailing comment). The
+# same SHAs exist in Forgejo's action mirror (data.forgejo.org), so the pins
+# resolve on both forges. Bump them together (e.g. via Renovate/Dependabot).
 jobs:
   # Validate the Helm chart on every branch. build-and-publish only packages
   # the chart on main, so without this a chart-only change would sail through
   # CI untested.
   lint-chart:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       # Install via the official script rather than an action: full-URL action
       # refs (needed by Forgejo) are rejected by GitHub's resolver, and short
       # refs don't resolve on Forgejo. A script works identically on both.
+      # Script and Helm version are pinned to a release tag, not main.
       - name: Install Helm
-        run: curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+        env:
+          DESIRED_VERSION: v3.22.1
+        run: curl -fsSL "https://raw.githubusercontent.com/helm/helm/${DESIRED_VERSION}/scripts/get-helm-3" | bash
 
       - name: Lint and template chart
         run: |
@@ -42,7 +56,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       # Target the registry of whatever git provider this runs under instead
       # of a hard-coded vars.REGISTRY (which is unset on non-GitHub runners and
@@ -68,10 +82,10 @@ jobs:
       #   uses: docker/setup-qemu-action@v3
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
         with:
           driver-opts: |
-            image=moby/buildkit:latest
+            image=moby/buildkit:v0.35.1
 
       # Registry credential, in preference order:
       #   PACKAGES_TOKEN       - Forgejo (code.nhn.no) PAT with package write
@@ -81,7 +95,7 @@ jobs:
       # Each forge has its own secret store, so only the relevant PAT is set on
       # each and the first non-empty one wins.
       - name: Login to container registry
-        uses: docker/login-action@v3
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
         with:
           registry: ${{ env.REGISTRY_HOST }}
           username: ${{ github.actor }}
@@ -96,7 +110,7 @@ jobs:
       # approaches work identically on GitHub and Forgejo.
       # ---------- App image (api + web, root Dockerfile) ----------
       - name: App image metadata
-        uses: docker/metadata-action@v4.3.0
+        uses: docker/metadata-action@507c2f2dc502c992ad446e3d7a5dfbe311567a96 # v4.3.0
         id: meta-app
         with:
           images: ${{ env.REGISTRY_HOST }}/${{ env.REPOSITORY_LOWER }}
@@ -106,7 +120,7 @@ jobs:
               type=raw,value=dev,enable=${{ github.ref != format('refs/heads/{0}', 'main') }}
 
       - name: Build and push app image
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
         id: build-app
         with:
           context: .
@@ -120,7 +134,7 @@ jobs:
 
       # ---------- Screenshot service image ----------
       - name: Screenshot image metadata
-        uses: docker/metadata-action@v4.3.0
+        uses: docker/metadata-action@507c2f2dc502c992ad446e3d7a5dfbe311567a96 # v4.3.0
         id: meta-shot
         with:
           images: ${{ env.REGISTRY_HOST }}/${{ env.REPOSITORY_LOWER }}/screenshotr
@@ -130,7 +144,7 @@ jobs:
               type=raw,value=dev,enable=${{ github.ref != format('refs/heads/{0}', 'main') }}
 
       - name: Build and push screenshot image
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
         id: build-shot
         with:
           context: screenshot-service
@@ -145,7 +159,7 @@ jobs:
       # ---------- Publish Helm chart (main only), pinning BOTH digests ----------
       - name: Install Helm
         if: github.ref == 'refs/heads/main'
-        uses: azure/setup-helm@v3
+        uses: azure/setup-helm@5119fcb9089d432beecbf79bb2c7915207344b78 # v3.5
 
       - name: Pin image digests and publish chart
         if: github.ref == 'refs/heads/main'

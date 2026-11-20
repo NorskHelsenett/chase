@@ -30,8 +30,11 @@ services:
       - PYTHONUNBUFFERED=1
       - MAX_RETRIES=3
       - WAIT_TIME=3
+    # The API reaches this service over the compose network
+    # (http://screenshot:11235). The host port is only for local debugging and
+    # is bound to loopback so the service is not exposed on the network.
     ports:
-      - "8081:11235"
+      - "127.0.0.1:8081:11235"
     deploy:
       resources:
         limits:
@@ -39,8 +42,8 @@ services:
         reservations:
           memory: 512M
     user: "1001:1001"
-    extra_hosts:
-      - "host.containers.internal:host-gateway"
+    # No host-gateway mapping: the headless browser fetches untrusted URLs and
+    # must not be able to reach services listening on the Docker host.
     healthcheck:
       test: ["CMD", "wget", "--spider", "http://localhost:11235/healthz"]
       interval: 30s

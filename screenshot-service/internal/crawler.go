@@ -4,9 +4,14 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
+	"net"
 	"net/url"
 	"os"
+	"sync"
+	"sync/atomic"
 	"time"
+
+	"bookmarker/crawler/internal/netguard"
 
 	"github.com/go-rod/rod"
 	"github.com/go-rod/rod/lib/launcher"
@@ -71,8 +76,9 @@ func NewCrawler() (*Crawler, error) {
 		Headless(true).
 		NoSandbox(true).                                       // Required for Docker
 		Set("disable-blink-features", "AutomationControlled"). // Avoid detection
-		Set("disable-web-security").                           // Allow cross-origin if needed
-		Set("disable-features", "IsolateOrigins,site-per-process").
+		// Note: the same-origin policy and site isolation are deliberately left
+		// ON. Crawled pages are untrusted; with web security disabled their
+		// scripts could read internal endpoints and leak them into the output.
 		Set("disable-dev-shm-usage"). // Overcome limited resource problems
 		Set("disable-gpu")            // Disable GPU in headless mode
 
@@ -101,8 +107,18 @@ func (c *Crawler) Crawl(ctx context.Context, targetURL string, waitTime time.Dur
 		URL: targetURL,
 	}
 
+	// Each crawl gets its own throwaway browser context so cookies,
+	// localStorage, cache etc. set by one (untrusted) page never leak into
+	// a later capture. Disposing the context also closes its pages.
+	session, err := c.browser.Incognito()
+	if err != nil {
+		result.Error = fmt.Sprintf("failed to create browser context: %v", err)
+		return result, err
+	}
+	defer func() { _ = session.Close() }()
+
 	// Create a new page
-	page, err := c.browser.Page(proto.TargetCreateTarget{})
+	page, err := session.Page(proto.TargetCreateTarget{})
 	if err != nil {
 		result.Error = fmt.Sprintf("failed to create page: %v", err)
 		return result, err
@@ -113,6 +129,12 @@ func (c *Crawler) Crawl(ctx context.Context, targetURL string, waitTime time.Dur
 
 	// Set context timeout
 	page = page.Context(ctx)
+
+	// SSRF guard inside the browser: every request the page makes (main
+	// document, redirect hops, sub-resources, fetch/XHR) is paused and its host
+	// checked against netguard before Chromium is allowed to send it.
+	blockedDocument, stopGuard := guardRequests(ctx, page)
+	defer stopGuard()
 
 	// Set user agent to avoid being blocked
 	err = page.SetUserAgent(&proto.NetworkSetUserAgentOverride{
@@ -170,6 +192,10 @@ func (c *Crawler) Crawl(ctx context.Context, targetURL string, waitTime time.Dur
 	defer stop()
 
 	err = page.Navigate(targetURL)
+	if blockedDocument.Load() {
+		result.Error = "navigation to a blocked address"
+		return result, fmt.Errorf("%w: navigation blocked", netguard.ErrBlocked)
+	}
 	if err != nil {
 		result.Error = fmt.Sprintf("failed to navigate: %v", err)
 		return result, err
@@ -189,6 +215,21 @@ func (c *Crawler) Crawl(ctx context.Context, targetURL string, waitTime time.Dur
 
 	if err := c.waitForRender(page, waitTimeout); err != nil {
 		fmt.Printf("Warning: page not fully rendered after %v: %v\n", waitTimeout, err)
+	}
+
+	// A redirect (HTTP, meta refresh or JS) may have ended on a blocked
+	// address; never return content from it.
+	if blockedDocument.Load() {
+		result.Error = "navigation to a blocked address"
+		return result, fmt.Errorf("%w: navigation blocked", netguard.ErrBlocked)
+	}
+	if info, infoErr := page.Info(); infoErr == nil {
+		if finalURL, perr := url.Parse(info.URL); perr == nil && (finalURL.Scheme == "http" || finalURL.Scheme == "https") {
+			if err := netguard.CheckHost(ctx, finalURL.Hostname()); err != nil {
+				result.Error = "final URL is a blocked address"
+				return result, err
+			}
+		}
 	}
 
 	// Remove cookie consent banners (best effort - may not work on all sites)
@@ -251,6 +292,62 @@ func (c *Crawler) Crawl(ctx context.Context, targetURL string, waitTime time.Dur
 	}
 
 	return result, nil
+}
+
+// guardRequests installs a request interceptor that fails any request whose
+// host is an internal name or resolves to a blocked IP. The returned flag is
+// set when a document (top-level navigation or redirect hop) was blocked.
+//
+// Residual risk: Chromium performs its own DNS lookup after this check, so a
+// DNS-rebinding host with a near-zero TTL could still race it. With the
+// same-origin policy enabled, page scripts cannot read such cross-origin
+// responses, which limits the impact to what is rendered in the screenshot.
+func guardRequests(ctx context.Context, page *rod.Page) (*atomic.Bool, func()) {
+	blockedDocument := &atomic.Bool{}
+
+	var mu sync.Mutex
+	verdicts := map[string]bool{} // host -> blocked
+
+	isBlocked := func(host string) bool {
+		mu.Lock()
+		v, ok := verdicts[host]
+		mu.Unlock()
+		if ok {
+			return v
+		}
+		lookupCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
+		defer cancel()
+		blocked := netguard.CheckHost(lookupCtx, host) != nil
+		mu.Lock()
+		verdicts[host] = blocked
+		mu.Unlock()
+		return blocked
+	}
+
+	router := page.HijackRequests()
+	_ = router.Add("*", "", func(h *rod.Hijack) {
+		u := h.Request.URL()
+		blocked := true
+		if u.Scheme == "http" || u.Scheme == "https" || u.Scheme == "ws" || u.Scheme == "wss" {
+			host := u.Hostname()
+			if ip := net.ParseIP(host); ip != nil {
+				blocked = netguard.IsBlockedIP(ip)
+			} else {
+				blocked = isBlocked(host)
+			}
+		}
+		if blocked {
+			if h.Request.Type() == proto.NetworkResourceTypeDocument {
+				blockedDocument.Store(true)
+			}
+			h.Response.Fail(proto.NetworkErrorReasonBlockedByClient)
+			return
+		}
+		h.ContinueRequest(&proto.FetchContinueRequest{})
+	})
+	go router.Run()
+
+	return blockedDocument, func() { _ = router.Stop() }
 }
 
 // Close shuts down the browser and removes its temporary user-data directory.

@@ -27,13 +27,34 @@ function getCurrentFilterValue() {
 }
 
 // Initialize store with cached data from localStorage if available
-const initialData =
-	browser && localStorage.getItem('servers') ? JSON.parse(localStorage.getItem('servers')) : [];
+// Reads are guarded: a corrupt or unreadable value must not crash module load.
+/** @param {string} key @returns {string | null} */
+function readStorage(key) {
+	if (!browser) return null;
+	try {
+		return localStorage.getItem(key);
+	} catch {
+		return null;
+	}
+}
+
+function parseStoredServers() {
+	const raw = readStorage('servers');
+	if (!raw) return [];
+	try {
+		const parsed = JSON.parse(raw);
+		return Array.isArray(parsed) ? parsed : [];
+	} catch {
+		return [];
+	}
+}
+
+const initialData = parseStoredServers();
+const storedLastUpdated = readStorage('serversLastUpdated');
+const parsedLastUpdated = storedLastUpdated ? new Date(storedLastUpdated) : null;
 const initialLastUpdated =
-	browser && localStorage.getItem('serversLastUpdated')
-		? new Date(localStorage.getItem('serversLastUpdated'))
-		: null;
-const storedFilter = browser && localStorage.getItem('serversFilter');
+	parsedLastUpdated && !Number.isNaN(parsedLastUpdated.getTime()) ? parsedLastUpdated : null;
+const storedFilter = readStorage('serversFilter');
 const initialFilter = storedFilter && storedFilter !== 'null' ? storedFilter : 'all';
 
 // Main server data store
@@ -240,8 +261,7 @@ export const serverStoreActions = {
 		});
 
 		const ttlAgo = new Date(Date.now() - defaultCacheTTL);
-		const hasFreshData =
-			currentState.lastUpdated && new Date(currentState.lastUpdated) > ttlAgo;
+		const hasFreshData = currentState.lastUpdated && new Date(currentState.lastUpdated) > ttlAgo;
 		const isSameFilter = currentState.currentFilter === filterKey;
 
 		if (!force && hasFreshData && isSameFilter && currentState.servers.length > 0) {

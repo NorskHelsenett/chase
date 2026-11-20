@@ -2,6 +2,7 @@ package servers
 
 import (
 	"errors"
+	"fmt"
 	"log"
 	"strconv"
 	"strings"
@@ -366,29 +367,9 @@ func PatchServer(c *gin.Context) {
 		return
 	}
 
-	// Only update fields that are present in the request
-	if patch.URL != nil {
-		server.URL = *patch.URL
-	}
-	if patch.Active != nil {
-		server.Active = *patch.Active
-	}
-	if patch.FollowRedirect != nil {
-		server.FollowRedirect = *patch.FollowRedirect
-	}
-	if patch.AllowInsecure != nil {
-		server.AllowInsecure = *patch.AllowInsecure
-	}
-	if patch.ExpectedStatusCode != nil {
-		server.ExpectedStatusCode = *patch.ExpectedStatusCode
-	}
-	if patch.Comment != nil {
-		server.Comment = *patch.Comment
-	}
-	if patch.UpdateInterval != nil {
-		server.UpdateInterval = *patch.UpdateInterval
-		// Update NextCheck when interval changes
-		server.NextCheck = time.Now().Add(time.Duration(server.UpdateInterval) * time.Minute)
+	if err := applyServerPatch(&server, patch); err != nil {
+		c.JSON(400, gin.H{"error": err.Error()})
+		return
 	}
 
 	if err := db.Save(&server).Error; err != nil {
@@ -413,14 +394,24 @@ func UpdateServer(c *gin.Context) {
 	// Store the original active state before updating
 	wasActive := server.Active
 
-	if err := c.ShouldBindJSON(&server); err != nil {
+	// Bind to the editable-field struct, never the full model: binding into
+	// Server would let a client overwrite id, timestamps, favicon, etc.
+	var patch types.ServerPatch
+	if err := c.ShouldBindJSON(&patch); err != nil {
+		c.JSON(400, gin.H{"error": err.Error()})
+		return
+	}
+	if err := applyServerPatch(&server, patch); err != nil {
 		c.JSON(400, gin.H{"error": err.Error()})
 		return
 	}
 
 	server.NextCheck = time.Now().Add(time.Duration(server.UpdateInterval) * time.Minute)
 
-	db.Save(&server)
+	if err := db.Save(&server).Error; err != nil {
+		c.JSON(500, gin.H{"error": "Failed to update server"})
+		return
+	}
 
 	// Invalidate geo cache since server was updated
 	go InvalidateGeoResponseCache()
@@ -431,4 +422,37 @@ func UpdateServer(c *gin.Context) {
 	}
 
 	c.JSON(200, server)
+}
+
+// applyServerPatch copies the user-editable fields present in patch onto
+// server. A new URL goes through the same normalization as the create paths.
+func applyServerPatch(server *Server, patch types.ServerPatch) error {
+	if patch.URL != nil && *patch.URL != server.URL {
+		normalized, err := normalizeServerURL(*patch.URL)
+		if err != nil {
+			return fmt.Errorf("invalid url: %w", err)
+		}
+		server.URL = normalized
+	}
+	if patch.Active != nil {
+		server.Active = *patch.Active
+	}
+	if patch.FollowRedirect != nil {
+		server.FollowRedirect = *patch.FollowRedirect
+	}
+	if patch.AllowInsecure != nil {
+		server.AllowInsecure = *patch.AllowInsecure
+	}
+	if patch.ExpectedStatusCode != nil {
+		server.ExpectedStatusCode = *patch.ExpectedStatusCode
+	}
+	if patch.Comment != nil {
+		server.Comment = *patch.Comment
+	}
+	if patch.UpdateInterval != nil {
+		server.UpdateInterval = *patch.UpdateInterval
+		// Update NextCheck when interval changes
+		server.NextCheck = time.Now().Add(time.Duration(server.UpdateInterval) * time.Minute)
+	}
+	return nil
 }

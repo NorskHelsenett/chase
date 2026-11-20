@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"net"
 	"strings"
+
+	"github.com/norskhelsenett/chase/netguard"
 )
 
 // blockedTLDs are top-level domains or suffixes that indicate internal/non-routable services.
@@ -27,27 +29,6 @@ var blockedHosts = []string{
 	"kubernetes.default.svc",
 }
 
-// privateNetworks are CIDR ranges for private/reserved IPs.
-var privateNetworks = []net.IPNet{
-	parseCIDR("127.0.0.0/8"),     // Loopback
-	//parseCIDR("10.0.0.0/8"),      // RFC1918
-	parseCIDR("172.16.0.0/12"),   // RFC1918
-	parseCIDR("192.168.0.0/16"),  // RFC1918
-	parseCIDR("169.254.0.0/16"), // Link-local / cloud metadata
-	parseCIDR("0.0.0.0/8"),       // "This" network
-	parseCIDR("::1/128"),         // IPv6 loopback
-	parseCIDR("fc00::/7"),        // IPv6 ULA
-	parseCIDR("fe80::/10"),       // IPv6 link-local
-}
-
-func parseCIDR(cidr string) net.IPNet {
-	_, n, err := net.ParseCIDR(cidr)
-	if err != nil {
-		panic("invalid CIDR in blocklist: " + cidr)
-	}
-	return *n
-}
-
 // ValidateDomain checks whether a domain is safe to scan.
 // Returns an error describing the reason if the domain is blocked.
 func ValidateDomain(domain string) error {
@@ -58,10 +39,19 @@ func ValidateDomain(domain string) error {
 
 	// Strip protocol if present
 	host := strings.TrimPrefix(strings.TrimPrefix(domain, "https://"), "http://")
+	// Strip path, query and fragment (stored server URLs may include a path)
+	if i := strings.IndexAny(host, "/?#"); i >= 0 {
+		host = host[:i]
+	}
+	// Strip userinfo
+	if i := strings.LastIndex(host, "@"); i >= 0 {
+		host = host[i+1:]
+	}
 	// Strip port if present
 	if h, _, err := net.SplitHostPort(host); err == nil {
 		host = h
 	}
+	host = strings.Trim(host, "[]")
 	host = strings.ToLower(strings.TrimSuffix(host, "."))
 
 	// Check exact blocked hostnames
@@ -101,11 +91,9 @@ func ValidateDomain(domain string) error {
 	return nil
 }
 
+// isPrivateIP reports whether ip is blocked for scans. The policy lives in
+// netguard.Strict; 10.0.0.0/8 is intentionally allowed (internal monitored
+// hosts), while loopback, metadata, reserved and other private ranges are not.
 func isPrivateIP(ip net.IP) bool {
-	for _, n := range privateNetworks {
-		if n.Contains(ip) {
-			return true
-		}
-	}
-	return false
+	return netguard.Strict.IsBlocked(ip)
 }

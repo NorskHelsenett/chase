@@ -365,7 +365,7 @@ func (s *Scanner) fetchServiceContent(ctx context.Context, targetURL, suffix str
 
 	client := &http.Client{
 		Timeout:   serviceTimeout(),
-		Transport: s.strictTransport,
+		Transport: s.serviceTransport,
 	}
 	resp, err := s.doRequest(client, req)
 	if err != nil {

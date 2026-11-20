@@ -16,7 +16,7 @@ export function load({ params, url }) {
 	}
 	queryParams.set('waitTime', waitTime);
 	
-	const imageSrc = `/api/screenshot/${domain}?${queryParams.toString()}?cached=true`;
+	const imageSrc = `/api/screenshot/${domain}?${queryParams.toString()}`;
 	
 	return {
 		domain,

@@ -301,6 +301,15 @@ func processServer(ctx context.Context, server types.Server) BatchResult {
 		ServerURL: server.URL,
 	}
 
+	// Apply the same SSRF guard as the interactive scan endpoints: stored
+	// server URLs must not point at blocked hosts or ranges.
+	if err := ValidateDomain(server.URL); err != nil {
+		result.Error = err.Error()
+		result.SecurityError = err.Error()
+		result.ScreenshotError = err.Error()
+		return result
+	}
+
 	// Create channels for each operation
 	securityChan := make(chan struct {
 		report *SecurityReport
