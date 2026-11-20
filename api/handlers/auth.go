@@ -6,7 +6,6 @@ import (
 	"crypto/subtle"
 	"encoding/base64"
 	"errors"
-	"fmt"
 	"net/http"
 	"time"
 
@@ -152,8 +151,10 @@ func HandleCallback(c *gin.Context) {
 	c.SetCookie("session", sessionID, maxAge, "/", "", c.Request.TLS != nil, true)
 
 	if isNewUser {
-		// Redirect new users to a welcome page, passing the API token
-		c.Redirect(http.StatusFound, fmt.Sprintf("/welcome?api_token=%s", user.APIToken))
+		// Redirect new users to the welcome page. The API token is NOT put in
+		// the URL (history/Referer/log leak); the page fetches it from the
+		// authenticated GET /api/api-token endpoint.
+		c.Redirect(http.StatusFound, "/welcome")
 	} else {
 		c.Redirect(http.StatusFound, "/")
 	}

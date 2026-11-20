@@ -4,6 +4,9 @@
 chase:
   repository: ghcr.io/norskhelsenett/chase
   pullPolicy: Always
+  # "latest" is a moving tag. The chart published by CI on main rewrites this
+  # to "latest@sha256:<digest>" (see docker-image.yml), so deploy that chart
+  # (or set an explicit tag/digest) — don't deploy these raw values to prod.
   tag: "latest"
   deployment: deployment
   # chase runs as UID 101; screenshotr/certstream default to 1001.
@@ -82,7 +85,11 @@ postgres:
   database: chase
   owner: chase
   instances: 1
-  image: ghcr.io/cloudnative-pg/postgresql:17
+  # Pinned to a patch release so every node runs the same, known build.
+  # IfNotPresent is safe only with an immutable tag like this; use Always if
+  # you switch back to a moving tag such as ":17". Bump deliberately.
+  image: ghcr.io/cloudnative-pg/postgresql:17.11
+  imagePullPolicy: IfNotPresent
   storageSize: 10Gi
   # storageClass: ""
   resources:
@@ -102,6 +109,7 @@ screenshotr:
   deployment: deployment
   replicaCount: 1
   # Overwritten with "latest@sha256:..." by CI on main (see docker-image.yml).
+  # Moving tag otherwise — don't deploy the raw default to prod.
   tag: "latest"
   env:
     - name: PORT

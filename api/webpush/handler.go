@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/norskhelsenett/chase/auth"
 	"github.com/norskhelsenett/chase/types"
 	"gorm.io/gorm"
 )
@@ -73,15 +74,15 @@ func (h *Handler) RegisterRoutes(router *gin.RouterGroup) {
 		push.POST("/history/:id/dismiss", h.DismissNotification)
 		push.POST("/history/dismiss-all", h.DismissAllNotifications)
 
-		// Stats (admin only - you may want to add admin middleware)
-		push.GET("/stats", h.GetStats)
+		// Stats (admin only)
+		push.GET("/stats", auth.RequireAdmin(), h.GetStats)
 
 		// Test notification (for development/testing)
 		push.POST("/test", h.SendTestNotification)
 
 		// Admin endpoints for VAPID key management
-		push.GET("/admin/vapid-keys-status", h.GetVAPIDKeysStatus)
-		push.POST("/admin/regenerate-vapid-keys", h.RegenerateVAPIDKeysHandler)
+		push.GET("/admin/vapid-keys-status", auth.RequireAdmin(), h.GetVAPIDKeysStatus)
+		push.POST("/admin/regenerate-vapid-keys", auth.RequireAdmin(), h.RegenerateVAPIDKeysHandler)
 	}
 
 	// Notification redirect endpoint (outside /push group for cleaner URLs)
@@ -264,6 +265,18 @@ func (h *Handler) UpdatePreferences(c *gin.Context) {
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(400, gin.H{"error": "Invalid request"})
 		return
+	}
+
+	// Only accept known event types
+	known := make(map[NotificationEventType]bool)
+	for _, et := range GetAllEventTypes() {
+		known[et] = true
+	}
+	for eventTypeStr := range req {
+		if !known[NotificationEventType(eventTypeStr)] {
+			c.JSON(400, gin.H{"error": "Unknown event type: " + eventTypeStr})
+			return
+		}
 	}
 
 	// Update each preference
@@ -609,8 +622,20 @@ func (h *Handler) NotificationRedirect(c *gin.Context) {
 		return
 	}
 
+	email, exists := c.Get("email")
+	if !exists {
+		c.JSON(401, gin.H{"error": "Authentication required"})
+		return
+	}
+	userID, err := h.getUserIDByEmail(email.(string))
+	if err != nil {
+		c.JSON(500, gin.H{"error": "Failed to get user information"})
+		return
+	}
+
+	// Scope to the caller: notifications are per user.
 	var notificationLog NotificationLog
-	if err := h.db.First(&notificationLog, id).Error; err != nil {
+	if err := h.db.Where("id = ? AND user_id = ?", id, userID).First(&notificationLog).Error; err != nil {
 		c.JSON(404, gin.H{"error": "Notification not found"})
 		return
 	}
@@ -631,7 +656,7 @@ func (h *Handler) NotificationRedirect(c *gin.Context) {
 	if !notificationLog.Read {
 		now := time.Now()
 		if err := h.db.Model(&NotificationLog{}).
-			Where("id = ?", notificationLog.ID).
+			Where("id = ? AND user_id = ?", notificationLog.ID, userID).
 			Updates(map[string]interface{}{
 				"read":    true,
 				"read_at": now,

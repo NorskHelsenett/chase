@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"bookmarker/crawler/internal"
+	"bookmarker/crawler/internal/netguard"
 )
 
 type Handler struct {
@@ -40,7 +41,7 @@ func NewHandler() *Handler {
 	return &Handler{
 		pool:                  make(chan *internal.Crawler, poolSize),
 		poolSize:              poolSize,
-		httpClient:            &http.Client{Timeout: preflightTimeout()},
+		httpClient:            netguard.NewHTTPClient(preflightTimeout()),
 		requestCounts:         make(map[*internal.Crawler]int),
 		maxRequestsPerCrawler: maxRequestsPerCrawler(),
 	}
@@ -152,10 +153,23 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	// Keep log URL as the full request path for clarity.
 
+	// SSRF guard: refuse internal hostnames and hosts resolving to loopback,
+	// link-local/metadata or other reserved ranges. The preflight client and the
+	// browser re-check every connection, so this is the early, cheap rejection.
+	if err := netguard.CheckURL(r.Context(), targetURL); err != nil {
+		log.Printf("Blocked target %s: %v", targetURL, err)
+		http.Error(w, "Target address is not allowed", http.StatusForbidden)
+		return
+	}
+
 	// Preflight to get upstream status before launching a browser.
 	preflightStatusCode, err := h.preflightStatus(targetURL)
 	if err != nil {
 		log.Printf("Preflight failed %s (%s)", targetURL, format)
+		if errors.Is(err, netguard.ErrBlocked) {
+			http.Error(w, "Target address is not allowed", http.StatusForbidden)
+			return
+		}
 		http.Error(w, "Failed to reach URL", statusFromCrawlError(err, "preflight failed"))
 		return
 	}
@@ -198,6 +212,10 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	result, err = crawler.Crawl(ctx, targetURL, waitTime, captureScreenshot, fullPageScreenshot, viewportWidth, viewportHeight)
 	if err != nil || result.Error != "" {
 		log.Printf("Error crawling %s (%s): %v / %s", targetURL, format, err, result.Error)
+		if errors.Is(err, netguard.ErrBlocked) {
+			http.Error(w, "Target address is not allowed", http.StatusForbidden)
+			return
+		}
 		http.Error(w, "Failed to crawl URL", statusFromCrawlError(err, result.Error))
 		return
 	}
@@ -234,6 +252,11 @@ func (h *Handler) servePNG(w http.ResponseWriter, result *internal.CrawlResult, 
 
 func (h *Handler) serveHTML(w http.ResponseWriter, result *internal.CrawlResult, statusCode int) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	// The HTML comes from an arbitrary third-party page. Never let it run as
+	// script in this service's origin: sandbox it (opaque origin, no scripts),
+	// while still allowing images/styles so it renders in an <iframe> preview.
+	w.Header().Set("Content-Security-Policy", "sandbox; default-src 'none'; script-src 'none'; img-src * data:; style-src * 'unsafe-inline'; font-src * data:")
+	w.Header().Set("X-Content-Type-Options", "nosniff")
 	w.Header().Set("Cache-Control", "public, max-age=3600") // 1 hour
 	w.WriteHeader(statusCode)
 	w.Write([]byte(result.HTML))

@@ -16,6 +16,7 @@ func getApiToken(c *gin.Context) {
 	user, err := getUserFromCookie(c)
 	if err != nil {
 		c.AbortWithStatus(http.StatusUnauthorized)
+		return
 	}
 	db = database.GetDB()
 	var apiToken string

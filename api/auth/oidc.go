@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"time"
 
 	"github.com/norskhelsenett/chase/types"
 	"golang.org/x/oauth2"
@@ -42,8 +43,12 @@ func InitOIDC() error {
 	return nil
 }
 
+// oidcHTTPClient is used for all IdP calls so a slow or hung IdP can't block
+// the login callback indefinitely.
+var oidcHTTPClient = &http.Client{Timeout: 10 * time.Second}
+
 func fetchOpenIDConfiguration(issuerURL string) (*types.OpenIDConfiguration, error) {
-	resp, err := http.Get(issuerURL + "/.well-known/openid-configuration")
+	resp, err := oidcHTTPClient.Get(issuerURL + "/.well-known/openid-configuration")
 	if err != nil {
 		return nil, err
 	}
@@ -74,8 +79,7 @@ func GetUserInfo(accessToken string) (*types.UserInfo, error) {
 
 	req.Header.Set("Authorization", "Bearer "+accessToken)
 
-	client := &http.Client{}
-	resp, err := client.Do(req)
+	resp, err := oidcHTTPClient.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("failed to send request: %v", err)
 	}

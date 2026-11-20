@@ -1,5 +1,7 @@
-# Stage 1: Build the SvelteKit frontend with Bun
-FROM node AS frontend-builder
+# Stage 1: Build the SvelteKit frontend
+# Pinned to an LTS major (glibc-based slim, so esbuild/rollup native binaries
+# install without musl surprises) instead of the mutable node:latest.
+FROM node:22-slim AS frontend-builder
 WORKDIR /app/frontend
 
 # Copy package.json
@@ -44,6 +46,9 @@ COPY --from=backend-builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
 # Copy the binary and web files as user 101
 COPY --from=backend-builder --chown=101:101 /app/backend/chase /chase
 COPY --from=frontend-builder --chown=101:101 /app/frontend/build /web
+
+# Licence and third-party notices (scratch inherits none from a base image)
+COPY LICENSE NOTICE /licenses/
 
 # Define any necessary volumes
 VOLUME ["/data"]

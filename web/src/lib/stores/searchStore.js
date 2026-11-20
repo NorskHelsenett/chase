@@ -5,10 +5,15 @@ const CACHE_DURATION_MS = 5 * 60 * 1000; // 5 minutes in milliseconds
 
 function createSearchStore() {
 	// Load initial state from localStorage
-	const storedHistory =
-		typeof localStorage !== 'undefined'
-			? JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]')
-			: [];
+	let storedHistory = [];
+	try {
+		if (typeof localStorage !== 'undefined') {
+			const parsed = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
+			if (Array.isArray(parsed)) storedHistory = parsed;
+		}
+	} catch {
+		// Corrupt or unreadable value: start with an empty history.
+	}
 
 	const { subscribe, set, update } = writable(storedHistory);
 
@@ -35,7 +40,11 @@ function createSearchStore() {
 
 				// Save to localStorage
 				if (typeof localStorage !== 'undefined') {
-					localStorage.setItem(STORAGE_KEY, JSON.stringify(newHistory));
+					try {
+						localStorage.setItem(STORAGE_KEY, JSON.stringify(newHistory));
+					} catch {
+						// Storage unavailable: history stays in memory only.
+					}
 				}
 				return newHistory;
 			});
@@ -50,11 +59,9 @@ function createSearchStore() {
 			const normalizedQuery = query.toLowerCase().trim();
 			const now = Date.now();
 
-			const cached = history.find(
-				(item) => item.query.toLowerCase().trim() === normalizedQuery
-			);
+			const cached = history.find((item) => item.query.toLowerCase().trim() === normalizedQuery);
 
-			if (cached && (now - cached.timestamp < CACHE_DURATION_MS)) {
+			if (cached && now - cached.timestamp < CACHE_DURATION_MS) {
 				return {
 					results: cached.results,
 					timestamp: cached.timestamp
@@ -66,7 +73,11 @@ function createSearchStore() {
 		clear: () => {
 			set([]);
 			if (typeof localStorage !== 'undefined') {
-				localStorage.removeItem(STORAGE_KEY);
+				try {
+					localStorage.removeItem(STORAGE_KEY);
+				} catch {
+					// Storage unavailable: history stays in memory only.
+				}
 			}
 		}
 	};

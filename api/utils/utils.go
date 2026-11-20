@@ -2,10 +2,9 @@ package utils
 
 import (
 	"crypto/rand"
-	"encoding/base64"
 	"log"
+	"math/big"
 	"os"
-	"strings"
 )
 
 func GetEnv(key, fallback string) string {
@@ -17,22 +16,18 @@ func GetEnv(key, fallback string) string {
 }
 
 func GenerateAPIToken() string {
-	b := make([]byte, 32) // 32 bytes will give us more than enough characters
-	if _, err := rand.Read(b); err != nil {
-		log.Fatalf("Error generating random bytes: %v", err)
-	}
-
-	// Use RawURLEncoding to avoid padding characters
-	encoded := base64.RawURLEncoding.EncodeToString(b)
-
-	// Remove any non-alphanumeric characters
-	alphanumeric := strings.Map(func(r rune) rune {
-		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') {
-			return r
+	// Draw uniformly from an alphanumeric alphabet so the result is always
+	// exactly 32 characters ("sk-" + 32 = 35, which auth relies on). The
+	// previous base64-and-strip approach could yield fewer than 32 chars and
+	// panic on the slice.
+	const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
+	out := make([]byte, 32)
+	for i := range out {
+		n, err := rand.Int(rand.Reader, big.NewInt(int64(len(alphabet))))
+		if err != nil {
+			log.Fatalf("Error generating random bytes: %v", err)
 		}
-		return -1
-	}, encoded)
-
-	// Trim to ensure consistent length and add prefix
-	return "sk-" + alphanumeric[:32]
+		out[i] = alphabet[n.Int64()]
+	}
+	return "sk-" + string(out)
 }

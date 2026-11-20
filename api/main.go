@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"net/http"
 	"os"
 	"strconv"
 	"strings"
@@ -93,13 +94,17 @@ func setupRoutes(r *gin.Engine) {
 		api.GET("/callback", handlers.HandleCallback)
 		api.GET("/logout", handlers.HandleLogout)
 
-		api.GET("/security/:domain", security.SecurityScanHandler)
-		api.GET("/security/:domain/stream", security.SecurityScanSSEHandler)
-		api.GET("/screenshot/:domain", security.ScreenshotHandler)
 		api.POST("/webhooks/servers", auth.RequireToken(), servers.AddServerFromWebhook)
 
+		// Everything registered below requires a session or API token.
 		api.Use(auth.Middleware())
 		{
+			// Security scans and screenshots make the server fetch arbitrary
+			// URLs (including internal 10.x hosts), so they require login.
+			api.GET("/security/:domain", security.SecurityScanHandler)
+			api.GET("/security/:domain/stream", security.SecurityScanSSEHandler)
+			api.GET("/screenshot/:domain", security.ScreenshotHandler)
+
 			api.POST("/servers", servers.AddServer)
 			api.GET("/servers", servers.GetServersWithSecurityStatus)
 			api.GET("/servers/pings/stream", servers.PingStreamSSE)
@@ -194,8 +199,19 @@ func main() {
 
 	setupRoutes(r)
 
+	// SPA fallback: any path that doesn't match a registered route serves a
+	// static file or index.html. Explicit NoRoute so it never intercepts API
+	// routes and doesn't depend on r.Use ordering. Unknown /api paths get a
+	// JSON 404 instead of the SPA shell.
 	spaDirectory := utils.GetEnv("WEB_DIR", "../web")
-	r.Use(spa.Middleware("/", spaDirectory))
+	serveSPA := spa.Middleware("/", spaDirectory)
+	r.NoRoute(func(c *gin.Context) {
+		if strings.HasPrefix(c.Request.URL.Path, "/api/") {
+			c.JSON(http.StatusNotFound, gin.H{"error": "not found"})
+			return
+		}
+		serveSPA(c)
+	})
 
 	log.Println("Application routes registered")
 

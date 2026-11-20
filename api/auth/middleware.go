@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"crypto/subtle"
 	"net/http"
 	"os"
 	"time"
@@ -25,8 +26,13 @@ func RequireToken() gin.HandlerFunc {
 			return
 		}
 
-		exists, err := isTokenInDatabase(apiToken)
-		if err == nil && exists {
+		id, err := lookupToken(apiToken)
+		if err == nil && id.ok {
+			if id.master {
+				c.Set(ctxMasterKey, true)
+			} else {
+				c.Set("email", id.email)
+			}
 			c.Next()
 			return
 		}
@@ -46,11 +52,20 @@ func Middleware() gin.HandlerFunc {
 				return
 			}
 
-			exists, err := isTokenInDatabase(apiToken)
-			if err == nil && exists {
+			id, err := lookupToken(apiToken)
+			if err == nil && id.ok {
+				// Establish identity the same way the session path does, so
+				// email-dependent handlers work for token-authenticated calls.
+				if id.master {
+					c.Set(ctxMasterKey, true)
+				} else {
+					c.Set("email", id.email)
+				}
 				c.Next()
 				return
 			}
+			c.AbortWithStatus(http.StatusUnauthorized)
+			return
 		}
 
 		// Fall back to session cookie
@@ -79,21 +94,52 @@ func Middleware() gin.HandlerFunc {
 	}
 }
 
-func isTokenInDatabase(token string) (bool, error) {
-	// Check against environment variable first (faster than DB lookup)
-	if key := os.Getenv("CHASE_SECRET_KEY"); key != "" && token == key {
-		return true, nil
+// ctxMasterKey marks a request authenticated with CHASE_SECRET_KEY.
+const ctxMasterKey = "auth.master"
+
+type tokenIdentity struct {
+	ok     bool
+	master bool
+	email  string
+}
+
+// lookupToken resolves an API token to the identity it belongs to.
+func lookupToken(token string) (tokenIdentity, error) {
+	// Constant-time compare against the master key to avoid a timing oracle.
+	if key := os.Getenv("CHASE_SECRET_KEY"); key != "" &&
+		subtle.ConstantTimeCompare([]byte(token), []byte(key)) == 1 {
+		return tokenIdentity{ok: true, master: true}, nil
 	}
 
-	// Only query database if token isn't the secret key
-	db := database.GetDB()
-	var exists bool
-	err := db.Model(&types.User{}).
-		Select("1").
+	var user types.User
+	err := database.GetDB().
+		Select("email").
 		Where("api_token = ?", token).
 		Limit(1).
-		Scan(&exists).
+		Find(&user).
 		Error
+	if err != nil {
+		return tokenIdentity{}, err
+	}
+	if user.Email == "" {
+		return tokenIdentity{}, nil
+	}
+	return tokenIdentity{ok: true, email: user.Email}, nil
+}
 
-	return exists, err
+// RequireAdmin must run after Middleware. It allows the master key and the
+// admin user (types.IsAdmin), and rejects everyone else with 403.
+func RequireAdmin() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if c.GetBool(ctxMasterKey) {
+			c.Next()
+			return
+		}
+		email := c.GetString("email")
+		if email == "" || !types.IsAdmin(database.GetDB(), email) {
+			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "admin privileges required"})
+			return
+		}
+		c.Next()
+	}
 }
