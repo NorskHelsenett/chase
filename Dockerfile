@@ -62,3 +62,21 @@ EXPOSE 8080
 # Run with explicit entrypoint and cmd
 ENTRYPOINT ["/chase"]
 CMD []
+
+# Build provenance (populated by CI build-args: GIT_COMMIT/GIT_BRANCH/BUILD_DATE/VERSION).
+# Kept last so per-build values don't invalidate the cache of the steps above.
+ARG GIT_COMMIT
+ARG GIT_BRANCH
+ARG BUILD_DATE
+ARG VERSION=dev
+LABEL org.opencontainers.image.source="https://github.com/NorskHelsenett/chase" \
+      org.opencontainers.image.revision="$GIT_COMMIT" \
+      org.opencontainers.image.ref.name="$GIT_BRANCH" \
+      org.opencontainers.image.created="$BUILD_DATE" \
+      org.opencontainers.image.licenses="Apache-2.0" \
+      org.opencontainers.image.vendor="Norsk helsenett SF" \
+      org.opencontainers.image.version="$VERSION" \
+      org.opencontainers.image.title="chase" \
+      org.opencontainers.image.description="Certificate Hunting & Security Enumeration" \
+      org.opencontainers.image.url="https://github.com/NorskHelsenett/chase" \
+      org.opencontainers.image.documentation="https://github.com/NorskHelsenett/chase#readme"
