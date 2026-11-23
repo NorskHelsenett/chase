@@ -81,6 +81,10 @@ jobs:
       # - name: Set up QEMU
       #   uses: docker/setup-qemu-action@v3
 
+      - name: Get build date (UTC, RFC 3339)
+        id: build-date
+        run: echo "date=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
         with:
@@ -118,6 +122,13 @@ jobs:
               type=ref,event=branch
               type=raw,value=latest,enable=${{ github.ref == format('refs/heads/{0}', 'main') }}
               type=raw,value=dev,enable=${{ github.ref != format('refs/heads/{0}', 'main') }}
+          labels: |
+            org.opencontainers.image.title=chase
+            org.opencontainers.image.description=Certificate Hunting & Security Enumeration
+            org.opencontainers.image.licenses=Apache-2.0
+            org.opencontainers.image.vendor=Norsk helsenett SF
+            org.opencontainers.image.url=https://github.com/NorskHelsenett/chase
+            org.opencontainers.image.documentation=https://github.com/NorskHelsenett/chase#readme
 
       - name: Build and push app image
         uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
@@ -129,6 +140,11 @@ jobs:
           push: true
           tags: ${{ steps.meta-app.outputs.tags }}
           labels: ${{ steps.meta-app.outputs.labels }}
+          build-args: |
+            GIT_COMMIT=${{ github.sha }}
+            GIT_BRANCH=${{ github.ref_name }}
+            BUILD_DATE=${{ steps.build-date.outputs.date }}
+            VERSION=${{ steps.meta-app.outputs.version }}
           cache-from: type=registry,ref=${{ env.REGISTRY_HOST }}/${{ env.REPOSITORY_LOWER }}:buildcache
           cache-to: type=registry,ref=${{ env.REGISTRY_HOST }}/${{ env.REPOSITORY_LOWER }}:buildcache,mode=max
 
@@ -142,6 +158,13 @@ jobs:
               type=ref,event=branch
               type=raw,value=latest,enable=${{ github.ref == format('refs/heads/{0}', 'main') }}
               type=raw,value=dev,enable=${{ github.ref != format('refs/heads/{0}', 'main') }}
+          labels: |
+            org.opencontainers.image.title=chase-screenshotr
+            org.opencontainers.image.description=Headless Chrome screenshot service for CHASE
+            org.opencontainers.image.licenses=Apache-2.0
+            org.opencontainers.image.vendor=Norsk helsenett SF
+            org.opencontainers.image.url=https://github.com/NorskHelsenett/chase
+            org.opencontainers.image.documentation=https://github.com/NorskHelsenett/chase#readme
 
       - name: Build and push screenshot image
         uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
@@ -153,6 +176,11 @@ jobs:
           push: true
           tags: ${{ steps.meta-shot.outputs.tags }}
           labels: ${{ steps.meta-shot.outputs.labels }}
+          build-args: |
+            GIT_COMMIT=${{ github.sha }}
+            GIT_BRANCH=${{ github.ref_name }}
+            BUILD_DATE=${{ steps.build-date.outputs.date }}
+            VERSION=${{ steps.meta-shot.outputs.version }}
           cache-from: type=registry,ref=${{ env.REGISTRY_HOST }}/${{ env.REPOSITORY_LOWER }}/screenshotr:buildcache
           cache-to: type=registry,ref=${{ env.REGISTRY_HOST }}/${{ env.REPOSITORY_LOWER }}/screenshotr:buildcache,mode=max
 
